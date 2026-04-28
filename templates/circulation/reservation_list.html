@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% block title %}Reservations{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-bookmark-check"></i> Book Reservations &amp; Queue Monitor</h4>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <a href="?status=pending" class="text-decoration-none">
+      <div class="card stat-card text-center h-100 {% if status_filter == 'pending' %}border-warning border-2{% endif %}">
+        <div class="card-body py-2">
+          <div class="display-6 fw-bold text-warning">{{ counts.pending }}</div>
+          <div class="small text-muted">Pending</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="?status=notified" class="text-decoration-none">
+      <div class="card stat-card text-center h-100 {% if status_filter == 'notified' %}border-success border-2{% endif %}">
+        <div class="card-body py-2">
+          <div class="display-6 fw-bold text-success">{{ counts.notified }}</div>
+          <div class="small text-muted">Notified</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="?status=fulfilled" class="text-decoration-none">
+      <div class="card stat-card text-center h-100 {% if status_filter == 'fulfilled' %}border-primary border-2{% endif %}">
+        <div class="card-body py-2">
+          <div class="display-6 fw-bold text-primary">{{ counts.fulfilled }}</div>
+          <div class="small text-muted">Fulfilled</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="?status=cancelled" class="text-decoration-none">
+      <div class="card stat-card text-center h-100 {% if status_filter == 'cancelled' %}border-secondary border-2{% endif %}">
+        <div class="card-body py-2">
+          <div class="display-6 fw-bold text-secondary">{{ counts.cancelled }}</div>
+          <div class="small text-muted">Cancelled</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2">
+    <div class="col-md-3">
+      <select name="status" class="form-select">
+        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="notified" {% if status_filter == 'notified' %}selected{% endif %}>Notified (Active Turn)</option>
+        <option value="fulfilled" {% if status_filter == 'fulfilled' %}selected{% endif %}>Fulfilled</option>
+        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Cancelled</option>
+        <option value="expired" {% if status_filter == 'expired' %}selected{% endif %}>Expired</option>
+        <option value="" {% if not status_filter %}selected{% endif %}>All Statuses</option>
+      </select>
+    </div>
+    <div class="col-md-6">
+      <input type="text" name="q" class="form-control" placeholder="Search by member name, username, or book title..." value="{{ query }}">
+    </div>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i> Filter</button>
+    </div>
+  </form>
+</div>
+
+<!-- Reservations Table -->
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>S/N</th>
+          <th>Book</th>
+          <th>Member</th>
+          <th>Queue #</th>
+          <th>Reserved On</th>
+          <th>Notified At</th>
+          <th>Expires</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reservations %}
+        <tr class="{% if r.status == 'notified' %}table-success{% elif r.status == 'expired' %}table-secondary{% endif %}">
+          <td>{{ forloop.counter }}</td>
+          <td>
+            <a href="{% url 'book_detail_public' r.book.pk %}" class="fw-semibold text-decoration-none">
+              {{ r.book.title|truncatechars:40 }}
+            </a>
+            <div class="small text-muted">{{ r.book.author|truncatechars:25 }}</div>
+          </td>
+          <td>
+            <a href="{% url 'user_detail' r.user.pk %}" class="text-decoration-none fw-semibold">
+              {{ r.user.get_full_name }}
+            </a>
+            <div class="small text-muted"><code>{{ r.user.username }}</code></div>
+          </td>
+          <td>
+            {% if r.status == 'pending' or r.status == 'notified' %}
+              <span class="badge bg-info">#{{ r.position }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td><small>{{ r.created_at|date:"d M Y H:i" }}</small></td>
+          <td>
+            {% if r.notified_at %}
+              <small class="text-success fw-semibold">{{ r.notified_at|date:"d M Y H:i" }}</small>
+              <div class="small text-muted">{{ r.notified_at|timesince }} ago</div>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.status == 'pending' or r.status == 'notified' %}
+              <small class="{% if r.expires_at < now %}text-danger fw-bold{% endif %}">
+                {{ r.expires_at|date:"d M Y" }}
+              </small>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.status == 'pending' %}
+              <span class="badge bg-warning text-dark">Pending</span>
+            {% elif r.status == 'notified' %}
+              <span class="badge bg-success"><i class="bi bi-bell-fill"></i> Notified</span>
+            {% elif r.status == 'fulfilled' %}
+              <span class="badge bg-primary">Fulfilled</span>
+            {% elif r.status == 'cancelled' %}
+              <span class="badge bg-secondary">Cancelled</span>
+            {% elif r.status == 'expired' %}
+              <span class="badge bg-danger">Expired</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="d-flex gap-1 flex-wrap">
+            {% if r.status == 'pending' or r.status == 'notified' %}
+              <button type="button" class="btn btn-sm btn-outline-danger cancel-res-btn"
+                data-url="{% url 'librarian_cancel_reservation' r.pk %}"
+                data-member="{{ r.user.get_full_name }}"
+                data-book="{{ r.book.title|truncatechars:50 }}"
+                title="Cancel Reservation">
+                <i class="bi bi-x-circle"></i> Cancel
+              </button>
+            {% endif %}
+            {% if r.status == 'expired' or r.status == 'pending' %}
+              <form method="post" action="{% url 'renew_reservation' r.pk %}" style="display:inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-success" title="Renew for 14 more days">
+                  <i class="bi bi-arrow-clockwise"></i> Renew
+                </button>
+              </form>
+            {% endif %}
+            {% if r.status == 'fulfilled' or r.status == 'cancelled' %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="9" class="text-center text-muted py-4">
+            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+            No {{ status_filter|default:"" }} reservations found.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Cancel Reservation Modal -->
+<div class="modal fade" id="cancelResModal" tabindex="-1" aria-labelledby="cancelResModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="cancelResModalLabel"><i class="bi bi-x-octagon"></i> Cancel Reservation</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-1">You are about to cancel the reservation for:</p>
+        <p class="fw-semibold mb-3" id="cancelResInfo"></p>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Reason for Cancellation <span class="text-danger">*</span></label>
+          <textarea class="form-control" id="cancelResReason" rows="3"
+            placeholder="e.g. Book no longer available, Policy violation, Librarian decision…"></textarea>
+          <div class="invalid-feedback" id="cancelResReasonError">Please provide a reason before cancelling.</div>
+        </div>
+        <div class="alert alert-warning small mb-0">
+          <i class="bi bi-bell-fill"></i> The member will be notified via SMS &amp; email with this reason.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        <form id="cancelResForm" method="post" action="">
+          {% csrf_token %}
+          <input type="hidden" name="reason" id="cancelResReasonHidden">
+          <button type="submit" class="btn btn-danger"><i class="bi bi-check-circle"></i> Confirm &amp; Notify</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  document.querySelectorAll('.cancel-res-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.getElementById('cancelResInfo').textContent =
+        btn.dataset.member + ' — ' + btn.dataset.book;
+      document.getElementById('cancelResForm').action = btn.dataset.url;
+      document.getElementById('cancelResReason').value = '';
+      document.getElementById('cancelResReason').classList.remove('is-invalid');
+      new bootstrap.Modal(document.getElementById('cancelResModal')).show();
+    });
+  });
+
+  document.getElementById('cancelResForm').addEventListener('submit', function (e) {
+    var reason = document.getElementById('cancelResReason').value.trim();
+    if (!reason) {
+      e.preventDefault();
+      document.getElementById('cancelResReason').classList.add('is-invalid');
+      return;
+    }
+    document.getElementById('cancelResReasonHidden').value = reason;
+  });
+})();
+</script>
+{% endblock %}

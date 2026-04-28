@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+{% block title %}Circulation Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-arrow-left-right"></i> Circulation Report</h4>
+  <a href="{% url 'export_circulation_pdf' %}?period={{ period }}"
+     class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
+</div>
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small">Period</label>
+      <select name="period" class="form-select">
+        <option value="7" {% if period == '7' %}selected{% endif %}>Last 7 days</option>
+        <option value="30" {% if period == '30' %}selected{% endif %}>Last 30 days</option>
+        <option value="90" {% if period == '90' %}selected{% endif %}>Last 90 days</option>
+        <option value="365" {% if period == '365' %}selected{% endif %}>Last 1 year</option>
+      </select>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-msict w-100">Apply</button></div>
+  </form>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card p-3 text-center stat-card"><div class="fs-2 fw-bold text-primary">{{ total_borrowed }}</div><div class="small text-muted">Total Borrowed</div></div></div>
+  <div class="col-md-4"><div class="card p-3 text-center stat-card danger"><div class="fs-2 fw-bold text-danger">{{ total_overdue }}</div><div class="small text-muted">Overdue</div></div></div>
+  <div class="col-md-4"><div class="card p-3 text-center stat-card success"><div class="fs-2 fw-bold text-success">{{ total_returned }}</div><div class="small text-muted">Returned</div></div></div>
+</div>
+<div class="row g-3">
+  <div class="col-md-5">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-trophy"></i> Top Borrowed Books</h6>
+      {% for item in top_books %}
+      <div class="d-flex justify-content-between border-bottom py-1">
+        <small>{{ item.copy__book__title|truncatechars:45 }}</small>
+        <span class="badge bg-primary">{{ item.borrow_count }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card p-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-person-badge"></i> Top Borrowers</h6>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>S/N</th><th>Username</th><th>Borrows</th></tr></thead>
+        <tbody>
+          {% for b in top_borrowers %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><small>{{ b.user__first_name }} {{ b.user__surname }} ({{ b.user__username }})</small></td>
+            <td><span class="badge bg-info">{{ b.borrow_count }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

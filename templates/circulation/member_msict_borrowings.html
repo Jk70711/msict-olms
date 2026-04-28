@@ -1,0 +1,266 @@
+{% extends 'base.html' %}
+{% block title %}My MSICT Borrowings{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-book"></i> My MSICT Borrowings</h4>
+  <a href="{% url 'borrow_catalog' %}" class="btn btn-msict btn-sm"><i class="bi bi-plus-circle"></i> Borrow New Book</a>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-primary">{{ active_borrows.count }}</div>
+        <div class="small text-muted">Active Borrows</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-warning">{{ pending_requests.count }}</div>
+        <div class="small text-muted">Pending Requests</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-info">{{ reservations.count }}</div>
+        <div class="small text-muted">Active Reservations</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-danger">{{ unpaid_fines.count }}</div>
+        <div class="small text-muted">Unpaid Fines</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Active Borrows -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-journal-check"></i> Active Borrows</span>
+        {% if active_borrows %}
+        <span class="badge bg-primary">{{ active_borrows.count }}</span>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for tx in active_borrows %}
+        <div class="list-group-item {% if tx.copy.copy_type == 'softcopy' and not tx.is_link_active %}list-group-item-warning{% endif %}">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <a href="{% url 'book_detail_public' tx.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ tx.copy.book.title|truncatechars:40 }}</a>
+              <div class="small text-muted">Accession: {{ tx.copy.accession_no }}</div>
+              <div class="small mt-1 d-flex flex-wrap gap-1">
+                {% if tx.copy.copy_type == 'softcopy' %}
+                  {% if tx.is_link_active %}
+                    <span class="badge bg-success"><i class="bi bi-wifi"></i> Link Active</span>
+                    {% if tx.days_remaining <= 2 %}
+                    <span class="badge bg-danger"><i class="bi bi-alarm"></i> Expires in {{ tx.days_remaining }} day{{ tx.days_remaining|pluralize }}</span>
+                    {% elif tx.days_remaining <= 5 %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} days left</span>
+                    {% else %}
+                    <span class="badge bg-info text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} days left</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="badge bg-danger"><i class="bi bi-wifi-off"></i> Link Expired</span>
+                    <span class="badge bg-warning text-dark">Renew to restore access</span>
+                  {% endif %}
+                  <span class="badge bg-secondary"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
+                {% else %}
+                  <span class="badge {% if tx.status == 'overdue' %}bg-danger{% else %}bg-success{% endif %}">{{ tx.status|title }}</span>
+                  <span class="badge bg-secondary"><i class="bi bi-book"></i> Hardcopy</span>
+                  {% if tx.status == 'overdue' %}
+                  <span class="badge bg-danger"><i class="bi bi-alarm"></i> {{ tx.days_overdue }} day{{ tx.days_overdue|pluralize }} overdue</span>
+                  {% elif tx.status == 'borrowed' %}
+                    {% if tx.days_remaining <= 2 %}
+                    <span class="badge bg-danger"><i class="bi bi-alarm"></i> {{ tx.days_remaining }} day{{ tx.days_remaining|pluralize }} left</span>
+                    {% elif tx.days_remaining <= 5 %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} day{{ tx.days_remaining|pluralize }} left</span>
+                    {% else %}
+                    <span class="badge bg-info text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} day{{ tx.days_remaining|pluralize }} left</span>
+                    {% endif %}
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+            <div class="text-end small">
+              <div class="text-muted">Due: <strong>{{ tx.due_date|date:"M d, Y" }}</strong></div>
+              <div class="mt-2 d-flex flex-column gap-1 align-items-end">
+                {% if tx.copy.copy_type == 'softcopy' %}
+                  {% if tx.is_link_active and tx.copy.file_path %}
+                  <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-sm btn-primary" target="_blank">
+                    <i class="bi bi-file-pdf"></i> Read Online
+                  </a>
+                  {% elif not tx.is_link_active %}
+                  <span class="btn btn-sm btn-outline-danger disabled"><i class="bi bi-wifi-off"></i> Link Expired</span>
+                  {% endif %}
+                  {% if tx.renewals_left > 0 %}
+                  <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-arrow-clockwise"></i> {% if tx.is_link_active %}Renew{% else %}Renew to Restore{% endif %}
+                  </a>
+                  {% else %}
+                  <span class="text-muted small">No renewals left</span>
+                  {% endif %}
+                  <a href="{% url 'return_early' tx.pk %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-arrow-return-left"></i> Return
+                  </a>
+                {% else %}
+                  {% if tx.renewals_left > 0 and tx.status != 'overdue' %}
+                  <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-clockwise"></i> Renew
+                  </a>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No active borrows</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Pending Requests -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-hourglass-split"></i> Pending Requests</span>
+        {% if pending_requests %}
+        <span class="badge bg-warning text-dark">{{ pending_requests.count }}</span>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for req in pending_requests %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <a href="{% url 'book_detail_public' req.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ req.copy.book.title|truncatechars:40 }}</a>
+              <div class="small text-muted">Accession: {{ req.copy.accession_no }}</div>
+              <div class="small text-muted">Requested: {{ req.request_date|date:"M d, Y" }}</div>
+            </div>
+            <a href="{% url 'cancel_borrow_request' req.pk %}" class="btn btn-sm btn-outline-danger">Cancel</a>
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No pending requests</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-3">
+  <!-- Borrow History -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold"><i class="bi bi-clock-history"></i> Borrow History</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Book</th>
+              <th>Borrowed</th>
+              <th>Returned</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in borrow_history %}
+            <tr>
+              <td>
+                <a href="{% url 'book_detail_public' tx.copy.book.pk %}">{{ tx.copy.book.title|truncatechars:30 }}</a>
+                <div class="small text-muted">{{ tx.copy.accession_no }}</div>
+              </td>
+              <td class="small">{{ tx.borrow_date|date:"M d, Y" }}</td>
+              <td class="small">{{ tx.return_date|date:"M d, Y" }}</td>
+              <td><span class="badge bg-success">Returned</span></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-3">No borrow history</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reservations -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bookmark"></i> My Reservations</span>
+        {% if reservations %}
+        <span class="badge bg-info">{{ reservations.count }}</span>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for res in reservations %}
+        <div class="list-group-item d-flex justify-content-between align-items-center">
+          <div>
+            <a href="{% url 'book_detail_public' res.book.pk %}" class="fw-semibold text-decoration-none">{{ res.book.title|truncatechars:35 }}</a>
+            <div class="small text-muted">Expires: {{ res.expires_at|date:"M d, Y" }}</div>
+          </div>
+          <a href="{% url 'cancel_reservation' res.pk %}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No active reservations</div>
+        {% endfor %}
+      </div>
+      {% if reservation_history %}
+      <div class="card-footer">
+        <small class="text-muted"><strong>Recent History:</strong></small>
+        {% for res in reservation_history|slice:":3" %}
+        <div class="small text-muted">
+          {{ res.book.title|truncatechars:30 }} - <span class="badge bg-secondary">{{ res.status|title }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Unpaid Fines -->
+{% if unpaid_fines %}
+<div class="row g-3 mt-3">
+  <div class="col-12">
+    <div class="card border-danger">
+      <div class="card-header fw-bold bg-danger text-white"><i class="bi bi-exclamation-triangle"></i> Unpaid Fines</div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Book</th>
+              <th>Amount</th>
+              <th>Reason</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fine in unpaid_fines %}
+            <tr>
+              <td>{{ fine.transaction.copy.book.title|truncatechars:40 }}</td>
+              <td class="fw-bold text-danger">TSh {{ fine.amount }}</td>
+              <td><span class="badge bg-warning text-dark">{{ fine.reason|default:"Overdue" }}</span></td>
+              <td class="small">{{ fine.created_at|date:"M d, Y" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

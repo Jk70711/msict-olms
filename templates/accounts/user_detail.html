@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% block title %}User Detail – {{ user_obj.username }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-person-badge"></i> User Profile – <code>{{ user_obj.username }}</code></h4>
+  <div>
+    {# <a href="{% url 'edit_user' user_obj.pk %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Edit</a> #}
+    <a href="{% url 'reset_user_password' user_obj.pk %}" class="btn btn-outline-warning btn-sm" onclick="return confirm('Reset password for {{ user_obj.username }}?')"><i class="bi bi-key"></i> Reset Password</a>
+    {% if user.role == 'admin' %}
+      {% if user_obj.is_active %}
+        <a href="{% url 'user_action' user_obj.pk 'lock' %}" class="btn btn-outline-danger btn-sm" onclick="return confirm('Lock account {{ user_obj.username }}?')"><i class="bi bi-lock-fill"></i> Lock</a>
+      {% else %}
+        <a href="{% url 'user_action' user_obj.pk 'unlock' %}" class="btn btn-outline-success btn-sm" onclick="return confirm('Unlock account {{ user_obj.username }}?')"><i class="bi bi-unlock-fill"></i> Unlock</a>
+      {% endif %}
+      <a href="{% url 'user_action' user_obj.pk 'delete' %}" class="btn btn-outline-dark btn-sm" onclick="return confirm('PERMANENTLY DELETE {{ user_obj.username }}? This cannot be undone.')"><i class="bi bi-trash"></i> Delete</a>
+    {% endif %}
+    <a href="{% url 'user_list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Identity Card -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-body text-center">
+        {% if user_obj.photo %}
+          <img src="{{ user_obj.photo.url }}" class="rounded-circle mb-3" style="width:90px;height:90px;object-fit:cover;">
+        {% else %}
+          <div class="rounded-circle bg-secondary d-flex align-items-center justify-content-center mx-auto mb-3" style="width:90px;height:90px;">
+            <i class="bi bi-person-fill text-white fs-1"></i>
+          </div>
+        {% endif %}
+        <h5 class="fw-bold mb-1">{{ user_obj.get_full_name }}</h5>
+        <p class="text-muted mb-2"><code>{{ user_obj.username }}</code></p>
+        <span class="badge badge-role-{{ user_obj.role }} mb-2">{{ user_obj.role|title }}</span>
+        {% if user_obj.member_type %}
+          <span class="badge bg-secondary mb-2">{{ user_obj.get_member_type_display }}</span>
+        {% endif %}
+        <div class="mt-2">
+          {% if user_obj.is_active %}
+            <span class="badge bg-success fs-6"><i class="bi bi-check-circle"></i> Active</span>
+          {% else %}
+            <span class="badge bg-danger fs-6"><i class="bi bi-lock-fill"></i> Locked</span>
+          {% endif %}
+          {% if user_obj.failed_attempts > 0 %}
+            <span class="badge bg-warning text-dark ms-1">{{ user_obj.failed_attempts }} failed login{{ user_obj.failed_attempts|pluralize }}</span>
+          {% endif %}
+        </div>
+        {% if user.role != 'admin' and not user_obj.is_active %}
+          <div class="alert alert-warning mt-3 small py-2"><i class="bi bi-info-circle"></i> Account is locked. Contact an Admin to unlock.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Personal Details -->
+  <div class="col-md-8">
+    <div class="card h-100">
+      <div class="card-header fw-bold"><i class="bi bi-info-circle"></i> Personal Information</div>
+      <div class="card-body">
+        <div class="row g-2">
+          <div class="col-6"><small class="text-muted">Army Number</small><div class="fw-semibold">{{ user_obj.army_no }}</div></div>
+          <div class="col-6"><small class="text-muted">Registration No</small><div class="fw-semibold">{{ user_obj.registration_no|default:"—" }}</div></div>
+          <div class="col-6"><small class="text-muted">First Name</small><div>{{ user_obj.first_name }}</div></div>
+          <div class="col-6"><small class="text-muted">Middle Name</small><div>{{ user_obj.middle_name|default:"—" }}</div></div>
+          <div class="col-6"><small class="text-muted">Surname</small><div>{{ user_obj.surname }}</div></div>
+          <div class="col-6"><small class="text-muted">Email</small><div>{{ user_obj.email }}</div></div>
+          <div class="col-6"><small class="text-muted">Phone</small><div>{{ user_obj.phone }}</div></div>
+          <div class="col-6"><small class="text-muted">Last Login</small><div>{{ user_obj.last_login|date:"d M Y H:i"|default:"Never" }}</div></div>
+          <div class="col-6"><small class="text-muted">Account Created</small><div>{{ user_obj.created_at|date:"d M Y" }}</div></div>
+          <div class="col-6"><small class="text-muted">Last Password Change</small><div>{{ user_obj.last_password_change|date:"d M Y"|default:"—" }}</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Borrows -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between">
+        <span><i class="bi bi-book"></i> Active Borrows</span>
+        <span class="badge bg-primary">{{ active_borrows.count }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>S/N</th><th>Book</th><th>Due Date</th></tr></thead>
+          <tbody>
+            {% for b in active_borrows %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ b.copy.book.title }}</td>
+              <td>{{ b.due_date|date:"d M Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-2">No active borrows.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overdue Books -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between">
+        <span><i class="bi bi-exclamation-triangle text-danger"></i> Overdue Books</span>
+        <span class="badge bg-danger">{{ overdue.count }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>S/N</th><th>Book</th><th>Due Date</th></tr></thead>
+          <tbody>
+            {% for b in overdue %}
+            <tr class="table-danger">
+              <td>{{ forloop.counter }}</td>
+              <td>{{ b.copy.book.title }}</td>
+              <td>{{ b.due_date|date:"d M Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-2">No overdue books.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Unpaid Fines -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between">
+        <span><i class="bi bi-cash-coin text-warning"></i> Unpaid Fines</span>
+        <span class="badge bg-warning text-dark">{{ unpaid_fines.count }}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>S/N</th><th>Book</th><th>Amount</th></tr></thead>
+          <tbody>
+            {% for f in unpaid_fines %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ f.transaction.copy.book.title }}</td>
+              <td>{{ f.amount }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-2">No unpaid fines.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Borrow History -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold"><i class="bi bi-clock-history"></i> Recent Borrow History <small class="text-muted">(last 20)</small></div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>S/N</th><th>Book</th><th>Status</th><th>Date</th></tr></thead>
+          <tbody>
+            {% for b in borrow_history %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ b.copy.book.title }}</td>
+              <td>
+                {% if b.status == 'returned' %}<span class="badge bg-success">Returned</span>
+                {% elif b.status == 'overdue' %}<span class="badge bg-danger">Overdue</span>
+                {% elif b.status == 'borrowed' %}<span class="badge bg-primary">Active</span>
+                {% else %}<span class="badge bg-secondary">{{ b.status|title }}</span>{% endif %}
+              </td>
+              <td>{{ b.borrow_date|date:"d M Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-2">No borrow history.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Logs -->
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-bold"><i class="bi bi-shield-check"></i> Recent Activity Logs <small class="text-muted">(last 20)</small></div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead><tr><th>S/N</th><th>Action</th><th>IP</th><th>Timestamp</th></tr></thead>
+          <tbody>
+            {% for log in audit_logs %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>{{ log.action }}</td>
+              <td><small>{{ log.ip_address|default:"—" }}</small></td>
+              <td><small>{{ log.timestamp|date:"d M Y H:i" }}</small></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" class="text-center text-muted py-2">No activity logs.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

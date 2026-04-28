@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% block title %}Update ILL Status{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-arrow-left-right"></i> Update ILL Request Status</h4>
+  <a href="{% url 'ill_request_list' %}" class="btn btn-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to ILL List</a>
+</div>
+
+<div class="row">
+  <div class="col-md-8 mx-auto">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">{{ ill.title }}</h5>
+      </div>
+      <div class="card-body">
+        <div class="mb-4">
+          <p><strong>Requested by:</strong> {{ ill.user.get_full_name }} ({{ ill.user.username }})</p>
+          <p><strong>Current Status:</strong> <span class="badge bg-secondary">{{ ill.status|title }}</span></p>
+          <p><strong>Request Date:</strong> {{ ill.request_date|date:"F d, Y" }}</p>
+          {% if ill.author %}
+          <p><strong>Author:</strong> {{ ill.author }}</p>
+          {% endif %}
+          {% if ill.isbn %}
+          <p><strong>ISBN:</strong> {{ ill.isbn }}</p>
+          {% endif %}
+          {% if ill.source_library %}
+          <p><strong>Source Library:</strong> {{ ill.source_library }}</p>
+          {% endif %}
+          {% if ill.notes %}
+          <p><strong>Notes:</strong> {{ ill.notes }}</p>
+          {% endif %}
+        </div>
+
+        <form method="post">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label for="status" class="form-label fw-bold">New Status</label>
+            <select name="status" id="status" class="form-select" required>
+              <option value="" disabled selected>-- Select Status --</option>
+              <option value="pending" {% if ill.status == 'pending' %}selected{% endif %}>Pending</option>
+              <option value="sent">Sent to Source Library</option>
+              <option value="fulfilled">Fulfilled</option>
+              <option value="received">Received (Ready for Pickup)</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <div class="form-text">Member will be automatically notified via SMS and Email when status changes.</div>
+          </div>
+
+          <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> <strong>Notification Preview:</strong>
+            <div id="notification-preview" class="mt-2 small">
+              Member will receive: "MSICT OLMS: Your ILL request for '{{ ill.title }}' has been [status]..."
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle"></i> Update Status & Notify Member</button>
+            <a href="{% url 'ill_request_list' %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.getElementById('status').addEventListener('change', function() {
+  const status = this.value;
+  const title = "{{ ill.title|escapejs }}";
+  const messages = {
+    'pending': 'is pending review.',
+    'sent': 'has been sent to the source library.',
+    'fulfilled': 'has been fulfilled and is being processed.',
+    'received': 'has been received and is ready for pickup.',
+    'cancelled': 'has been cancelled. Contact library for details.'
+  };
+  document.getElementById('notification-preview').textContent = 
+    `Member will receive: "MSICT OLMS: Your ILL request for '${title}' ${messages[status] || 'status changed to: ' + status}"`;
+});
+</script>
+{% endblock %}

@@ -1,0 +1,179 @@
+{% extends 'base.html' %}
+{% block title %}My Reservations{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-bookmark-star"></i> My Book Reservations</h4>
+  <a href="{% url 'borrow_catalog' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Borrow Catalog
+  </a>
+</div>
+
+{% if annotated %}
+<div class="mb-4">
+  <h6 class="text-muted fw-semibold mb-2"><i class="bi bi-clock"></i> Active Queue</h6>
+  {% for item in annotated %}
+  {% with res=item.res %}
+  <div class="card mb-3 border-{% if res.status == 'notified' %}success{% else %}secondary{% endif %}">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+        <div>
+          <div class="fw-bold fs-6">{{ res.book.title }}</div>
+          <div class="small text-muted">{{ res.book.author }}</div>
+        </div>
+        <div class="text-end">
+          {% if res.status == 'notified' %}
+            <span class="badge bg-success fs-6 px-3 py-2">
+              <i class="bi bi-bell-fill"></i> YOUR TURN — Borrow Now!
+            </span>
+          {% else %}
+            <span class="badge bg-warning text-dark px-3 py-2">
+              #{{ res.position }} in Queue
+            </span>
+          {% endif %}
+        </div>
+      </div>
+
+      <hr class="my-2">
+
+      <div class="row g-3">
+        <!-- Queue Info -->
+        <div class="col-md-4">
+          <div class="small text-muted">Queue Position</div>
+          <div class="fw-bold">
+            #{{ res.position }}
+            <span class="text-muted fw-normal">of {{ item.total_queue }} total</span>
+          </div>
+          <div class="small text-muted mt-1">
+            {% if item.ahead == 0 %}
+              <span class="text-success"><i class="bi bi-check-circle-fill"></i> You are next!</span>
+            {% elif item.ahead == 1 %}
+              1 member ahead of you
+            {% else %}
+              {{ item.ahead }} members ahead of you
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Availability -->
+        <div class="col-md-4">
+          <div class="small text-muted">Nearest Expected Return</div>
+          {% if item.nearest_return %}
+            <div class="fw-bold">{{ item.nearest_return.due_date|date:"d M Y" }}</div>
+            <div class="small text-muted">
+              {% if item.nearest_return.status == 'overdue' %}
+                <span class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Overdue borrower</span>
+              {% else %}
+                {{ item.nearest_return.due_date|timeuntil }} remaining
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="text-success fw-bold"><i class="bi bi-check-circle"></i> Copy may be available</div>
+          {% endif %}
+        </div>
+
+        <!-- Reservation Expiry -->
+        <div class="col-md-4">
+          <div class="small text-muted">Reservation Expires</div>
+          <div class="fw-bold {% if res.is_expired %}text-danger{% endif %}">
+            {{ res.expires_at|date:"d M Y" }}
+          </div>
+          <div class="small text-muted">Reserved: {{ res.created_at|date:"d M Y H:i" }}</div>
+        </div>
+      </div>
+
+      {% if res.status == 'notified' %}
+      <!-- NOTIFIED: Show Borrow Now + countdown -->
+      <div class="alert alert-success mt-3 mb-0 d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <div>
+          <i class="bi bi-bell-fill me-2"></i>
+          <strong>It's your turn!</strong> A softcopy of <em>{{ res.book.title }}</em> is ready for you.
+          <br>
+          <small>
+            Notified: {{ res.notified_at|date:"d M Y H:i" }}
+            {% if item.hours_notified %}
+              &mdash; {{ item.hours_notified|floatformat:1 }} hrs ago
+              {% if item.hours_notified > 20 %}
+                <span class="text-danger fw-bold"> — Less than 4 hrs remaining!</span>
+              {% endif %}
+            {% endif %}
+          </small>
+        </div>
+        <div class="d-flex gap-2">
+          <a href="{% url 'queue_borrow' res.pk %}"
+             class="btn btn-success btn-sm"
+             onclick="return confirm('Submit a borrow request for {{ res.book.title }}? You will wait for librarian approval.')">
+            <i class="bi bi-bag-plus-fill"></i> Request Borrow
+          </a>
+          <a href="{% url 'cancel_reservation' res.pk %}"
+             class="btn btn-outline-danger btn-sm"
+             onclick="return confirm('Cancel your reservation for {{ res.book.title }}?')">
+            <i class="bi bi-x-circle"></i> Cancel
+          </a>
+        </div>
+      </div>
+      {% else %}
+      <!-- PENDING: Show queue info + cancel -->
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <a href="{% url 'cancel_reservation' res.pk %}"
+           class="btn btn-outline-danger btn-sm"
+           onclick="return confirm('Cancel your reservation for {{ res.book.title }}?')">
+          <i class="bi bi-x-circle"></i> Cancel Reservation
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endwith %}
+  {% endfor %}
+</div>
+{% else %}
+<div class="card p-5 text-center text-muted mb-4">
+  <i class="bi bi-bookmark-x fs-1 d-block mb-3"></i>
+  <p class="mb-2">You have no active reservations.</p>
+  <a href="{% url 'borrow_catalog' %}" class="btn btn-msict btn-sm">
+    <i class="bi bi-bag-plus"></i> Browse Borrow Catalog
+  </a>
+</div>
+{% endif %}
+
+{% if history %}
+<div>
+  <h6 class="text-muted fw-semibold mb-2"><i class="bi bi-clock-history"></i> Reservation History</h6>
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 small">
+        <thead>
+          <tr>
+            <th>Book</th>
+            <th>Reserved On</th>
+            <th>Expires</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in history %}
+          <tr>
+            <td>
+              <div class="fw-semibold">{{ r.book.title|truncatechars:50 }}</div>
+              <div class="text-muted">{{ r.book.author|truncatechars:30 }}</div>
+            </td>
+            <td>{{ r.created_at|date:"d M Y" }}</td>
+            <td>{{ r.expires_at|date:"d M Y" }}</td>
+            <td>
+              {% if r.status == 'fulfilled' %}
+                <span class="badge bg-success">Fulfilled</span>
+              {% elif r.status == 'cancelled' %}
+                <span class="badge bg-secondary">Cancelled</span>
+              {% elif r.status == 'expired' %}
+                <span class="badge bg-danger">Expired</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

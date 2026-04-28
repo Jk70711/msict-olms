@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+{% block title %}Member Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-people"></i> Member Report</h4>
+  <div class="d-flex gap-2">
+    <a href="{% url 'export_members_pdf' %}{% if role_filter %}?member_type={{ role_filter }}{% endif %}"
+       class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
+    <a href="{% url 'export_members_csv' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-csv"></i> Export CSV</a>
+  </div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4">
+    <div class="card stat-card p-3 text-center"><div class="fs-2 fw-bold">{{ total }}</div><div class="text-muted small">Total Members</div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card success p-3 text-center"><div class="fs-2 fw-bold text-success">{{ active }}</div><div class="text-muted small">Active</div></div>
+  </div>
+  <div class="col-md-4">
+    <div class="card stat-card danger p-3 text-center"><div class="fs-2 fw-bold text-danger">{{ total|add:"-"|add:active }}</div><div class="text-muted small">Locked</div></div>
+  </div>
+</div>
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2">
+    <div class="col-md-3">
+      <select name="member_type" class="form-select">
+        <option value="">All Types</option>
+        <option value="student" {% if role_filter == 'student' %}selected{% endif %}>Student</option>
+        <option value="lecturer" {% if role_filter == 'lecturer' %}selected{% endif %}>Instructor</option>
+        <option value="staff" {% if role_filter == 'staff' %}selected{% endif %}>Staff</option>
+      </select>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-msict w-100">Filter</button></div>
+    <div class="col-md-2"><a href="{% url 'report_members' %}" class="btn btn-outline-secondary w-100">Clear</a></div>
+  </form>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0">
+      <thead><tr><th>S/N</th><th>Username</th><th>Full Name</th><th>Army No</th><th>Type</th><th>Email</th><th>Status</th><th>Joined</th></tr></thead>
+      <tbody>
+        {% for m in members %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td><code>{{ m.username }}</code></td>
+          <td>{{ m.get_full_name }}</td>
+          <td>{{ m.army_no }}</td>
+          <td>{{ m.get_member_type_display|default:"-" }}</td>
+          <td><small>{{ m.email }}</small></td>
+          <td>{% if m.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Locked</span>{% endif %}</td>
+          <td><small>{{ m.created_at|date:"d M Y" }}</small></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="text-center py-4 text-muted">No members found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

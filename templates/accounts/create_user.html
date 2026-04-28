@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Create User{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-person-plus"></i> Create New User</h5>
+      <form method="post">{% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Army Number <span class="text-danger">*</span></label>
+            <input type="hidden" name="army_no" id="army_no_hidden">
+            <div class="input-group">
+              <select id="army_prefix" class="form-select" style="max-width:90px;" onchange="buildArmyNo()">
+                <option value="MT">MT</option>
+                <option value="MTM">MTM</option>
+                <option value="P">P</option>
+                <option value="PW">PW</option>
+              </select>
+              <input type="number" id="army_digits" class="form-control" placeholder="134513" min="1"
+                     oninput="buildArmyNo()" required>
+            </div>
+            <div class="form-text">Prefix + digits only. E.g. MT 134513, PW 456</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Role <span class="text-danger">*</span></label>
+            <select name="role" id="roleSelect" class="form-select" onchange="toggleMemberType()" required>
+              <option value="member">Member</option>
+              <option value="librarian">Librarian</option>
+            </select>
+          </div>
+          <div class="col-md-4" id="memberTypeGroup">
+            <label class="form-label fw-semibold">Member Type</label>
+            <select name="member_type" id="memberTypeSelect" class="form-select" onchange="toggleRegNo()">
+              <option value="">-- Select Type --</option>
+              <option value="student">Student</option>
+              <option value="lecturer">Instructor</option>
+              <option value="staff">Staff</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Surname <span class="text-danger">*</span></label>
+            <input type="text" name="surname" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">First Name <span class="text-danger">*</span></label>
+            <input type="text" name="first_name" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Middle Name</label>
+            <input type="text" name="middle_name" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+            <input type="email" name="email" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Phone <span class="text-danger">*</span></label>
+            <input type="text" name="phone" class="form-control" placeholder="255XXXXXXXXX" required>
+          </div>
+          <div class="col-md-4" id="regNoGroup">
+            <label class="form-label">Registration No <small class="text-muted">(students)</small></label>
+            <input type="text" name="registration_no" class="form-control" placeholder="e.g. MSICT/2024/001">
+          </div>
+        </div>
+        <div class="alert alert-info mt-3 small">
+          <i class="bi bi-info-circle"></i> Username and initial password are generated automatically based on role, surname, and army number. Credentials are sent via email and SMS.
+        </div>
+        <div class="mt-3">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-person-check"></i> Create User</button>
+          <a href="{% url 'user_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function buildArmyNo() {
+  var prefix = document.getElementById('army_prefix').value;
+  var digits = document.getElementById('army_digits').value.trim();
+  document.getElementById('army_no_hidden').value = digits ? prefix + ' ' + digits : '';
+}
+function toggleMemberType() {
+  var role = document.getElementById('roleSelect').value;
+  var isMember = role === 'member';
+  document.getElementById('memberTypeGroup').style.display = isMember ? 'block' : 'none';
+  toggleRegNo();
+}
+function toggleRegNo() {
+  var role       = document.getElementById('roleSelect').value;
+  var memberType = document.getElementById('memberTypeSelect').value;
+  var show       = (role === 'member' && memberType === 'student');
+  var grp        = document.getElementById('regNoGroup');
+  var inp        = grp.querySelector('input');
+  grp.style.display = show ? 'block' : 'none';
+  inp.required      = show;
+  if (!show) inp.value = '';
+}
+toggleMemberType();
+buildArmyNo();
+// Ensure army_no is set before submit
+document.querySelector('form').addEventListener('submit', function(e) {
+  var digits = document.getElementById('army_digits').value.trim();
+  if (!digits) { e.preventDefault(); alert('Please enter the digits for the army number.'); return; }
+  buildArmyNo();
+});
+</script>
+{% endblock %}

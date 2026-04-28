@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block title %}Librarian Dashboard{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> Librarian Dashboard</h4>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Total Books</span><i class="bi bi-book fs-4 text-primary"></i></div>
+      <div class="fs-2 fw-bold" style="color:#0f172a">{{ total_books }}</div>
+      <div class="small text-muted">{{ total_copies }} copies</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card success p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Available Copies</span><i class="bi bi-check-circle fs-4 text-success"></i></div>
+      <div class="fs-2 fw-bold" style="color:#059669">{{ available_copies }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card warning p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Pending Requests</span><i class="bi bi-clock-fill fs-4 text-warning"></i></div>
+      <div class="fs-2 fw-bold" style="color:#d97706">{{ pending_count }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card danger p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Overdue</span><i class="bi bi-exclamation-triangle fs-4 text-danger"></i></div>
+      <div class="fs-2 fw-bold" style="color:#dc2626">{{ overdue_count }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-7">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0" style="color:#0f172a"><i class="bi bi-inbox text-warning"></i> Pending Borrow Requests</h6>
+        <a href="{% url 'all_requests' %}" class="btn btn-sm btn-outline-primary">View All</a>
+      </div>
+      {% if pending_requests %}
+      <table class="table table-sm table-hover mb-0">
+        <thead><tr><th>Member</th><th>Book</th><th>Requested</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for req in pending_requests %}
+          <tr>
+            <td><small>{{ req.user.get_full_name }}<br><span class="text-muted">{{ req.user.army_no }}</span></small></td>
+            <td><small>{{ req.copy.book.title|truncatechars:35 }}<br><span class="badge bg-secondary">{{ req.copy.copy_type }}</span></small></td>
+            <td><small class="text-muted">{{ req.request_date|timesince }} ago</small></td>
+            <td>
+              <a href="{% url 'approve_borrow_request' req.pk %}" class="btn btn-xs btn-sm btn-success py-0 px-1">
+                <i class="bi bi-check"></i> Approve
+              </a>
+              <button class="btn btn-xs btn-sm btn-danger py-0 px-1" data-bs-toggle="modal" data-bs-target="#rejectModal{{ req.pk }}">
+                <i class="bi bi-x"></i> Reject
+              </button>
+              <!-- Reject Modal -->
+              <div class="modal fade" id="rejectModal{{ req.pk }}" tabindex="-1">
+                <div class="modal-dialog modal-sm">
+                  <div class="modal-content">
+                    <form action="{% url 'reject_borrow_request' req.pk %}" method="post">{% csrf_token %}
+                      <div class="modal-header"><h6 class="modal-title">Reject Request</h6></div>
+                      <div class="modal-body">
+                        <input type="text" name="rejection_reason" class="form-control" placeholder="Reason..." required>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="submit" class="btn btn-danger btn-sm">Confirm Reject</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-center py-3" style="color:#0f172a;font-weight:500">No pending requests.</p>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-5">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0" style="color:#0f172a"><i class="bi bi-exclamation-triangle text-danger"></i> Overdue Books</h6>
+        <a href="{% url 'overdue_list' %}" class="btn btn-sm btn-outline-danger">View All</a>
+      </div>
+      {% if overdue_transactions %}
+      <table class="table table-sm mb-0">
+        <tbody>
+          {% for tx in overdue_transactions %}
+          <tr>
+            <td><small>{{ tx.user.username }}<br><span class="text-muted">{{ tx.copy.book.title|truncatechars:25 }}</span></small></td>
+            <td class="text-end"><small class="text-danger fw-bold">{{ tx.days_overdue }} days</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="text-center py-3" style="color:#0f172a;font-weight:500">No overdue items.</p>
+      {% endif %}
+    </div>
+    <div class="card mt-3 p-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-lightning-fill text-primary"></i> Quick Actions</h6>
+      <div class="d-grid gap-2">
+        <a href="{% url 'return_desk' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-return-left"></i> Return Desk (Scan)</a>
+        <a href="{% url 'book_create' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-plus-circle"></i> Add New Book</a>
+        <a href="{% url 'create_user' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-plus"></i> Add Member</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

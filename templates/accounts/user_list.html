@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}{% if status == 'locked' %}Locked Accounts{% else %}User Management{% endif %}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0">
+    {% if status == 'locked' %}
+      <i class="bi bi-person-x text-danger"></i> Locked Accounts
+    {% else %}
+      <i class="bi bi-people"></i> User Management
+    {% endif %}
+  </h4>
+  {# <a href="{% url 'create_user' %}" class="btn btn-msict"><i class="bi bi-person-plus"></i> Add User</a> #}
+</div>
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2">
+    <div class="col-md-5"><input type="text" name="q" class="form-control" placeholder="Search by name, army number, username..." value="{{ query }}"></div>
+    <div class="col-md-3">
+      <select name="role" class="form-select">
+        <option value="">All Roles</option>
+        <option value="librarian" {% if request.GET.role == 'librarian' %}selected{% endif %}>Librarian</option>
+        <option value="member" {% if request.GET.role == 'member' %}selected{% endif %}>Member</option>
+      </select>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i> Search</button></div>
+    <div class="col-md-2"><a href="{% url 'user_list' %}" class="btn btn-outline-secondary w-100">Clear</a></div>
+  </form>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr><th>S/N</th><th>Username</th><th>Full Name</th><th>Army No</th><th>Role</th><th>Type</th><th>Email</th><th>Status</th><th>Actions</th></tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td><a href="{% url 'user_detail' u.pk %}" class="fw-bold text-decoration-none"><code>{{ u.username }}</code></a></td>
+          <td>{{ u.get_full_name }}</td>
+          <td><small>{{ u.army_no }}</small></td>
+          <td><span class="badge badge-role-{{ u.role }}">{{ u.role|title }}</span></td>
+          <td>
+            {% if u.member_type == 'student' %}
+              <span class="badge bg-primary"><i class="bi bi-mortarboard"></i> Student</span>
+            {% elif u.member_type == 'lecturer' %}
+              <span class="badge bg-info text-dark"><i class="bi bi-person-workspace"></i> Instructor</span>
+            {% elif u.member_type == 'staff' %}
+              <span class="badge bg-secondary"><i class="bi bi-briefcase"></i> Staff</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td><small>{{ u.email }}</small></td>
+          <td>
+            {% if u.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Locked</span>{% endif %}
+            {% if u.failed_attempts > 0 %}<span class="badge bg-warning text-dark ms-1">{{ u.failed_attempts }} fails</span>{% endif %}
+          </td>
+          <td>
+            <div class="btn-group">
+              {# <a href="{% url 'edit_user' u.pk %}" class="btn btn-sm btn-outline-primary" title="Edit User"><i class="bi bi-pencil"></i></a> #}
+              <a href="{% url 'reset_user_password' u.pk %}" class="btn btn-sm btn-outline-warning" title="Reset Password" onclick="return confirm('Reset password for {{ u.username }}?')"><i class="bi bi-key"></i></a>
+              
+              {% if user.role == 'admin' %}
+                {% if u.is_active %}
+                  <a href="{% url 'user_action' u.pk 'lock' %}" class="btn btn-sm btn-outline-danger" title="Lock Account" onclick="return confirm('Are you sure you want to lock {{ u.username }}?')"><i class="bi bi-lock-fill"></i></a>
+                {% else %}
+                  <a href="{% url 'user_action' u.pk 'unlock' %}" class="btn btn-sm btn-outline-success" title="Unlock Account" onclick="return confirm('Are you sure you want to unlock {{ u.username }}?')"><i class="bi bi-unlock-fill"></i></a>
+                {% endif %}
+                <a href="{% url 'user_action' u.pk 'delete' %}" class="btn btn-sm btn-outline-dark" title="Delete User" onclick="return confirm('CRITICAL WARNING: Are you sure you want to PERMANENTLY DELETE {{ u.username }}? This cannot be undone.')"><i class="bi bi-trash"></i></a>
+              {% elif user.role == 'librarian' and u.role == 'member' %}
+                <a href="{% url 'user_action' u.pk 'delete' %}" class="btn btn-sm btn-outline-danger" title="Delete Member" onclick="return confirm('Are you sure you want to permanently delete member {{ u.username }}? This cannot be undone.')"><i class="bi bi-trash"></i></a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="10" class="text-center text-muted py-4">No users found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

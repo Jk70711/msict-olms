@@ -1,0 +1,62 @@
+# ========== SECURITY - SENSITIVE FILES ==========
+.env
+*.env
+.env.*
+**/settings_local.py
+**/secrets.py
+**/credentials.py
+*.pem
+*.key
+*.crt
+
+# ========== DATABASE & DATA ==========
+db.sqlite3
+*.sqlite3
+*.db
+data.json
+data_clean.json
+*.dump
+*.dmp
+
+# ========== DJANGO ==========
+*.log
+*.pot
+*.pyc
+__pycache__/
+*.py[cod]
+*$py.class
+migrations/__pycache__/
+!migrations/__init__.py
+
+# ========== STATIC & MEDIA ==========
+staticfiles/
+media/
+static/CACHE/
+*.jpg
+*.png
+*.svg
+*.pdf
+*.mp4
+
+# ========== VENV & IDE ==========
+venv/
+olmsvenv/
+env/
+.env/
+.venv/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ========== BACKUP & TEMP ==========
+*.backup
+*.bak
+*.tmp
+.DS_Store
+Thumbs.db
+MAFUNZO_MAELEZO.md
+*.patch
+*.orig
+*.rej
+

@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}SQL Report{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-code-slash"></i> Custom SQL Report (Admin Only)</h4>
+<div class="card p-4 mb-3">
+  <form method="post">{% csrf_token %}
+    <div class="mb-3">
+      <label class="form-label fw-semibold">SQL Query <small class="text-muted">(SELECT only)</small></label>
+      <textarea name="sql" class="form-control font-monospace" rows="6" placeholder="SELECT * FROM accounts_olmsuser WHERE rownum <= 10">{{ sql }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-dark"><i class="bi bi-play-fill"></i> Execute Query</button>
+    <div class="alert alert-warning mt-3 small mb-0">
+      <i class="bi bi-exclamation-triangle"></i> Only SELECT statements are permitted. Results capped at 500 rows.
+    </div>
+  </form>
+</div>
+{% if error %}
+<div class="alert alert-danger"><i class="bi bi-x-circle"></i> <strong>Error:</strong> {{ error }}</div>
+{% endif %}
+{% if result is not None %}
+<div class="card">
+  <div class="card-header fw-bold small">Query Results ({{ result|length }} rows)</div>
+  <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+    <table class="table table-sm table-hover mb-0 font-monospace small">
+      <thead>
+        <tr>{% for col in columns %}<th>{{ col }}</th>{% endfor %}</tr>
+      </thead>
+      <tbody>
+        {% for row in result %}
+        <tr>{% for cell in row %}<td>{{ cell|default:"NULL" }}</td>{% endfor %}</tr>
+        {% empty %}
+        <tr><td colspan="{{ columns|length }}" class="text-center text-muted">No rows returned.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

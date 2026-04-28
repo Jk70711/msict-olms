@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% block title %}Book Copies{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-collection"></i> Book Copies Management</h4>
+  <div class="d-flex gap-2">
+    <a href="{% url 'copy_add' %}" class="btn btn-msict"><i class="bi bi-plus-square"></i> Add Copy</a>
+    <a href="{% url 'book_list' %}" class="btn btn-outline-secondary"><i class="bi bi-book"></i> Books</a>
+  </div>
+</div>
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2">
+    <div class="col-md-4">
+      <input type="text" name="q" class="form-control" placeholder="Search accession, title, ISBN..." value="{{ query }}">
+    </div>
+    <div class="col-md-3">
+      <select name="book" class="form-select">
+        <option value="">All Books</option>
+        {% for b in books %}
+        <option value="{{ b.pk }}" {% if selected_book == b.pk|stringformat:"i" %}selected{% endif %}>{{ b.title|truncatechars:40 }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="copy_type" class="form-select">
+        <option value="">All Types</option>
+        <option value="hardcopy" {% if request.GET.copy_type == 'hardcopy' %}selected{% endif %}>Hardcopy</option>
+        <option value="softcopy" {% if request.GET.copy_type == 'softcopy' %}selected{% endif %}>Softcopy</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="status" class="form-select">
+        <option value="">All Status</option>
+        <option value="available" {% if status == 'available' %}selected{% endif %}>Available</option>
+        <option value="borrowed" {% if status == 'borrowed' %}selected{% endif %}>Borrowed</option>
+        <option value="reserved" {% if status == 'reserved' %}selected{% endif %}>Reserved</option>
+        <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i></button>
+    </div>
+  </form>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>S/N</th>
+          <th>Accession No</th>
+          <th>Book Title</th>
+          <th>Type</th>
+          <th>Access</th>
+          <th>Status</th>
+          <th>Location / File</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for copy in copies %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td><code class="fw-bold">{{ copy.accession_no }}</code></td>
+          <td>
+            <a href="{% url 'book_detail' copy.book.pk %}" class="text-decoration-none fw-semibold">{{ copy.book.title|truncatechars:40 }}</a>
+            <div class="small text-muted">{{ copy.book.author|truncatechars:30 }}</div>
+          </td>
+          <td>
+            {% if copy.copy_type == 'hardcopy' %}
+              <span class="badge bg-primary"><i class="bi bi-book"></i> Hardcopy</span>
+            {% else %}
+              <span class="badge bg-info text-dark"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if copy.copy_type == 'hardcopy' %}
+              <span class="badge bg-primary"><i class="bi bi-arrow-return-right"></i> Borrowing</span>
+            {% elif copy.access_type == 'free' %}
+              <span class="badge bg-success"><i class="bi bi-download"></i> Free Download</span>
+            {% elif copy.access_type == 'borrow' %}
+              <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special Borrow</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if copy.copy_type == 'softcopy' %}
+              <span class="badge bg-success">Always Available</span>
+            {% elif copy.status == 'available' %}
+              <span class="badge bg-success">Available</span>
+            {% elif copy.status == 'borrowed' %}
+              <span class="badge bg-warning text-dark">Borrowed</span>
+            {% elif copy.status == 'reserved' %}
+              <span class="badge bg-info">Reserved</span>
+            {% elif copy.status == 'lost' %}
+              <span class="badge bg-danger">Lost</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if copy.copy_type == 'hardcopy' %}
+              <small>{{ copy.shelf_location|default:"—" }}</small>
+            {% elif copy.file_path %}
+              <span class="text-success small"><i class="bi bi-check-circle"></i> File OK</span>
+            {% else %}
+              <span class="text-danger small"><i class="bi bi-exclamation-circle"></i> No file</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="btn-group">
+              <a href="{% url 'copy_edit' copy.pk %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
+              {% if copy.status != 'lost' %}
+                <a href="{% url 'copy_mark_lost' copy.pk %}" class="btn btn-sm btn-outline-warning" title="Mark as Lost" onclick="return confirm('Mark this copy as lost?')"><i class="bi bi-exclamation-triangle"></i></a>
+              {% endif %}
+              <form method="POST" action="{% url 'copy_delete' copy.pk %}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this copy?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete"><i class="bi bi-trash"></i></button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center py-4 text-muted">No book copies found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

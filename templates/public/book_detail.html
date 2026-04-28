@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+{% block title %}{{ book.title }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'home' %}">Home</a></li>
+    <li class="breadcrumb-item"><a href="{% url 'catalog_search' %}">Catalog</a></li>
+    <li class="breadcrumb-item active">{{ book.title|truncatechars:40 }}</li>
+  </ol>
+</nav>
+<div class="row g-4">
+  <div class="col-md-3 text-center">
+    {% if book.cover_image %}
+      <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" class="img-fluid rounded shadow" style="max-height:300px">
+    {% else %}
+      <div class="d-flex align-items-center justify-content-center rounded bg-light" style="height:300px">
+        <i class="bi bi-book text-secondary" style="font-size:6rem"></i>
+      </div>
+    {% endif %}
+    <div class="mt-3 d-grid gap-2">
+      {% if user.is_authenticated %}
+
+        {# ── Free soft copies: always downloadable ── #}
+        {% for copy in free_copies %}
+          <a href="{% url 'free_softcopy_download' copy.pk %}" class="btn btn-success">
+            <i class="bi bi-download"></i> Download Free PDF
+          </a>
+        {% endfor %}
+
+        {# ── Special soft copies ──────────────────── #}
+        {% if special_copies %}
+          {% if user_active_softcopy_tx %}
+            {# User already has active borrow – show Read + Return #}
+            <a href="{% url 'serve_softcopy' user_active_softcopy_tx.copy.pk %}"
+               class="btn btn-primary" target="_blank">
+              <i class="bi bi-file-pdf"></i> Read Soft Copy Online
+            </a>
+            <a href="{% url 'return_early' user_active_softcopy_tx.pk %}"
+               class="btn btn-outline-secondary btn-sm">
+              <i class="bi bi-arrow-return-left"></i> Return Soft Copy
+            </a>
+          {% elif user_pending_softcopy_req %}
+            <button class="btn btn-outline-warning" disabled>
+              <i class="bi bi-hourglass-split"></i> Soft Copy Request Pending…
+            </button>
+          {% elif not user_can_borrow %}
+            {# Blocked – show reason #}
+            {% if borrow_block_reason == 'overdue' %}
+            <button class="btn btn-outline-danger" disabled title="Return overdue items first">
+              <i class="bi bi-exclamation-triangle"></i> Clear Overdue to Borrow
+            </button>
+            {% elif borrow_block_reason == 'fines' %}
+            <button class="btn btn-outline-danger" disabled title="Pay fines at circulation desk">
+              <i class="bi bi-cash-coin"></i> Pay Fines to Borrow
+            </button>
+            {% else %}
+            <button class="btn btn-outline-danger" disabled title="Borrow limit reached">
+              <i class="bi bi-slash-circle"></i> Borrow Limit Reached (3)
+            </button>
+            {% endif %}
+          {% else %}
+            {# Eligible – request the first available special softcopy #}
+            {% with copy=special_copies.first %}
+            <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-warning">
+              <i class="bi bi-file-earmark-lock"></i> Request Special Soft Copy
+            </a>
+            {% endwith %}
+          {% endif %}
+        {% endif %}
+
+        {# ── Hardcopy borrow / reserve ──────────────── #}
+        {% if book.available_hardcopy_count > 0 %}
+          {% if user_can_borrow %}
+            {% for copy in hardcopies %}
+              {% if copy.status == 'available' %}
+                <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-msict">
+                  <i class="bi bi-plus-circle"></i> Request Hardcopy
+                </a>
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+        {% elif book.total_hardcopies > 0 %}
+          <a href="{% url 'reserve_book' book.pk %}" class="btn btn-outline-warning">
+            <i class="bi bi-bookmark-plus"></i> Reserve Hardcopy
+          </a>
+        {% endif %}
+
+      {% else %}
+        <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-msict">
+          <i class="bi bi-box-arrow-in-right"></i> Login to Borrow / Read
+        </a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h3 class="fw-bold">{{ book.title }}</h3>
+    <p class="fs-5 text-muted mb-2"><i class="bi bi-person"></i> {{ book.author }}</p>
+    <div class="d-flex flex-wrap gap-2 mb-3">
+      {% if book.category %}<span class="badge bg-secondary"><i class="bi bi-tag"></i> {{ book.category.name }}</span>{% endif %}
+      {% if book.isbn %}<span class="badge bg-light text-dark border">ISBN: {{ book.isbn }}</span>{% endif %}
+      {% if book.year %}<span class="badge bg-light text-dark border">{{ book.year }}</span>{% endif %}
+      {% if book.publisher %}<span class="badge bg-light text-dark border"><i class="bi bi-building"></i> {{ book.publisher }}</span>{% endif %}
+    </div>
+    {% if book.summary %}
+    <div class="mb-3">
+      <h6 class="fw-bold">Summary</h6>
+      <p>{{ book.summary }}</p>
+    </div>
+    {% endif %}
+    {% if book.courses.all %}
+    <div class="mb-3">
+      <h6 class="fw-bold">Related Courses</h6>
+      {% for course in book.courses.all %}<span class="badge bg-primary me-1">{{ course.course_name }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="row g-3 mb-3">
+      <div class="col-6 col-md-3">
+        <div class="card p-2 text-center">
+          <div class="fs-4 fw-bold text-primary">{{ book.available_hardcopy_count }}</div>
+          <div class="small text-muted">Hardcopies Available</div>
+          <div class="small text-muted">({{ book.total_hardcopies }} total)</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card p-2 text-center">
+          <div class="fs-4 fw-bold text-success">{{ book.free_softcopy_count }}</div>
+          <div class="small text-muted">Free PDF Downloads</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card p-2 text-center">
+          <div class="fs-4 fw-bold text-warning">{{ book.available_special_softcopy_count }}</div>
+          <div class="small text-muted">Special Soft Copies Available</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card p-2 text-center">
+          <div class="fs-4 fw-bold text-info">{{ book.reservations.count }}</div>
+          <div class="small text-muted">Reservations</div>
+        </div>
+      </div>
+    </div>
+    {% if copies %}
+    <h6 class="fw-bold">Copies</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover">
+        <thead><tr><th>Accession No</th><th>Type</th><th>Access</th><th>Status</th><th>Location</th><th>Action</th></tr></thead>
+        <tbody>
+          {% for copy in copies %}
+          <tr>
+            <td><code>{{ copy.accession_no }}</code></td>
+            <td>
+              {% if copy.copy_type == 'hardcopy' %}
+                <span class="badge bg-primary"><i class="bi bi-book"></i> Hardcopy</span>
+              {% else %}
+                <span class="badge bg-info text-dark"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'hardcopy' %}
+                <span class="badge bg-primary"><i class="bi bi-arrow-return-right"></i> Borrowing</span>
+              {% elif copy.access_type == 'free' %}
+                <span class="badge bg-success"><i class="bi bi-download"></i> Free Download</span>
+              {% elif copy.access_type == 'borrow' %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special Borrow</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'softcopy' %}
+                <span class="badge bg-success">Always Available</span>
+              {% elif copy.status == 'available' %}
+                <span class="badge bg-success">Available</span>
+              {% elif copy.status == 'borrowed' %}
+                <span class="badge bg-warning text-dark">Borrowed</span>
+              {% elif copy.status == 'reserved' %}
+                <span class="badge bg-info">Reserved</span>
+              {% elif copy.status == 'lost' %}
+                <span class="badge bg-danger">Lost</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ copy.status|title }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'hardcopy' %}
+                {{ copy.shelf_location|default:"—" }}
+              {% elif copy.file_path %}
+                <span class="text-success small"><i class="bi bi-check-circle"></i> Available</span>
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'softcopy' and copy.access_type == 'free' and copy.file_path %}
+                {% if user.is_authenticated %}
+                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-success" target="_blank">
+                  <i class="bi bi-book-fill"></i> Read Free
+                </a>
+                {% else %}
+                <a href="{% url 'login' %}?next={{ request.path }}" class="btn btn-sm btn-outline-success">
+                  <i class="bi bi-book"></i> Login to Read
+                </a>
+                {% endif %}
+              {% elif copy.copy_type == 'softcopy' and copy.access_type == 'borrow' %}
+                <span class="text-muted small"><i class="bi bi-lock"></i> Request required</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

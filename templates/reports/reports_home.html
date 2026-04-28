@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4"><i class="bi bi-bar-chart"></i> Reports & Analytics</h4>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-people-fill fs-1 text-primary mb-2"></i>
+      <h6 class="fw-bold">Member Report</h6>
+      <p class="text-muted small">View all members by type, status, and activity.</p>
+      <a href="{% url 'report_members' %}" class="btn btn-msict mt-auto">View Report</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-book-fill fs-1 text-success mb-2"></i>
+      <h6 class="fw-bold">Book Inventory Report</h6>
+      <p class="text-muted small">Catalog statistics including copies, availability, and softcopies.</p>
+      <a href="{% url 'report_books' %}" class="btn btn-success mt-auto">View Report</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-arrow-left-right fs-1 text-warning mb-2"></i>
+      <h6 class="fw-bold">Circulation Report</h6>
+      <p class="text-muted small">Top borrowed books, borrowers, overdue trends.</p>
+      <a href="{% url 'report_circulation' %}" class="btn btn-warning mt-auto">View Report</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-cash-coin fs-1 text-danger mb-2"></i>
+      <h6 class="fw-bold">Fines Report</h6>
+      <p class="text-muted small">Total fines, collected, and outstanding amounts.</p>
+      <a href="{% url 'report_fines' %}" class="btn btn-danger mt-auto">View Report</a>
+    </div>
+  </div>
+  {% if request.user.role == 'admin' %}
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-code-slash fs-1 text-dark mb-2"></i>
+      <h6 class="fw-bold">Custom SQL Report</h6>
+      <p class="text-muted small">Run read-only SQL queries directly on the Oracle database.</p>
+      <a href="{% url 'sql_report' %}" class="btn btn-dark mt-auto">Open SQL Console</a>
+    </div>
+  </div>
+  {% endif %}
+  <div class="col-md-4">
+    <div class="card p-3 h-100">
+      <i class="bi bi-file-earmark-arrow-down fs-1 text-info mb-2 text-center d-block"></i>
+      <h6 class="fw-bold text-center">Export Data</h6>
+      <p class="text-muted small text-center">Download reports as PDF or CSV.</p>
+      <div class="d-grid gap-2 mt-auto">
+        <div class="d-flex gap-1">
+          <a href="{% url 'export_members_pdf' %}" class="btn btn-danger btn-sm flex-fill"><i class="bi bi-file-earmark-pdf"></i> Members PDF</a>
+          <a href="{% url 'export_members_csv' %}" class="btn btn-outline-success btn-sm flex-fill"><i class="bi bi-filetype-csv"></i> Members CSV</a>
+        </div>
+        <div class="d-flex gap-1">
+          <a href="{% url 'export_books_pdf' %}" class="btn btn-danger btn-sm flex-fill"><i class="bi bi-file-earmark-pdf"></i> Books PDF</a>
+          <a href="{% url 'export_books_csv' %}" class="btn btn-outline-success btn-sm flex-fill"><i class="bi bi-filetype-csv"></i> Books CSV</a>
+        </div>
+        <div class="d-flex gap-1">
+          <a href="{% url 'export_circulation_pdf' %}" class="btn btn-danger btn-sm flex-fill"><i class="bi bi-file-earmark-pdf"></i> Circulation PDF</a>
+          <a href="{% url 'export_fines_pdf' %}" class="btn btn-danger btn-sm flex-fill"><i class="bi bi-file-earmark-pdf"></i> Fines PDF</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

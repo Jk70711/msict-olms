@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Edit User{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-pencil"></i> Edit User – {{ user_obj.username }}</h5>
+      <form method="post">{% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Army Number <span class="text-danger">*</span></label>
+            <input type="text" name="army_no" class="form-control" value="{{ user_obj.army_no }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Surname <span class="text-danger">*</span></label>
+            <input type="text" name="surname" class="form-control" value="{{ user_obj.surname }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">First Name <span class="text-danger">*</span></label>
+            <input type="text" name="first_name" class="form-control" value="{{ user_obj.first_name }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Middle Name</label>
+            <input type="text" name="middle_name" class="form-control" value="{{ user_obj.middle_name }}">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Email <span class="text-danger">*</span></label>
+            <input type="email" name="email" class="form-control" value="{{ user_obj.email }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Phone <span class="text-danger">*</span></label>
+            <input type="text" name="phone" class="form-control" value="{{ user_obj.phone }}" required>
+          </div>
+          {% if user_obj.member_type == 'student' or not user_obj.member_type %}
+          <div class="col-md-4">
+            <label class="form-label">Registration No {% if user_obj.member_type == 'student' %}<span class="text-danger">*</span>{% endif %} <small class="text-muted">(students only)</small></label>
+            <input type="text" name="registration_no" class="form-control" value="{{ user_obj.registration_no|default:'' }}" {% if user_obj.member_type == 'student' %}required{% endif %}>
+          </div>
+          {% endif %}
+        </div>
+        <div class="alert alert-secondary mt-3 small">
+          <b>Role:</b> {{ user_obj.role|title }} &nbsp;|&nbsp;
+          <b>Member Type:</b> {{ user_obj.get_member_type_display|default:'—' }} &nbsp;|&nbsp;
+          <b>Username:</b> <code>{{ user_obj.username }}</code>
+        </div>
+        <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Changes</button>
+        <a href="{% url 'user_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

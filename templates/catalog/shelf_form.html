@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}{% if shelf %}Edit Shelf{% else %}Add Shelf{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-6">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3">
+        <i class="bi bi-bookshelf"></i>
+        {% if shelf %}Edit Shelf {{ shelf.shelf_code }}{% else %}Add New Shelf{% endif %}
+      </h5>
+      <form method="post">{% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Category <span class="text-danger">*</span></label>
+          <select name="category" class="form-select" {% if shelf %}disabled{% endif %} required>
+            <option value="">-- Select Category --</option>
+            {% for cat in categories %}
+            <option value="{{ cat.pk }}"
+              {% if shelf and shelf.category_id == cat.pk %}selected{% endif %}
+              {% if request.GET.category == cat.pk|stringformat:"d" %}selected{% endif %}>
+              {{ cat.name }} (Prefix: {{ cat.shelf_prefix|default:"?" }})
+            </option>
+            {% endfor %}
+          </select>
+          {% if shelf %}<input type="hidden" name="category" value="{{ shelf.category_id }}">{% endif %}
+          <div class="form-text">Category determines shelf letter. Shelf code = SHELF-{letter}{number}</div>
+        </div>
+        {% if not shelf %}
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Shelf Number</label>
+          <input type="number" name="shelf_number" class="form-control" min="1" placeholder="Leave blank for auto-next">
+          <div class="form-text">Leave blank to auto-assign next number. E.g., 1 → SHELF-A1, 2 → SHELF-A2</div>
+        </div>
+        {% endif %}
+        <div class="mb-3">
+          <label class="form-label">Name / Description <span class="text-muted small">(optional)</span></label>
+          <input type="text" name="name" class="form-control" value="{{ shelf.name|default:'' }}" placeholder="e.g. Computer Science Section">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Capacity</label>
+          <input type="number" name="capacity" class="form-control" value="{{ shelf.capacity|default:50 }}" min="1" max="500">
+          <div class="form-text">Maximum number of books this shelf can hold.</div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Notes <span class="text-muted small">(optional)</span></label>
+          <input type="text" name="notes" class="form-control" value="{{ shelf.notes|default:'' }}" placeholder="Any special notes about this shelf">
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-msict">
+            <i class="bi bi-save"></i> {% if shelf %}Update{% else %}Create{% endif %} Shelf
+          </button>
+          <a href="{% url 'shelf_list_all' %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+{% block title %}Suspicious Activity{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Suspicious Activity &amp; Failed Logins</h4>
+</div>
+
+<div class="row g-4">
+  <!-- Suspicious IPs Panel -->
+  <div class="col-12">
+    <div class="card p-3 h-100 shadow-sm border-0">
+      <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock-fill text-danger"></i> Suspicious IPs (last 1h, ≥5 fails)</h6>
+      
+      {% if suspicious_ips %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 border">
+          <thead class="table-light">
+            <tr>
+              <th>S/N</th>
+              <th>IP Address</th>
+              <th>Fails</th>
+              <th>Last Attempt</th>
+              <th>Usernames Tried</th>
+              <th>User Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ip in suspicious_ips %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td class="text-danger fw-bold"><code>{{ ip.ip_address }}</code></td>
+              <td><span class="badge bg-danger">{{ ip.total }}</span></td>
+              <td>
+                <small class="text-muted">{{ ip.last_attempt|date:"M d, Y" }}</small><br>
+                <small class="fw-bold">{{ ip.last_attempt|time:"H:i:s" }}</small>
+              </td>
+              <td>
+                {% for u in ip.usernames %}
+                  <code class="small">{{ u }}</code>{% if not forloop.last %}, {% endif %}
+                {% endfor %}
+              </td>
+              <td>
+                {% if ip.is_known %}
+                  <span class="badge bg-warning text-dark"><i class="bi bi-person-fill"></i> Known User</span>
+                {% else %}
+                  <span class="badge bg-secondary"><i class="bi bi-person-question"></i> Unknown</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-check-circle text-success fs-1"></i>
+        <p class="mb-0 mt-2">No suspicious IPs detected recently.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Recent Failed Logins Panel -->
+  <div class="col-12">
+    <div class="card p-3 h-100 shadow-sm border-0">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history text-secondary"></i> Recent Failed Logins (24h)</h6>
+      </div>
+      
+      <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+        <table class="table table-hover align-middle mb-0 border">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th>S/N</th>
+              <th>Username</th>
+              <th>IP Address</th>
+              <th>Attempts</th>
+              <th>Pwd Chars</th>
+              <th>Date &amp; Time</th>
+              <th>User Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fl in failed_logins %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td class="fw-bold"><code>{{ fl.username }}</code></td>
+              <td><small><code>{{ fl.ip_address }}</code></small></td>
+              <td><span class="badge bg-warning text-dark">{{ fl.attempt_count }}</span></td>
+              <td>
+                {% if fl.password_chars %}
+                  <span class="badge bg-dark" title="Length of last attempted password">{{ fl.password_chars }} chars</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td>
+                <small class="text-muted d-block">{{ fl.timestamp|date:"M d, Y" }}</small>
+                <small class="fw-bold">{{ fl.timestamp|time:"H:i:s" }}</small>
+                <small class="text-muted">({{ fl.timestamp|timesince }} ago)</small>
+              </td>
+              <td>
+                {% if fl.username in known_usernames %}
+                  <span class="badge bg-warning text-dark"><i class="bi bi-person-fill"></i> Known</span>
+                {% else %}
+                  <span class="badge bg-secondary"><i class="bi bi-person-question"></i> Unknown</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="7" class="text-center py-4 text-muted">
+                No failed logins in the last 24 hours.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

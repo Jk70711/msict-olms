@@ -1,0 +1,218 @@
+{% extends 'base.html' %}
+{% block title %}Add Book Copy{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+
+    <nav aria-label="breadcrumb" class="mb-3">
+      <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'book_list' %}">Books</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'copy_list' %}">Copies</a></li>
+        <li class="breadcrumb-item active">Add Copy</li>
+      </ol>
+    </nav>
+
+    <div class="card p-4">
+      <h5 class="fw-bold mb-4"><i class="bi bi-plus-circle"></i> Add Book Copy</h5>
+
+      <form method="post" enctype="multipart/form-data" id="addCopyForm">
+        {% csrf_token %}
+        <div class="row g-3">
+
+          <!-- Book Selector -->
+          <div class="col-12">
+            <label class="form-label fw-semibold">Book <span class="text-danger">*</span></label>
+            <select name="book_id" id="bookSelect" class="form-select" required>
+              <option value="">— Select a book —</option>
+              {% for book in books %}
+              <option value="{{ book.pk }}"
+                data-category="{{ book.category_id|default:'' }}"
+                data-category-name="{{ book.category.name|default:'' }}"
+                data-has-softcopy="{% if book.pk in books_with_softcopy %}1{% else %}0{% endif %}">
+                {{ book.title }}{% if book.author %} — {{ book.author }}{% endif %}{% if book.isbn %} [{{ book.isbn }}]{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+            <div class="form-text" id="bookCategoryHint"></div>
+            <div id="softcopyExistsAlert" class="alert alert-warning mt-2 py-2 small mb-0" style="display:none">
+              <i class="bi bi-exclamation-triangle-fill"></i>
+              This book already has a softcopy. Only <strong>1 softcopy per book</strong> is allowed.
+              If you select Softcopy as the type, the request will be rejected.
+              <a href="#" id="viewExistingLink" class="alert-link ms-1">View existing copy →</a>
+            </div>
+          </div>
+
+          <!-- Copy Type -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Copy Type <span class="text-danger">*</span></label>
+            <div class="d-flex gap-3 mt-1">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="copy_type" id="typeHard" value="hardcopy" checked>
+                <label class="form-check-label" for="typeHard"><i class="bi bi-book"></i> Hardcopy</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="copy_type" id="typeSoft" value="softcopy">
+                <label class="form-check-label" for="typeSoft"><i class="bi bi-file-earmark-pdf"></i> Softcopy</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Access Type (softcopy only) -->
+          <div class="col-md-6" id="accessTypeRow" style="display:none">
+            <label class="form-label fw-semibold">Access Type <span class="text-danger">*</span></label>
+            <select name="access_type" id="accessTypeSelect" class="form-select">
+              <option value="free">Free Download</option>
+              <option value="borrow">Special (Borrowable)</option>
+            </select>
+            <div class="form-text">
+              <span class="badge bg-success">Free</span> = any logged-in user can download immediately.<br>
+              <span class="badge bg-warning text-dark">Special</span> = user requests and librarian approves access.
+            </div>
+          </div>
+
+          <!-- Accession Number -->
+          <div class="col-md-6" id="accessionRow">
+            <label class="form-label fw-semibold">Accession Number <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="text" name="accession_no" id="accessionInput" class="form-control font-monospace fw-bold"
+                     placeholder="Loading…" required>
+              <button type="button" class="btn btn-outline-secondary" onclick="fetchNextAccession()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+            <div class="form-text text-success"><i class="bi bi-info-circle"></i> Auto-generated. Edit if needed.</div>
+          </div>
+
+          <!-- Barcode -->
+          <div class="col-md-6" id="barcodeRow">
+            <label class="form-label">Barcode <span class="text-muted small">(optional, defaults to accession no.)</span></label>
+            <input type="text" name="barcode" id="barcodeInput" class="form-control" placeholder="Leave blank to use accession no.">
+          </div>
+
+          <!-- Shelf Location (hardcopy only) -->
+          <div class="col-md-6" id="shelfRow">
+            <label class="form-label">Shelf Location</label>
+            <select name="shelf_location" id="shelfSelect" class="form-select">
+              <option value="">— Select book first —</option>
+            </select>
+          </div>
+
+          <!-- PDF File (softcopy only) -->
+          <div class="col-md-6" id="fileRow" style="display:none">
+            <label class="form-label fw-semibold">PDF / eBook File</label>
+            <input type="file" name="file_path" id="fileInput" class="form-control" accept=".pdf,.epub,.doc,.docx">
+            <div class="form-text">Upload the digital file. Supported: PDF, EPUB, DOC.</div>
+          </div>
+
+        </div>
+
+        <div class="mt-4 d-flex gap-2">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Add Copy</button>
+          <a href="{% url 'copy_list' %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const nextAccessionUrl = "{% url 'next_accession_api' %}";
+const shelvesApiBase   = "{% url 'shelves_by_category_api' 0 %}".replace('/0/', '/');
+
+const bookSelect       = document.getElementById('bookSelect');
+const accessionInput   = document.getElementById('accessionInput');
+const shelfSelect      = document.getElementById('shelfSelect');
+const accessTypeRow    = document.getElementById('accessTypeRow');
+const fileRow          = document.getElementById('fileRow');
+const shelfRow         = document.getElementById('shelfRow');
+const barcodeRow       = document.getElementById('barcodeRow');
+const bookCategoryHint = document.getElementById('bookCategoryHint');
+
+/* ── Fetch next accession ─────────────────────────── */
+function fetchNextAccession() {
+  accessionInput.placeholder = 'Generating…';
+  accessionInput.value = '';
+  fetch(nextAccessionUrl)
+    .then(r => r.json())
+    .then(d => { accessionInput.value = d.accession_no; accessionInput.placeholder = ''; })
+    .catch(() => { accessionInput.placeholder = 'Error – type manually'; });
+}
+fetchNextAccession();
+
+/* ── Load shelves for category ────────────────────── */
+function loadShelves(catId) {
+  shelfSelect.innerHTML = '<option value="">Loading…</option>';
+  if (!catId) {
+    shelfSelect.innerHTML = '<option value="">— No shelves (no category) —</option>';
+    return;
+  }
+  fetch(shelvesApiBase + catId + '/')
+    .then(r => r.json())
+    .then(d => {
+      shelfSelect.innerHTML = '<option value="">— No shelf —</option>';
+      d.shelves.forEach(s => {
+        const o = document.createElement('option');
+        o.value = s.code;
+        o.textContent = s.code + (s.name ? ' – ' + s.name : '');
+        shelfSelect.appendChild(o);
+      });
+      if (!d.shelves.length) {
+        shelfSelect.innerHTML = '<option value="">No shelves for this category</option>';
+      }
+    })
+    .catch(() => { shelfSelect.innerHTML = '<option value="">Error loading shelves</option>'; });
+}
+
+/* ── Book change ──────────────────────────────────────── */
+const softcopyExistsAlert = document.getElementById('softcopyExistsAlert');
+const viewExistingLink    = document.getElementById('viewExistingLink');
+const softRadio           = document.getElementById('typeSoft');
+
+bookSelect.addEventListener('change', function () {
+  const opt = this.options[this.selectedIndex];
+  const catId      = opt.dataset.category || '';
+  const catName    = opt.dataset.categoryName || '';
+  const hasSoft    = opt.dataset.hasSoftcopy === '1';
+  const bookId     = opt.value;
+
+  bookCategoryHint.textContent = catId ? 'Category: ' + catName : 'No category set for this book.';
+  loadShelves(catId);
+
+  /* Softcopy restriction */
+  if (hasSoft) {
+    softcopyExistsAlert.style.display = '';
+    viewExistingLink.href = '/catalog/books/' + bookId + '/';
+    softRadio.disabled = true;
+    /* If softcopy was selected, switch back to hardcopy */
+    if (softRadio.checked) {
+      document.getElementById('typeHard').checked = true;
+      applyBookType && applyBookType('hardcopy');
+    }
+  } else {
+    softcopyExistsAlert.style.display = 'none';
+    softRadio.disabled = false;
+  }
+});
+
+/* ── Copy type toggle ─────────────────────────────── */
+document.querySelectorAll('input[name="copy_type"]').forEach(radio => {
+  radio.addEventListener('change', function () {
+    const isSoft = this.value === 'softcopy';
+    accessTypeRow.style.display = isSoft ? '' : 'none';
+    fileRow.style.display       = isSoft ? '' : 'none';
+    shelfRow.style.display      = isSoft ? 'none' : '';
+    barcodeRow.style.display    = isSoft ? 'none' : '';
+    if (isSoft) {
+      /* softcopy: accession field not needed, but keep it hidden */
+      document.getElementById('accessionRow').style.display = 'none';
+      accessionInput.removeAttribute('required');
+    } else {
+      document.getElementById('accessionRow').style.display = '';
+      accessionInput.setAttribute('required', 'required');
+    }
+  });
+});
+</script>
+{% endblock %}

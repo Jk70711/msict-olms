@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+{% block title %}PO-{{ order.pk }}{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-cart"></i> Purchase Order — PO-{{ order.pk }}</h4>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div><b>Vendor:</b> {{ order.vendor.name|default:"N/A" }}</div>
+      <div><b>Date:</b> {{ order.order_date|date:"d M Y" }}</div>
+      <div><b>Status:</b>
+        {% if order.status == 'received' %}<span class="badge bg-success">Received</span>
+        {% elif order.status == 'ordered' %}<span class="badge bg-primary">Ordered</span>
+        {% elif order.status == 'draft' %}<span class="badge bg-secondary">Draft</span>
+        {% else %}<span class="badge bg-danger">{{ order.status|title }}</span>{% endif %}
+      </div>
+      <div class="mt-2">
+        <form method="post" class="d-flex gap-2">{% csrf_token %}
+          <input type="hidden" name="action" value="update_status">
+          <select name="status" class="form-select form-select-sm">
+            <option value="draft">Draft</option>
+            <option value="ordered">Ordered</option>
+            <option value="received">Received</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <button type="submit" class="btn btn-sm btn-msict">Update</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-8">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0">Order Items</h6>
+        <button class="btn btn-sm btn-msict" data-bs-toggle="modal" data-bs-target="#addItemModal">
+          <i class="bi bi-plus"></i> Add Item
+        </button>
+      </div>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Title</th><th>ISBN</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+        <tbody>
+          {% for item in order.items.all %}
+          <tr>
+            <td><small>{{ item.title|truncatechars:40 }}</small></td>
+            <td><small>{{ item.isbn|default:"-" }}</small></td>
+            <td>{{ item.quantity }}</td>
+            <td>TZS {{ item.unit_price|floatformat:2 }}</td>
+            <td>TZS {{ item.total_price|floatformat:2 }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-center text-muted">No items added.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="addItemModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">{% csrf_token %}
+        <input type="hidden" name="action" value="add_item">
+        <div class="modal-header"><h5 class="modal-title">Add Item</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-2"><label class="form-label">Title *</label><input type="text" name="title" class="form-control" required></div>
+          <div class="mb-2"><label class="form-label">ISBN</label><input type="text" name="isbn" class="form-control" maxlength="13"></div>
+          <div class="row g-2">
+            <div class="col"><label class="form-label">Quantity</label><input type="number" name="quantity" class="form-control" value="1" min="1" required></div>
+            <div class="col"><label class="form-label">Unit Price (TZS)</label><input type="number" name="unit_price" class="form-control" step="0.01" required></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="submit" class="btn btn-msict">Add Item</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Categories{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-tags"></i> Book Categories</h4>
+  <a href="{% url 'category_create' %}" class="btn btn-msict"><i class="bi bi-plus-circle"></i> Add Category</a>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead><tr><th>#</th><th>Name</th><th>Shelf Prefix</th><th>Shelves</th><th>Books</th></tr></thead>
+      <tbody>
+        {% for cat in categories %}
+        <tr>
+          <td class="text-muted small">{{ forloop.counter }}</td>
+          <td class="fw-semibold">{{ cat.name }}</td>
+          <td>
+            {% if cat.shelf_prefix %}
+            <span class="badge bg-primary">{{ cat.shelf_prefix }}</span>
+            <small class="text-muted ms-1">SHELF-{{ cat.shelf_prefix }}1, SHELF-{{ cat.shelf_prefix }}2…</small>
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>
+            <a href="{% url 'shelf_list_all' %}#cat{{ cat.pk }}" class="badge bg-info text-decoration-none">
+              {{ cat.shelves.count }} shelf{{ cat.shelves.count|pluralize:"s" }}
+            </a>
+          </td>
+          <td><span class="badge bg-secondary">{{ cat.books.count }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-4 text-muted">No categories yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

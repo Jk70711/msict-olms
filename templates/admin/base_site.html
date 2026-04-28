@@ -1,0 +1,23 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | MSICT OLMS Admin{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">
+    <img src="{% static 'images/msict_logo.png' %}" alt="MSICT OLMS" style="height:40px;vertical-align:middle;margin-right:8px;">
+    MSICT OLMS
+  </a>
+</h1>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="icon" type="image/png" href="{% static 'images/msict_logo.png' %}">
+<link rel="shortcut icon" type="image/png" href="{% static 'images/msict_logo.png' %}">
+<style>
+  #header { background: #003366; }
+  #branding h1 a { color: #C8A951; }
+</style>
+{% endblock %}

@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Fines Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-cash-coin"></i> Fines Report</h4>
+  <a href="{% url 'export_fines_pdf' %}" class="btn btn-sm btn-danger">
+    <i class="bi bi-file-earmark-pdf"></i> Export PDF
+  </a>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-4"><div class="card p-3 text-center stat-card"><div class="fs-2 fw-bold">TZS {{ total_fines|floatformat:2 }}</div><div class="small text-muted">Total Fines Levied</div></div></div>
+  <div class="col-md-4"><div class="card p-3 text-center stat-card success"><div class="fs-2 fw-bold text-success">TZS {{ collected|floatformat:2 }}</div><div class="small text-muted">Collected</div></div></div>
+  <div class="col-md-4"><div class="card p-3 text-center stat-card danger"><div class="fs-2 fw-bold text-danger">TZS {{ outstanding|floatformat:2 }}</div><div class="small text-muted">Outstanding</div></div></div>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0">
+      <thead><tr><th>S/N</th><th>Member</th><th>Reason</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+      <tbody>
+        {% for fine in fines %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td><small>{{ fine.user.get_full_name }} ({{ fine.user.army_no }})</small></td>
+          <td><small>{{ fine.reason|truncatechars:60 }}</small></td>
+          <td class="fw-bold {% if fine.paid %}text-success{% else %}text-danger{% endif %}">TZS {{ fine.amount|floatformat:2 }}</td>
+          <td>{% if fine.paid %}<span class="badge bg-success">Paid</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+          <td><small>{{ fine.created_at|date:"d M Y" }}</small></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center py-4 text-muted">No fines recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

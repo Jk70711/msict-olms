@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+{% block title %}My Dashboard{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> My Library Dashboard</h4>
+
+{% if has_overdue %}
+<div class="overdue-banner mb-3">
+  <i class="bi bi-exclamation-triangle-fill me-2"></i>
+  <strong>You have overdue items!</strong> Return overdue books before borrowing new ones. Fines are accumulating.
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card p-3 text-center">
+      <i class="bi bi-book-fill fs-2 text-primary mb-1"></i>
+      <div class="fs-3 fw-bold">{{ active_transactions.count }}</div>
+      <div class="small text-muted">Active Borrows</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card danger p-3 text-center">
+      <i class="bi bi-exclamation-triangle-fill fs-2 text-danger mb-1"></i>
+      <div class="fs-3 fw-bold text-danger">{{ overdue_transactions.count }}</div>
+      <div class="small text-muted">Overdue</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card warning p-3 text-center">
+      <i class="bi bi-bookmark-fill fs-2 text-warning mb-1"></i>
+      <div class="fs-3 fw-bold">{{ reservations.count }}</div>
+      <div class="small text-muted">Reservations</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card p-3 text-center">
+      <i class="bi bi-cash-coin fs-2 text-danger mb-1"></i>
+      <div class="fs-3 fw-bold text-danger">{{ total_fines|floatformat:0 }}</div>
+      <div class="small text-muted">Unpaid Fines (TZS)</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-7">
+    <!-- Active Borrows -->
+    <div class="card p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-book"></i> Current Borrows</h6>
+        <a href="{% url 'borrow_catalog' %}" class="btn btn-sm btn-msict"><i class="bi bi-plus"></i> Borrow</a>
+      </div>
+      {% if active_transactions %}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle mb-0">
+          <thead class="table-light">
+            <tr><th>S/N</th><th>Book</th><th>Type</th><th>Due Date</th><th>Status</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            {% for tx in active_transactions %}
+            <tr class="{% if tx.status == 'overdue' %}table-danger{% endif %}">
+              <td>{{ forloop.counter }}</td>
+              <td><small class="fw-semibold">{{ tx.copy.book.title|truncatechars:35 }}</small></td>
+              <td><span class="badge bg-secondary">{{ tx.copy.copy_type }}</span></td>
+              <td>
+                <small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% endif %}">
+                  {{ tx.due_date|date:"d M Y" }}
+                  {% if tx.status == 'overdue' %}<br><span class="badge bg-danger">{{ tx.days_overdue }} days late</span>{% endif %}
+                </small>
+              </td>
+              <td>
+                {% if tx.status == 'overdue' %}<span class="badge bg-danger">Overdue</span>
+                {% else %}<span class="badge bg-warning text-dark">Borrowed</span>{% endif %}
+              </td>
+              <td>
+                {% if tx.copy.copy_type == 'softcopy' and tx.copy.file_path and tx.is_link_active %}
+                <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-xs btn-sm btn-primary py-0" target="_blank">
+                  <i class="bi bi-book-fill"></i> Read
+                </a>
+                {% endif %}
+                {% if tx.can_renew %}
+                <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-xs btn-sm btn-outline-success py-0">Renew</a>
+                {% endif %}
+                {% if tx.copy.copy_type == 'softcopy' %}
+                <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted text-center py-3 mb-0">No active borrows.</p>
+      {% endif %}
+    </div>
+
+    <!-- Pending Requests -->
+    {% if pending_requests %}
+    <div class="card p-3 mb-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-clock text-warning"></i> Pending Requests</h6>
+      <table class="table table-sm table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr><th>S/N</th><th>Book</th><th>Requested</th><th>Actions</th></tr>
+        </thead>
+        <tbody>
+          {% for req in pending_requests %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><small>{{ req.copy.book.title|truncatechars:40 }}</small></td>
+            <td><small class="text-muted">{{ req.request_date|timesince }} ago</small></td>
+            <td><a href="{% url 'cancel_borrow_request' req.pk %}" class="btn btn-xs btn-sm btn-outline-danger py-0"
+              onclick="return confirm('Cancel this request?')">Cancel</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="col-md-5">
+    <!-- Notified Reservations — Borrow Now Alert -->
+    {% for res in notified_reservations %}
+    <div class="alert alert-success border-success mb-3">
+      <div class="fw-bold"><i class="bi bi-bell-fill"></i> Your Turn — Borrow Now!</div>
+      <div class="small mb-2"><strong>{{ res.book.title }}</strong></div>
+      <div class="small text-muted mb-2">
+        Notified {{ res.notified_at|timesince }} ago &mdash; submit your request within 24 hours.
+      </div>
+      <a href="{% url 'queue_borrow' res.pk %}"
+         class="btn btn-success btn-sm"
+         onclick="return confirm('Submit borrow request for {{ res.book.title }}? Awaiting librarian approval.')">
+        <i class="bi bi-bag-plus-fill"></i> Request Borrow
+      </a>
+      <a href="{% url 'my_reservations' %}" class="btn btn-outline-secondary btn-sm ms-1">View Queue</a>
+    </div>
+    {% endfor %}
+
+    <!-- Pending Reservations -->
+    {% if reservations %}
+    <div class="card p-3 mb-3">
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-bookmark text-warning"></i> My Reservations</h6>
+        <a href="{% url 'my_reservations' %}" class="btn btn-outline-secondary btn-sm py-0">View All</a>
+      </div>
+      {% for res in reservations %}
+      <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+        <div>
+          <div class="small fw-semibold">{{ res.book.title|truncatechars:30 }}</div>
+          <div class="small text-muted">
+            Queue: <b>#{{ res.position }}</b>
+            {% if res.status == 'notified' %}
+              <span class="badge bg-success ms-1">Your Turn!</span>
+            {% endif %}
+          </div>
+        </div>
+        <a href="{% url 'cancel_reservation' res.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1"
+           onclick="return confirm('Cancel reservation for {{ res.book.title }}?')">
+          <i class="bi bi-x-circle"></i>
+        </a>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Fines -->
+    {% if unpaid_fines %}
+    <div class="card p-3 mb-3 border-danger">
+      <h6 class="fw-bold mb-2 text-danger"><i class="bi bi-cash-coin"></i> Outstanding Fines</h6>
+      {% for fine in unpaid_fines %}
+      <div class="d-flex justify-content-between border-bottom py-1">
+        <small>{{ fine.reason|truncatechars:40 }}</small>
+        <small class="fw-bold text-danger">TZS {{ fine.amount }}</small>
+      </div>
+      {% endfor %}
+      <div class="text-end mt-2"><small class="fw-bold">Total: TZS {{ total_fines }}</small></div>
+      <div class="small text-muted mt-1">Report to the circulation desk to clear fines.</div>
+    </div>
+    {% endif %}
+
+    <!-- Notifications -->
+    <div class="card p-3">
+      <h6 class="fw-bold mb-2"><i class="bi bi-bell"></i> Recent Notifications</h6>
+      {% for notif in notifications %}
+      <div class="border-bottom py-2">
+        <div class="small">{{ notif.message|truncatechars:80 }}</div>
+        <div class="small text-muted">{{ notif.created_at|timesince }} ago
+          <span class="badge bg-{{ notif.channel|yesno:'primary,success' }} ms-1">{{ notif.channel }}</span>
+        </div>
+      </div>
+      {% empty %}
+      <p class="text-muted text-center py-3 mb-0 small">No notifications.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

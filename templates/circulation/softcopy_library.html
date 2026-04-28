@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% block title %}Softcopy Library{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-file-earmark-text"></i> Softcopy Library</h4>
+  <span class="text-muted small">Digital collection of the MSICT Library</span>
+</div>
+
+{% if not user_can_borrow %}
+<div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
+  <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+  <div>
+    {% if borrow_block_reason == 'overdue' %}
+      <strong>Borrowing blocked:</strong> You have overdue items. Return them before borrowing new ones.
+    {% elif borrow_block_reason == 'fines' %}
+      <strong>Borrowing blocked:</strong> You have unpaid fines. Pay at the circulation desk.
+    {% else %}
+      <strong>Borrowing blocked:</strong> You have reached the maximum of 3 active borrows.
+    {% endif %}
+    You can still <strong>download free PDFs</strong> and <strong>read already borrowed</strong> soft copies.
+  </div>
+</div>
+{% endif %}
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card p-3 text-center stat-card success">
+      <div class="fs-2 fw-bold text-success">{{ total_free }}</div>
+      <div class="small text-muted">Free PDF Books</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3 text-center stat-card warning">
+      <div class="fs-2 fw-bold text-warning">{{ total_special }}</div>
+      <div class="small text-muted">Special Soft Copy Books</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3 text-center">
+      <div class="fs-2 fw-bold text-primary">{{ books.count }}</div>
+      <div class="small text-muted">Showing</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card p-3 text-center">
+      <div class="fs-2 fw-bold text-info">{{ active_borrow_copy_ids|length }}</div>
+      <div class="small text-muted">Your Active Soft Borrows</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card p-3 mb-4">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small fw-semibold mb-1">Search</label>
+      <input type="text" name="q" class="form-control" placeholder="Title, author, ISBN…" value="{{ query }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold mb-1">Category</label>
+      <select name="category" class="form-select">
+        <option value="">All Categories</option>
+        {% for c in categories %}
+          <option value="{{ c.pk }}" {% if category_id == c.pk|stringformat:"i" %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold mb-1">Type</label>
+      <select name="type" class="form-select">
+        <option value="" {% if not sc_type %}selected{% endif %}>All Soft Copies</option>
+        <option value="free" {% if sc_type == 'free' %}selected{% endif %}>🟢 Free PDF Downloads</option>
+        <option value="borrow" {% if sc_type == 'borrow' %}selected{% endif %}>🟡 Special (Borrow)</option>
+      </select>
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i> Filter</button>
+      <a href="{% url 'softcopy_library' %}" class="btn btn-outline-secondary"><i class="bi bi-x-lg"></i></a>
+    </div>
+  </form>
+</div>
+
+<!-- Type tabs -->
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item">
+    <a class="nav-link {% if not sc_type %}active{% endif %}" href="?{% if query %}q={{ query }}&{% endif %}{% if category_id %}category={{ category_id }}&{% endif %}type=">All</a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if sc_type == 'free' %}active{% endif %}" href="?{% if query %}q={{ query }}&{% endif %}{% if category_id %}category={{ category_id }}&{% endif %}type=free">
+      <i class="bi bi-download text-success"></i> Free Downloads
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if sc_type == 'borrow' %}active{% endif %}" href="?{% if query %}q={{ query }}&{% endif %}{% if category_id %}category={{ category_id }}&{% endif %}type=borrow">
+      <i class="bi bi-file-earmark-lock text-warning"></i> Special (Borrow)
+    </a>
+  </li>
+</ul>
+
+<!-- Book Grid -->
+<div class="row g-3">
+  {% for book in books %}
+  {% with free_copies=book.copies.all|length %}
+  <div class="col-md-6 col-lg-4">
+    <div class="card h-100">
+      <div class="row g-0 h-100">
+
+        <!-- Cover -->
+        <div class="col-3 d-flex align-items-center justify-content-center p-2 bg-light" style="border-radius:12px 0 0 12px;min-height:130px">
+          {% if book.cover_image %}
+            <img src="{{ book.cover_image.url }}" class="img-fluid rounded" style="max-height:110px;object-fit:cover">
+          {% else %}
+            <i class="bi bi-file-earmark-text text-secondary" style="font-size:2.8rem"></i>
+          {% endif %}
+        </div>
+
+        <!-- Info -->
+        <div class="col-9 d-flex flex-column">
+          <div class="card-body p-2 flex-grow-1">
+            <div class="fw-semibold" style="font-size:.85rem;line-height:1.3">{{ book.title|truncatechars:55 }}</div>
+            <div class="text-muted small">{{ book.author|truncatechars:35 }}</div>
+            {% if book.category %}<div class="small text-muted"><i class="bi bi-tag"></i> {{ book.category.name }}</div>{% endif %}
+
+            <!-- Type badges -->
+            <div class="mt-1 d-flex flex-wrap gap-1">
+              {% for copy in book.copies.all %}
+                {% if copy.copy_type == 'softcopy' and copy.access_type == 'free' %}
+                  <span class="badge bg-success"><i class="bi bi-download"></i> Free PDF</span>
+                {% endif %}
+                {% if copy.copy_type == 'softcopy' and copy.access_type == 'borrow' %}
+                  {% if copy.pk in active_borrow_copy_ids %}
+                    <span class="badge bg-primary"><i class="bi bi-file-pdf"></i> Borrowed by you</span>
+                  {% elif copy.pk in pending_copy_ids %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Request Pending</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special</span>
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+            </div>
+          </div>
+
+          <!-- Action buttons -->
+          <div class="card-footer p-2 bg-transparent border-top-0 d-flex flex-column gap-1">
+            {% for copy in book.copies.all %}
+              {% if copy.copy_type == 'softcopy' %}
+                {% if copy.access_type == 'free' %}
+                  <a href="{% url 'free_softcopy_download' copy.pk %}" class="btn btn-sm btn-success w-100">
+                    <i class="bi bi-download"></i> Download Free PDF
+                  </a>
+                {% elif copy.access_type == 'borrow' %}
+                  {% if copy.pk in active_borrow_copy_ids %}
+                    <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-primary w-100" target="_blank">
+                      <i class="bi bi-file-pdf"></i> Read Online
+                    </a>
+                  {% elif copy.pk in pending_copy_ids %}
+                    <button class="btn btn-sm btn-outline-warning w-100" disabled>
+                      <i class="bi bi-hourglass-split"></i> Awaiting Approval…
+                    </button>
+                  {% elif not user_can_borrow %}
+                    {% if borrow_block_reason == 'overdue' %}
+                    <button class="btn btn-sm btn-outline-danger w-100" disabled title="Return overdue items first">
+                      <i class="bi bi-exclamation-triangle"></i> Clear Overdue First
+                    </button>
+                    {% elif borrow_block_reason == 'fines' %}
+                    <button class="btn btn-sm btn-outline-danger w-100" disabled title="Pay fines at desk">
+                      <i class="bi bi-cash-coin"></i> Pay Fines First
+                    </button>
+                    {% else %}
+                    <button class="btn btn-sm btn-outline-danger w-100" disabled title="Borrow limit reached (3)">
+                      <i class="bi bi-slash-circle"></i> Limit Reached
+                    </button>
+                    {% endif %}
+                  {% else %}
+                    <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-sm btn-warning w-100">
+                      <i class="bi bi-file-earmark-lock"></i> Request to Read
+                    </a>
+                  {% endif %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            <a href="{% url 'book_detail_public' book.pk %}" class="btn btn-sm btn-outline-secondary w-100">
+              <i class="bi bi-eye"></i> Details
+            </a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+  {% endwith %}
+  {% empty %}
+  <div class="col-12 text-center py-5">
+    <i class="bi bi-file-earmark-x text-muted" style="font-size:4rem"></i>
+    <h5 class="text-muted mt-3">No softcopy books found{% if query %} for "{{ query }}"{% endif %}</h5>
+    <p class="text-muted small">The librarian needs to add softcopy files to books in the system.</p>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

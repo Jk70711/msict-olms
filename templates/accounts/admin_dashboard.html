@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> Admin Dashboard</h4>
+
+{% if security_alerts %}
+<div class="alert alert-danger shadow-sm mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-bold mb-0"><i class="bi bi-shield-exclamation text-danger"></i> Recent Security Alerts</h6>
+    <small class="text-muted">{{ security_alerts|length }} alert(s)</small>
+  </div>
+  <ul class="mb-0 list-unstyled">
+    {% for alert in security_alerts %}
+    <li class="d-flex justify-content-between align-items-start py-1 border-bottom border-danger border-opacity-25">
+      <span><strong>{{ alert.created_at|date:"M d, H:i" }}:</strong> {{ alert.message }}</span>
+      <form method="post" action="{% url 'delete_security_alert' alert.pk %}" class="ms-2 flex-shrink-0">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Dismiss alert"
+          onclick="return confirm('Dismiss this alert?')">
+          <i class="bi bi-x-lg"></i>
+        </button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Total Users</span><i class="bi bi-people fs-4 text-primary"></i></div>
+      <div class="fs-2 fw-bold">{{ total_users }}</div>
+      <div class="small text-success">{{ active_users }} active</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card danger p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Locked Accounts</span><i class="bi bi-lock-fill fs-4 text-danger"></i></div>
+      <div class="fs-2 fw-bold text-danger">{{ locked_users }}</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card warning p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Active Borrows</span><i class="bi bi-book-fill fs-4 text-warning"></i></div>
+      <div class="fs-2 fw-bold">{{ total_borrows }}</div>
+      <div class="small text-danger">{{ overdue_count }} overdue</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card p-3">
+      <div class="d-flex justify-content-between"><span class="text-muted small">Unpaid Fines</span><i class="bi bi-cash-coin fs-4 text-success"></i></div>
+      <div class="fs-2 fw-bold">TZS {{ unpaid_fines|floatformat:2 }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill text-primary"></i> Users by Role</h6>
+      <ul class="list-group list-group-flush">
+        {% for ur in users_by_role %}
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+          {{ ur.role|title }}
+          <span class="badge bg-primary rounded-pill">{{ ur.count }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill text-primary"></i> Most Borrowed Books</h6>
+      <ol class="list-group list-group-numbered list-group-flush">
+        {% for b in most_borrowed %}
+        <li class="list-group-item d-flex justify-content-between align-items-start">
+          <div class="ms-2 me-auto">
+            <div class="fw-bold text-truncate" style="max-width:250px;" title="{{ b.copy__book__title }}">{{ b.copy__book__title }}</div>
+          </div>
+          <span class="badge bg-secondary rounded-pill">{{ b.total }}</span>
+        </li>
+        {% empty %}
+        <p class="text-muted small">No borrowing data yet.</p>
+        {% endfor %}
+      </ol>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-3 p-3">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-bold mb-0"><i class="bi bi-journal-text"></i> Recent Audit Log</h6>
+    <div class="d-flex gap-2">
+      <a href="{% url 'audit_logs' %}" class="btn btn-sm btn-outline-primary py-0">View All</a>
+    </div>
+  </div>
+  <div class="table-responsive" style="max-height:280px;overflow-y:auto">
+    <table class="table table-sm table-hover mb-0 border">
+      <thead class="table-light"><tr><th>User</th><th>Action</th><th>IP</th><th>Time</th><th></th></tr></thead>
+      <tbody>
+        {% for log in recent_logs %}
+        <tr>
+          <td><span class="badge bg-secondary">{{ log.user.username|default:"system" }}</span></td>
+          <td><small>{{ log.action|truncatechars:80 }}</small></td>
+          <td><small class="text-muted"><code>{{ log.ip_address|default:"-" }}</code></small></td>
+          <td><small class="text-muted">{{ log.timestamp|timesince }} ago</small></td>
+          <td>
+            <form method="post" action="{% url 'delete_audit_log' log.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="admin_dashboard">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete"
+                onclick="return confirm('Delete this log entry?')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-muted small text-center">No logs found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

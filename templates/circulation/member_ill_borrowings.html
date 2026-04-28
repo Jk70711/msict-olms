@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+{% block title %}My ILL Borrowings{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-arrow-left-right"></i> My ILL (Inter-Library Loan) Borrowings</h4>
+  <a href="{% url 'ill_request_create' %}" class="btn btn-msict btn-sm"><i class="bi bi-plus-circle"></i> New ILL Request</a>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-warning">{{ pending_ill.count }}</div>
+        <div class="small text-muted">Pending</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-info">{{ sent_ill.count }}</div>
+        <div class="small text-muted">Sent to Source</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-success">{{ received_ill.count }}</div>
+        <div class="small text-muted">Received</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-primary">{{ ill_history.count }}</div>
+        <div class="small text-muted">Total Requests</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Pending ILL Requests -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-hourglass-split"></i> Pending ILL Requests</span>
+        {% if pending_ill %}
+        <span class="badge bg-warning text-dark">{{ pending_ill.count }}</span>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for ill in pending_ill %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold">{{ ill.title|truncatechars:40 }}</span>
+              {% if ill.author %}
+              <div class="small text-muted">Author: {{ ill.author }}</div>
+              {% endif %}
+              {% if ill.isbn %}
+              <div class="small text-muted">ISBN: {{ ill.isbn }}</div>
+              {% endif %}
+              <div class="small">
+                <span class="badge bg-warning text-dark">{{ ill.status|title }}</span>
+                <span class="text-muted">Requested: {{ ill.request_date|date:"M d, Y" }}</span>
+              </div>
+            </div>
+            {% if ill.source_library %}
+            <div class="small text-end text-muted">From: {{ ill.source_library }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No pending ILL requests</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Sent/Fulfilled ILL -->
+  <div class="col-md-6">
+    <div class="card h-100">
+      <div class="card-header fw-bold"><i class="bi bi-truck"></i> In Progress (Sent/Fulfilled)</div>
+      <div class="list-group list-group-flush">
+        {% for ill in sent_ill %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold">{{ ill.title|truncatechars:40 }}</span>
+              {% if ill.author %}
+              <div class="small text-muted">Author: {{ ill.author }}</div>
+              {% endif %}
+              <div class="small">
+                <span class="badge bg-info">{{ ill.status|title }}</span>
+                <span class="text-muted">{{ ill.request_date|date:"M d, Y" }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No requests in progress</div>
+        {% endfor %}
+        {% for ill in fulfilled_ill %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold">{{ ill.title|truncatechars:40 }}</span>
+              {% if ill.author %}
+              <div class="small text-muted">Author: {{ ill.author }}</div>
+              {% endif %}
+              <div class="small">
+                <span class="badge bg-success">{{ ill.status|title }}</span>
+                <span class="text-muted">{{ ill.request_date|date:"M d, Y" }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        {% if not sent_ill %}
+        <div class="list-group-item text-muted text-center py-3">No fulfilled requests</div>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mt-3">
+  <!-- Received ILL -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-check-circle"></i> Received ILL Books</span>
+        {% if received_ill %}
+        <span class="badge bg-success">{{ received_ill.count }}</span>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for ill in received_ill %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <span class="fw-semibold">{{ ill.title|truncatechars:40 }}</span>
+              {% if ill.author %}
+              <div class="small text-muted">Author: {{ ill.author }}</div>
+              {% endif %}
+              <div class="small">
+                <span class="badge bg-success">{{ ill.status|title }}</span>
+                <span class="text-muted">{{ ill.request_date|date:"M d, Y" }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No received ILL books</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- ILL History -->
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header fw-bold"><i class="bi bi-clock-history"></i> ILL Request History</div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Status</th>
+              <th>Date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ill in ill_history %}
+            <tr>
+              <td>
+                {{ ill.title|truncatechars:35 }}
+                {% if ill.author %}
+                <div class="small text-muted">{{ ill.author|truncatechars:25 }}</div>
+                {% endif %}
+              </td>
+              <td>
+                <span class="badge
+                  {% if ill.status == 'pending' %}bg-warning text-dark
+                  {% elif ill.status == 'sent' %}bg-info
+                  {% elif ill.status == 'fulfilled' %}bg-success
+                  {% elif ill.status == 'received' %}bg-success
+                  {% elif ill.status == 'cancelled' %}bg-danger
+                  {% else %}bg-secondary{% endif %}">
+                  {{ ill.status|title }}
+                </span>
+              </td>
+              <td class="small">{{ ill.request_date|date:"M d, Y" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" class="text-center text-muted py-3">No ILL history</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if cancelled_ill %}
+      <div class="card-footer">
+        <small class="text-muted"><strong>Cancelled Requests:</strong></small>
+        {% for ill in cancelled_ill|slice:":3" %}
+        <div class="small text-muted">
+          {{ ill.title|truncatechars:30 }} - <span class="badge bg-danger">{{ ill.status|title }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

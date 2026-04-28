@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+{% block title %}Borrow a Book{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-plus-circle"></i> Borrow a Book</h4>
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2">
+    <div class="col-md-4"><input type="text" name="q" class="form-control" placeholder="Search title, author, ISBN..." value="{{ query }}"></div>
+    <div class="col-md-2">
+      <select name="course" class="form-select">
+        <option value="">All Courses</option>
+        {% for c in courses %}<option value="{{ c.pk }}" {% if selected_course == c.pk|stringformat:"i" %}selected{% endif %}>{{ c.course_name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="category" class="form-select">
+        <option value="">All Categories</option>
+        {% for c in categories %}<option value="{{ c.pk }}" {% if selected_category == c.pk|stringformat:"i" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i> Search</button></div>
+    <div class="col-md-2"><a href="{% url 'borrow_catalog' %}" class="btn btn-outline-secondary w-100">Clear</a></div>
+  </form>
+</div>
+<div class="row g-3">
+  {% for book in books %}
+  <div class="col-md-4 col-lg-3">
+    <div class="card h-100">
+      <div class="text-center pt-2" style="height:140px;overflow:hidden">
+        {% if book.cover_image %}
+          <img src="{{ book.cover_image.url }}" class="img-fluid h-100" style="object-fit:contain">
+        {% else %}
+          <div class="d-flex align-items-center justify-content-center h-100 bg-light"><i class="bi bi-book text-secondary" style="font-size:3.5rem"></i></div>
+        {% endif %}
+      </div>
+      <div class="card-body p-2">
+        <div class="fw-semibold small" title="{{ book.title }}">{{ book.title|truncatechars:50 }}</div>
+        <div class="text-muted small">{{ book.author|truncatechars:32 }}</div>
+        {% if book.category %}<div class="small text-muted mt-1"><i class="bi bi-tag"></i> {{ book.category.name }}</div>{% endif %}
+        <div class="mt-2 d-flex flex-wrap gap-1">
+          {% if book.avail_hard > 0 %}
+            <span class="badge bg-primary">
+              <i class="bi bi-book"></i> {{ book.avail_hard }} Hard
+            </span>
+          {% endif %}
+          {% if book.soft_borrow_avail > 0 %}
+            <span class="badge bg-warning text-dark">
+              <i class="bi bi-file-earmark-lock"></i> Special
+            </span>
+          {% endif %}
+          {% if book.soft_free > 0 %}
+            <span class="badge bg-success">
+              <i class="bi bi-file-earmark-pdf"></i> Free PDF
+            </span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-footer p-2 bg-transparent d-flex flex-column gap-1">
+        {% if book.avail_hard > 0 %}
+        <a href="{% url 'request_borrow_book' book.pk %}" class="btn btn-sm btn-msict w-100">
+          <i class="bi bi-plus-circle"></i> Request Hardcopy
+          <span class="badge bg-white text-primary ms-1">{{ book.avail_hard }}</span>
+        </a>
+        {% endif %}
+        {% if book.soft_borrow_avail > 0 %}
+        <a href="{% url 'request_borrow_softcopy' book.pk %}" class="btn btn-sm btn-warning w-100">
+          <i class="bi bi-file-earmark-lock"></i> Request Special Soft Copy
+        </a>
+        {% endif %}
+        {% if book.soft_free > 0 %}
+        <a href="{% url 'download_free_book' book.pk %}" class="btn btn-sm btn-success w-100">
+          <i class="bi bi-download"></i> Download Free PDF
+        </a>
+        {% endif %}
+        <a href="{% url 'book_detail_public' book.pk %}" class="btn btn-sm btn-outline-secondary w-100">
+          <i class="bi bi-eye"></i> Details
+        </a>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col-12 text-center py-5">
+    <i class="bi bi-search text-muted" style="font-size:4rem"></i>
+    <h5 class="text-muted mt-3">No available books found{% if query %} for "{{ query }}"{% endif %}</h5>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

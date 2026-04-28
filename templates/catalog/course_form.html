@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}{% if course %}Edit Course{% else %}Add Course{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-mortarboard"></i> {% if course %}Edit{% else %}Add{% endif %} Course</h5>
+      <form method="post">{% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label">Course Name <span class="text-danger">*</span></label>
+          <input type="text" name="course_name" class="form-control" value="{{ course.course_name|default:'' }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Duration <small class="text-muted">(e.g. 2 years)</small></label>
+          <input type="text" name="duration" class="form-control" value="{{ course.duration|default:'' }}">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Parent Category <small class="text-muted">(as subcategory)</small></label>
+          <select name="category" class="form-select">
+            <option value="">-- None --</option>
+            {% for cat in categories %}
+            <option value="{{ cat.pk }}" {% if course and course.category_id == cat.pk %}selected{% endif %}>{{ cat.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save</button>
+        <a href="{% url 'course_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

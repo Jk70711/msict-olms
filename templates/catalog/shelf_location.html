@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+{% block title %}Shelf Locations{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-archive"></i> Shelf Locations <small class="text-muted">(by Category)</small></h4>
+  <a href="{% url 'category_list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-tags"></i> Manage Categories</a>
+</div>
+
+<!-- Summary Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-2">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-primary">{{ totals.total_books }}</div>
+        <div class="small text-muted">Total Books</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-success">{{ totals.total_copies }}</div>
+        <div class="small text-muted">Total Copies</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-info">{{ totals.total_available }}</div>
+        <div class="small text-muted">Available</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-warning">{{ totals.total_borrowed }}</div>
+        <div class="small text-muted">Borrowed</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-danger">{{ totals.total_lost }}</div>
+        <div class="small text-muted">Lost/Damaged</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-2">
+    <div class="card stat-card text-center h-100">
+      <div class="card-body">
+        <div class="display-6 fw-bold text-secondary">{{ totals.total_borrows }}</div>
+        <div class="small text-muted">Total Borrows</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Shelf List -->
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header fw-bold"><i class="bi bi-bookshelf"></i> All Shelves (Categories)</div>
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+          <thead>
+            <tr>
+              <th>S/N</th>
+              <th>Shelf Name</th>
+              <th class="text-center">Books</th>
+              <th class="text-center">Copies</th>
+              <th class="text-center">Available</th>
+              <th class="text-center">Borrowed</th>
+              <th class="text-center">Reserved</th>
+              <th class="text-center">Lost</th>
+              <th class="text-center">Total Borrows</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for shelf in shelves %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td>
+                <a href="{% url 'shelf_detail' shelf.pk %}" class="fw-semibold text-decoration-none">{{ shelf.name }}</a>
+                {% if shelf.parent %}
+                  <div class="small text-muted">{{ shelf.parent.name }}</div>
+                {% endif %}
+              </td>
+              <td class="text-center">{{ shelf.total_books }}</td>
+              <td class="text-center fw-bold">{{ shelf.total_copies }}</td>
+              <td class="text-center"><span class="badge bg-success">{{ shelf.available }}</span></td>
+              <td class="text-center"><span class="badge bg-warning text-dark">{{ shelf.borrowed }}</span></td>
+              <td class="text-center"><span class="badge bg-info">{{ shelf.reserved }}</span></td>
+              <td class="text-center"><span class="badge bg-danger">{{ shelf.lost }}</span></td>
+              <td class="text-center">
+                {% for stat in borrow_stats %}
+                  {% if stat.category.id == shelf.id %}
+                    <span class="fw-bold">{{ stat.borrow_count }}</span>
+                  {% endif %}
+                {% endfor %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="9" class="text-center py-4 text-muted">No shelves/categories found.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Most Borrowed Shelves -->
+  <div class="col-md-4">
+    <div class="card h-100">
+      <div class="card-header fw-bold"><i class="bi bi-trophy text-warning"></i> Most Borrowed Shelves</div>
+      <div class="list-group list-group-flush">
+        {% for item in most_borrowed %}
+        <a href="{% url 'shelf_detail' item.category.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+          <div>
+            <span class="fw-semibold">{{ item.category.name }}</span>
+            {% if item.category.parent %}
+              <div class="small text-muted">{{ item.category.parent.name }}</div>
+            {% endif %}
+          </div>
+          <span class="badge bg-primary rounded-pill">{{ item.borrow_count }} borrows</span>
+        </a>
+        {% empty %}
+        <div class="list-group-item text-muted">No borrow data available.</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Courses as Categories Section -->
+<div class="row g-3 mt-3">
+  <div class="col-12">
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-mortarboard"></i> Courses as Subcategories</span>
+        <a href="{% url 'course_list' %}" class="btn btn-sm btn-outline-primary">Manage Courses</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>S/N</th>
+              <th>Course Name</th>
+              <th>Duration</th>
+              <th>Linked Category</th>
+              <th>Books Count</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for course in shelves %}
+              {% for c in course.courses.all %}
+              <tr>
+                <td>{{ forloop.counter }}</td>
+                <td><a href="{% url 'course_list' %}" class="fw-semibold text-decoration-none">{{ c.course_name }}</a></td>
+                <td>{{ c.duration|default:"—" }}</td>
+                <td><span class="badge bg-secondary">{{ course.name }}</span></td>
+                <td>{{ c.books.count }}</td>
+              </tr>
+              {% endfor %}
+            {% empty %}
+            <tr><td colspan="5" class="text-center text-muted py-3">No courses linked to categories.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

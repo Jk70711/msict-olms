@@ -1,0 +1,18 @@
+{% extends 'base.html' %}
+{% block title %}Create Budget{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-wallet2"></i> Create Budget</h5>
+      <form method="post">{% csrf_token %}
+        <div class="mb-3"><label class="form-label">Budget Name <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required></div>
+        <div class="mb-3"><label class="form-label">Fiscal Year <span class="text-danger">*</span></label><input type="number" name="fiscal_year" class="form-control" value="2025" required></div>
+        <div class="mb-3"><label class="form-label">Total Amount (TZS) <span class="text-danger">*</span></label><input type="number" name="total_amount" class="form-control" step="0.01" required></div>
+        <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Create</button>
+        <a href="{% url 'budget_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

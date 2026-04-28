@@ -1,0 +1,1583 @@
+{% load static %}
+<!--
+  ============================================================
+  base.html — Templeti Mama ya Mfumo
+
+  Hii ndiyo templeti kuu ambayo templeti zote nyingine zina "extend".
+  Inajumuisha muundo wa jumla: <head>, sidebar, topbar, footer, na scripts.
+
+  Sehemu muhimu:
+    1. CSS za misingi (Bootstrap, Bootstrap Icons, Swiper)
+    2. Variable za rangi (CSS custom properties)
+    3. Mandhari ya mfumo (system appearance) — inaweza kubadilishwa na librarian
+    4. Dark/light mode — mtumiaji anaweza kubadili
+    5. Sidebar — inaonyeswa tu kwa watumiaji waliokuingia
+    6. Topbar — ina icon ya search, dark mode, na avatar ya mtumiaji
+    7. Category mega menu — inaonyesha makategoria na rafu
+    8. Content block — { % block content % } hapa ndipo content ya kila ukurasa inakaa
+    9. Loading spinner — inaonyesha wakati wa maombi ya form au link
+    10. Scripts za JS — Bootstrap, Swiper, mega menu, theme toggle, image preview
+
+  Kutumia katika templeti nyingine:
+    { % extends 'base.html' % }
+    { % block title % }Jina la Ukurasa{ % endblock % }
+    { % block content % }...hapa weka content yako...{ % endblock % }
+  ============================================================
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Jina la ukurasa — kila templeti inaweza kubadilisha kwa { % block title % } -->
+  <title>{% block title %}MSICT OLMS{% endblock %} — MSICT Library</title>
+  <link rel="icon" type="image/png" href="{% static 'images/msict_logo.png' %}">
+  <link rel="shortcut icon" type="image/png" href="{% static 'images/msict_logo.png' %}">
+  <link rel="apple-touch-icon" href="{% static 'images/msict_logo.png' %}">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.css" />
+  <style>
+    /* ============================================================
+       1. RANGI ZA MSINGI (Design Tokens)
+       Hizi nd variable za rangi zinazotumika kote kwenye mfumo.
+       Zinaweza kubadilishwa na mtunzaji kwa kutumia "System Appearance".
+       ============================================================ */
+    :root {
+      --sidebar-bg:     #0f172a;
+      --sidebar-width:  240px;
+      --accent:         #2563eb;
+      --accent-hover:   #1d4ed8;
+      --accent-light:   #eff6ff;
+      --gold:           #f59e0b;
+      --body-bg:        #f1f5f9;
+      --card-bg:        #ffffff;
+      --text-primary:   #0f172a;
+      --text-muted:     #64748b;
+      --border:         #e2e8f0;
+      --nav-link:       rgba(255,255,255,.65);
+      --nav-link-hover: rgba(255,255,255,.95);
+      --nav-active-bg:  rgba(37,99,235,.85);
+      --radius-sm:      8px;
+      --radius-md:      12px;
+      --radius-lg:      16px;
+      --shadow-sm:      0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
+      --shadow-md:      0 4px 16px rgba(0,0,0,.08);
+      --transition:     all .18s ease;
+    }
+
+  </style>
+
+  <!-- ============================================================
+         2. MANDHARI YA MFUMO (System Appearance)
+         Mtunzaji (librarian) anaweza kubadilisha rangi za:
+         - background ya ukurasa (APP_BODY_BG)
+         - background ya sidebar (APP_SIDEBAR_BG)
+         - background ya topbar (APP_TOPBAR_BG)
+         - fonti na ukubwa (APP_FONT_FAMILY, APP_FONT_SIZE)
+         - rangi ya fonti (APP_FONT_COLOR)
+         ============================================================ -->
+  {% if sys_ap %}
+  <style>
+    /* Kubadilisha variable za rangi kulingana na mipangilio ya mtunzaji */
+    :root {
+      {% if sys_ap.APP_BODY_BG %}--body-bg:    {{ sys_ap.APP_BODY_BG }};{% endif %}
+      {% if sys_ap.APP_SIDEBAR_BG %}--sidebar-bg: {{ sys_ap.APP_SIDEBAR_BG }};{% endif %}
+      {% if sys_ap.APP_TOPBAR_BG %}--topbar-bg:  {{ sys_ap.APP_TOPBAR_BG }};{% endif %}
+    }
+    {% if sys_ap.APP_FONT_FAMILY %}
+    body { font-family: {{ sys_ap.APP_FONT_FAMILY }}, 'Segoe UI', sans-serif !important; }
+    {% endif %}
+    {% if sys_ap.APP_FONT_SIZE == 'sm' %}body { font-size: 0.8125rem !important; }
+    {% elif sys_ap.APP_FONT_SIZE == 'lg' %}body { font-size: 0.9375rem !important; }
+    {% elif sys_ap.APP_FONT_SIZE == 'xl' %}body { font-size: 1rem !important; }
+    {% elif sys_ap.APP_FONT_SIZE == 'xxl' %}body { font-size: 1.0625rem !important; }
+    {% elif sys_ap.APP_FONT_SIZE == 'xxxl' %}body { font-size: 1.125rem !important; }{% endif %}
+    {% if sys_ap.APP_TOPBAR_BG %}.topbar { background: {{ sys_ap.APP_TOPBAR_BG }} !important; }{% endif %}
+    {% if sys_ap.APP_FOOTER_BG %}footer  { background: {{ sys_ap.APP_FOOTER_BG }} !important; border-color: {{ sys_ap.APP_FOOTER_BG }}; }{% endif %}
+    {% if sys_ap.APP_FONT_COLOR %}body, .main-content, p, span, div { color: {{ sys_ap.APP_FONT_COLOR }}; }{% endif %}
+  </style>
+  {% endif %}
+
+  <!-- ============================================================
+         3. DARK MODE (Mandhari ya Giza)
+         Mtumiaji anaweza kubadili kati ya light/dark kwa kubonyeza jua/mwezi kwenye topbar.
+         Imefadhiliwa kwa watumiaji wote walioingia.
+         ============================================================ -->
+  {% if user.is_authenticated and user.theme == 'dark' %}
+  <style>
+    /* Rangi za dark mode — zinabadili mazingira kuwa ya kijivu/kijivu-kizito */
+    :root {
+      --body-bg:      #0f172a;
+      --card-bg:      #1e293b;
+      --border:       #334155;
+      --text-primary: #f1f5f9;
+      --text-muted:   #94a3b8;
+      --topbar-bg:    #1e293b;
+    }
+    body { background: #0f172a; color: #f1f5f9; }
+    .card, .modal-content { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9; }
+    .topbar { background: #1e293b !important; border-bottom-color: #334155 !important; }
+    footer  { background: #020617 !important; border-top-color: #1e293b !important; color: #94a3b8; }
+    .table  { --bs-table-color: #f1f5f9; --bs-table-bg: #1e293b; --bs-table-border-color: #334155; }
+    .table-hover>tbody>tr:hover>* { --bs-table-color: #f1f5f9; --bs-table-accent-bg: #273549; }
+    .form-control, .form-select {
+      background: #1e293b !important; border-color: #334155 !important;
+      color: #f1f5f9 !important;
+    }
+    .form-control::placeholder, .form-select::placeholder { color: #64748b !important; }
+    .dropdown-menu { background: #1e293b; border-color: #334155; }
+    .dropdown-item { color: #f1f5f9; }
+    .dropdown-item:hover, .dropdown-item:focus { background: #273549; color: #f1f5f9; }
+    .alert { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+    .input-group-text { background: #273549; border-color: #334155; color: #94a3b8; }
+    .nav-tabs .nav-link { color: #94a3b8; }
+    .nav-tabs .nav-link.active { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+    .bg-light { background: #1e293b !important; }
+    .card-header.bg-light { background: #273549 !important; color: #f1f5f9 !important; }
+    .text-muted { color: #94a3b8 !important; }
+    .border, .border-bottom, .border-top { border-color: #334155 !important; }
+    .cat-mega { background: #1e293b; border-bottom-color: var(--accent); }
+    .cat-mega-header { background: #0f172a; border-color: #334155; }
+    .cat-card { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+    .cat-card:hover { border-color: var(--accent); }
+    .cat-card-name { color: #f1f5f9; }
+    .cat-stat { background: #0f172a; color: #94a3b8; }
+    .cat-stat.active-borrow { background: #451a03; color: #fde68a; }
+    .cat-mega-footer { border-color: #334155; }
+
+    /* ── Table headers & hover ── */
+    .table thead th { background: #1e293b !important; color: #94a3b8 !important; border-bottom-color: #334155 !important; }
+    .table tbody tr:hover { background: #273549 !important; }
+    .table-hover>tbody>tr:hover>* { background-color: #273549 !important; color: #f1f5f9 !important; }
+    .table-striped>tbody>tr:nth-of-type(odd)>*  { background-color: #232f42 !important; color: #f1f5f9 !important; }
+    .table-striped>tbody>tr:nth-of-type(even)>* { background-color: #1e293b !important; color: #f1f5f9 !important; }
+    .table-success   { --bs-table-bg: #052e16; --bs-table-color: #86efac; }
+    .table-warning   { --bs-table-bg: #422006; --bs-table-color: #fcd34d; }
+    .table-danger    { --bs-table-bg: #450a0a; --bs-table-color: #fca5a5; }
+    .table-secondary { --bs-table-bg: #1e293b; --bs-table-color: #94a3b8; }
+
+    /* ── Alert colour variants ── */
+    .alert-success { background: #052e16 !important; color: #86efac !important; border-left-color: #22c55e !important; }
+    .alert-danger  { background: #450a0a !important; color: #fca5a5 !important; border-left-color: #ef4444 !important; }
+    .alert-warning { background: #422006 !important; color: #fcd34d !important; border-left-color: #f59e0b !important; }
+    .alert-info    { background: #0c1a4a !important; color: #93c5fd !important; border-left-color: #3b82f6 !important; }
+    .alert a { color: inherit; font-weight: 600; }
+
+    /* ── Role badges ── */
+    .badge-role-admin     { background: #450a0a !important; color: #fca5a5 !important; border-color: #7f1d1d !important; }
+    .badge-role-librarian { background: #1e3a8a !important; color: #93c5fd !important; border-color: #1e40af !important; }
+    .badge-role-member    { background: #052e16 !important; color: #86efac !important; border-color: #14532d !important; }
+
+    /* ── Stat-card icon backgrounds ── */
+    .stat-card .stat-icon                                    { background: #273549 !important; }
+    .stat-card.blue .stat-icon, .stat-card.primary .stat-icon { background: #1e3a8a !important; }
+    .stat-card.green .stat-icon,.stat-card.success .stat-icon { background: #14532d !important; }
+    .stat-card.amber .stat-icon,.stat-card.warning .stat-icon { background: #451a03 !important; }
+    .stat-card.red .stat-icon,  .stat-card.danger  .stat-icon { background: #450a0a !important; }
+    .stat-card.purple .stat-icon                              { background: #2e1065 !important; }
+    .stat-card.teal   .stat-icon                              { background: #0c4a5e !important; }
+
+    /* ── Input group text ── */
+    .input-group-text { background: #273549 !important; border-color: #334155 !important; color: #94a3b8 !important; }
+
+    /* ── Code / Pre ── */
+    code { background: #273549 !important; color: #93c5fd !important; padding: .1em .35em; border-radius: 3px; }
+    pre  { background: #1e293b !important; color: #f1f5f9 !important; border-color: #334155 !important; }
+
+    /* ── Modal ── */
+    .modal-header, .modal-footer { border-color: #334155 !important; }
+    .modal-header { background: #1e293b !important; }
+
+    /* ── Pagination ── */
+    .page-link                          { background: #1e293b !important; border-color: #334155 !important; color: #94a3b8 !important; }
+    .page-link:hover                    { background: #273549 !important; color: #f1f5f9 !important; }
+    .page-item.active   .page-link      { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
+    .page-item.disabled .page-link      { background: #1e293b !important; color: #475569 !important; }
+
+    /* ── List group ── */
+    .list-group-item       { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9 !important; }
+    .list-group-item:hover { background: #273549 !important; }
+    .list-group-item.active { background: var(--accent) !important; border-color: var(--accent) !important; }
+
+    /* ── Progress bar ── */
+    .progress { background: #273549 !important; }
+
+    /* ── Bootstrap bg-white ── */
+    .bg-white { background: #1e293b !important; }
+
+    /* ── Card header / footer ── */
+    .card-header, .card-footer { background: #1a2744 !important; border-color: #334155 !important; color: #f1f5f9 !important; }
+
+    /* ── Tabs ── */
+    .nav-tabs { border-color: #334155 !important; }
+    .nav-pills .nav-link { color: #94a3b8; }
+    .nav-pills .nav-link.active { background: var(--accent) !important; color: #fff !important; }
+
+    /* ── Breadcrumb ── */
+    .breadcrumb-item + .breadcrumb-item::before { color: #475569; }
+    .breadcrumb-item.active { color: #94a3b8; }
+
+    /* ── Select2 / Chosen (if used) ── */
+    select option { background: #1e293b; color: #f1f5f9; }
+
+    /* ── Scrollable / overflowing containers ── */
+    .table-responsive { border-color: #334155; }
+  </style>
+  {% endif %}
+
+  <style>
+    /* ============================================================
+       4. CSS ZA MSINGI ZA MFUMO
+       Mabadiliko ya fonti, body, na mambo mengine ya msingi.
+       ============================================================ */
+    /* Base — fonti, rangi ya body, n.k. */
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: var(--body-bg);
+      color: var(--text-primary);
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+
+    /* ============================================================
+       5. SIDEBAR (Upau wa Kando)
+       Inaonekana upande wa kushoto kwa watumiaji waliokuingia.
+       Inajumuisha: logo, wasifu, navigation links, sign out.
+       ============================================================ */
+    /* Sidebar — upau wa kando unaosogea pamoja na ukurasa */
+    .sidebar {
+      width: var(--sidebar-width);
+      height: 100vh;          /* exact viewport height */
+      background: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      top: 0; left: 0;
+      z-index: 100;
+      overflow: hidden;       /* outer never scrolls */
+      transition: var(--transition);
+    }
+    /* Only the nav area scrolls */
+    .sidebar > nav {
+      flex: 1;
+      min-height: 0;          /* critical: lets flexbox child shrink & scroll */
+      overflow-y: auto;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+    /* Dark-themed sidebar scrollbar */
+    .sidebar > nav::-webkit-scrollbar { width: 4px; }
+    .sidebar > nav::-webkit-scrollbar-track { background: transparent; }
+    .sidebar > nav::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.15);
+      border-radius: 4px;
+    }
+    .sidebar > nav::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,.3);
+    }
+    /* Firefox */
+    .sidebar > nav { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.15) transparent; }
+    .sidebar-logo {
+      padding: 1.25rem 1rem 1rem;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      text-decoration: none;
+    }
+    .sidebar-logo img { max-height: 40px; width: auto; filter: brightness(1.1); }
+    .sidebar-logo .brand-text {
+      color: #fff;
+      font-weight: 700;
+      font-size: .85rem;
+      line-height: 1.2;
+    }
+    .sidebar-logo .brand-sub { color: rgba(255,255,255,.4); font-size: .7rem; font-weight: 400; }
+    .sidebar-user {
+      margin: .75rem .75rem .5rem;
+      background: rgba(255,255,255,.06);
+      border-radius: var(--radius-md);
+      padding: .6rem .75rem;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+    }
+    .sidebar-user .avatar {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: .8rem;
+      letter-spacing: -.5px;
+      line-height: 1;
+      text-align: center;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .sidebar-user img.avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      object-fit: cover;
+      flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,.2);
+    }
+    .sidebar-user .u-name { color: #fff; font-weight: 600; font-size: .8rem; line-height: 1.2; }
+    .sidebar-user .u-role {
+      color: rgba(255,255,255,.4);
+      font-size: .68rem;
+      text-transform: capitalize;
+    }
+    .sidebar-section {
+      padding: 1.25rem .75rem .25rem;
+    }
+    .sidebar-section-label {
+      color: rgba(255,255,255,.3);
+      font-size: .65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      padding: 0 .5rem;
+      margin-bottom: .35rem;
+    }
+    .sidebar .nav-link {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      color: var(--nav-link);
+      border-radius: var(--radius-sm);
+      padding: .5rem .75rem;
+      font-size: .82rem;
+      font-weight: 500;
+      transition: var(--transition);
+      margin-bottom: 1px;
+      text-decoration: none;
+    }
+    .sidebar .nav-link i { font-size: .95rem; width: 18px; flex-shrink: 0; }
+    .sidebar .nav-link:hover {
+      color: var(--nav-link-hover);
+      background: rgba(255,255,255,.08);
+    }
+    .sidebar .nav-link.active,
+    .sidebar .nav-link[aria-expanded="true"] {
+      color: #fff;
+      background: var(--nav-active-bg);
+    }
+    .sidebar .nav-link .badge-dot {
+      width: 6px; height: 6px;
+      background: var(--gold);
+      border-radius: 50%;
+      margin-left: auto;
+    }
+    /* Collapsible group trigger */
+    .sidebar .nav-link.nav-group {
+      cursor: pointer; background: none; border: none; width: 100%; text-align: left;
+    }
+    .sidebar-chevron {
+      margin-left: auto; font-size: .7rem !important;
+      width: auto !important; flex-shrink: 0;
+      transition: transform .22s ease;
+    }
+    .sidebar .nav-link[aria-expanded="true"] .sidebar-chevron { transform: rotate(180deg); }
+    /* Submenu */
+    .sidebar-submenu { padding-left: .5rem; }
+    .sidebar-submenu .nav-link {
+      font-size: .78rem;
+      padding: .38rem .75rem;
+      color: rgba(255,255,255,.5);
+    }
+    .sidebar-submenu .nav-link:hover { color: rgba(255,255,255,.9); }
+    .sidebar-submenu .nav-link.active { color: #fff; background: var(--nav-active-bg); }
+    .sidebar-bottom {
+      margin-top: auto;
+      padding: .75rem;
+      border-top: 1px solid rgba(255,255,255,.07);
+    }
+    .sidebar-bottom .nav-link { color: rgba(255,255,255,.45); font-size: .78rem; }
+
+    /* ============================================================
+       6. TOPBAR (Upau wa Juu)
+       Ina: search, dark mode toggle, avatar ya mtumiaji na dropdown.
+       ============================================================ */
+    /* Top bar — upau wa juu unaowekwa sticky */
+    .topbar {
+      height: 56px;
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 1.5rem;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 90;
+      box-shadow: var(--shadow-sm);
+    }
+    .topbar-toggle {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 1.25rem;
+      cursor: pointer;
+      padding: .25rem .5rem;
+      border-radius: var(--radius-sm);
+    }
+    .topbar-toggle:hover { background: var(--body-bg); }
+    .topbar-title {
+      font-weight: 600;
+      font-size: .95rem;
+      color: var(--text-primary);
+      flex: 1;
+    }
+    .topbar-actions { display: flex; align-items: center; gap: .5rem; }
+    .topbar-search {
+      background: var(--body-bg);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: .35rem .85rem;
+      font-size: .8rem;
+      color: var(--text-primary);
+      outline: none;
+      width: 180px;
+      transition: var(--transition);
+    }
+    .topbar-search:focus { border-color: var(--accent); width: 220px; }
+    .topbar-icon-btn {
+      width: 34px; height: 34px;
+      border-radius: 50%;
+      border: none;
+      background: var(--body-bg);
+      color: var(--text-muted);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer;
+      font-size: .95rem;
+      transition: var(--transition);
+      text-decoration: none;
+    }
+    .topbar-icon-btn:hover { background: var(--border); color: var(--text-primary); }
+    .topbar-avatar {
+      width: 42px; height: 42px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: flex; 
+      align-items: center; 
+      justify-content: center;
+      font-weight: 600; 
+      font-size: .85rem;
+      letter-spacing: -.5px;
+      cursor: pointer;
+      border: 2px solid var(--accent-light);
+      position: relative;
+      transition: var(--transition);
+      user-select: none;
+    }
+    .topbar-avatar:hover { transform: scale(1.05); border-color: #fff; }
+    .topbar-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }
+    /* Hide the default bootstrap arrow or position it absolutely */
+    .topbar-avatar.dropdown-toggle::after {
+      position: absolute;
+      right: 2px;
+      bottom: 12px;
+      border-top: 0.35em solid;
+      border-right: 0.25em solid transparent;
+      border-left: 0.25em solid transparent;
+      opacity: 0.8;
+      display: none; /* We'll use a better approach if needed, or just let it stay */
+    }
+    .topbar-avatar span {
+      font-size: .8rem;
+      font-weight: 600;
+      letter-spacing: -.5px;
+    }
+
+    /* ============================================================
+       7. MPANGILIO WA UKURASA (Layout)
+       Muundo wa jumla wa content: sidebar + main-content.
+       ============================================================ */
+    /* Main layout — mpangilio wa ukurasa */
+    .layout-wrapper {
+      margin-left: var(--sidebar-width);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .main-content {
+      flex: 1;
+      padding: 1.75rem;
+    }
+
+    /* ============================================================
+       8. KADI (Cards) — Kujumuisha Takwimu
+       Kutumia katika dashboard: kadi za status, vitabu, n.k.
+       ============================================================ */
+    /* Cards — kadi za takwimu za dashboard */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+    }
+    .card-header-custom {
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.25rem .75rem;
+      font-weight: 600;
+      font-size: .9rem;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
+
+    /* Stat cards — white card, color on number only */
+    .stat-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      color: var(--text-primary);
+    }
+    .stat-card .stat-icon {
+      width: 38px; height: 38px;
+      border-radius: var(--radius-sm);
+      background: var(--body-bg);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem;
+      margin-bottom: .6rem;
+    }
+    .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1; color: var(--text-primary); }
+    .stat-card .stat-label { font-size: .73rem; color: var(--text-muted); margin-top: .2rem; }
+
+    /* Color variants — left border + colored number + icon bg */
+    .stat-card.blue,   .stat-card.primary  { border-left-color: #2563eb; }
+    .stat-card.blue   .stat-value, .stat-card.primary .stat-value { color: #2563eb; }
+    .stat-card.blue   .stat-icon,  .stat-card.primary .stat-icon  { background:#eff6ff; color:#2563eb; }
+
+    .stat-card.green,  .stat-card.success  { border-left-color: #059669; }
+    .stat-card.green  .stat-value, .stat-card.success .stat-value { color: #059669; }
+    .stat-card.green  .stat-icon,  .stat-card.success .stat-icon  { background:#f0fdf4; color:#059669; }
+
+    .stat-card.amber,  .stat-card.warning  { border-left-color: #d97706; }
+    .stat-card.amber  .stat-value, .stat-card.warning .stat-value { color: #d97706; }
+    .stat-card.amber  .stat-icon,  .stat-card.warning .stat-icon  { background:#fffbeb; color:#d97706; }
+
+    .stat-card.red,    .stat-card.danger   { border-left-color: #dc2626; }
+    .stat-card.red    .stat-value, .stat-card.danger  .stat-value { color: #dc2626; }
+    .stat-card.red    .stat-icon,  .stat-card.danger  .stat-icon  { background:#fef2f2; color:#dc2626; }
+
+    .stat-card.purple { border-left-color: #7c3aed; }
+    .stat-card.purple .stat-value { color: #7c3aed; }
+    .stat-card.purple .stat-icon  { background:#f5f3ff; color:#7c3aed; }
+
+    .stat-card.teal   { border-left-color: #0891b2; }
+    .stat-card.teal   .stat-value { color: #0891b2; }
+    .stat-card.teal   .stat-icon  { background:#ecfeff; color:#0891b2; }
+
+    /* Buttons — vibonyezo (buttons) vya mfumo */
+    .btn-msict {
+      background: linear-gradient(135deg,var(--accent),var(--accent-hover));
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-weight: 500;
+      font-size: .82rem;
+      padding: .45rem .9rem;
+      transition: var(--transition);
+      box-shadow: 0 2px 8px rgba(37,99,235,.3);
+    }
+    .btn-msict:hover { background: linear-gradient(135deg,var(--accent-hover),#1e40af); color:#fff; box-shadow:0 4px 12px rgba(37,99,235,.4); }
+    .btn { border-radius: var(--radius-sm); font-size: .82rem; font-weight: 500; }
+    .btn-sm { padding: .3rem .7rem; font-size: .78rem; }
+    .btn-primary { background: var(--accent); border-color: var(--accent); }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+    /* Tables — jedwali za data (orodha ya vitabu, watumiaji, n.k.) */
+    .table { font-size: .82rem; }
+    .table thead th {
+      background: #f8fafc;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: .72rem;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border-bottom: 2px solid var(--border);
+      border-top: none;
+      padding: .65rem .75rem;
+    }
+    .table td { padding: .65rem .75rem; vertical-align: middle; border-color: var(--border); }
+    .table tbody tr:hover { background: #f8fafc; }
+    .table-hover>tbody>tr:hover>* { background-color: #f8fafc; }
+
+    /* Badges — nembe za jukumu: admin, librarian, member */
+    .badge { font-weight: 500; font-size: .7rem; border-radius: 6px; }
+    .badge-role-admin     { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+    .badge-role-librarian { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
+    .badge-role-member    { background: #f0fdf4; color: #059669; border: 1px solid #bbf7d0; }
+
+    /* Alerts — ujumbe wa mafanikio, kosa, onyo, au taarifa */
+    .alert { border-radius: var(--radius-md); font-size: .83rem; border: none; }
+    .alert-success { background: #f0fdf4; color: #166534; border-left: 4px solid #22c55e; }
+    .alert-danger  { background: #fef2f2; color: #991b1b; border-left: 4px solid #ef4444; }
+    .alert-warning { background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b; }
+    .alert-info    { background: #eff6ff; color: #1e40af; border-left: 4px solid #3b82f6; }
+    .overdue-banner {
+      background: linear-gradient(135deg,#dc2626,#ef4444);
+      color: #fff; padding: .75rem 1rem;
+      border-radius: var(--radius-md); margin-bottom: 1rem;
+      box-shadow: 0 4px 12px rgba(220,38,38,.25);
+    }
+
+    /* Forms — sehemu za kujaza: input, select, label, n.k. */
+    .form-control, .form-select {
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      font-size: .83rem;
+      padding: .45rem .75rem;
+      transition: var(--transition);
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .form-label { font-weight: 500; font-size: .8rem; color: var(--text-muted); margin-bottom: .35rem; }
+    .input-group-text { background: #f8fafc; border-color: var(--border); font-size: .83rem; }
+
+    /* Footer — sehemu ya chini ya ukurasa (copyright) */
+    footer {
+      background: var(--card-bg);
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      padding: .75rem 1.75rem;
+      font-size: .75rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* ============================================================
+       9. NAVBAR YA MAKATEGORIA (Category Mega Menu)
+       Inaonyesha makategoria yote na rafu zake kwenye dropdown kubwa.
+       ============================================================ */
+    /* Category nav bar — upau wa juu wa makategoria */
+    .catbar {
+      position: sticky;
+      top: 56px;
+      z-index: 88;
+      background: var(--sidebar-bg);
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      display: flex;
+      align-items: center;
+      padding: 0 1.25rem;
+      height: 38px;
+      gap: .1rem;
+    }
+    .catbar-link {
+      display: inline-flex;
+      align-items: center;
+      gap: .3rem;
+      color: rgba(255,255,255,.72);
+      font-size: .78rem;
+      font-weight: 500;
+      text-decoration: none;
+      padding: .25rem .7rem;
+      border-radius: 5px;
+      white-space: nowrap;
+      transition: all .15s;
+      cursor: pointer;
+      background: none;
+      border: none;
+      height: 28px;
+    }
+    .catbar-link:hover,
+    .catbar-link.active { color: #fff; background: rgba(255,255,255,.13); }
+    .catbar-sep { color: rgba(255,255,255,.2); font-size: .75rem; margin: 0 .2rem; user-select: none; }
+    .catbar-count { font-size: .7rem; color: rgba(255,255,255,.4); margin-left: auto; white-space: nowrap; }
+
+    /* Mega dropdown */
+    .cat-mega {
+      position: fixed;
+      top: 94px;
+      left: 0;
+      right: 0;
+      background: var(--card-bg);
+      border-bottom: 3px solid var(--accent);
+      box-shadow: 0 20px 60px rgba(0,0,0,.22);
+      z-index: 87;
+      display: none;
+      max-height: calc(100vh - 98px);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    .cat-mega.cat-mega--auth { left: var(--sidebar-width); }
+    @media (max-width: 767.98px) { .cat-mega.cat-mega--auth { left: 0; } }
+    .cat-mega.open {
+      display: block;
+      animation: megaIn .18s ease;
+    }
+    @keyframes megaIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .cat-mega-header {
+      padding: .65rem 1.5rem;
+      background: var(--body-bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .cat-mega-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: .85rem;
+      padding: 1.1rem 1.5rem;
+    }
+    .cat-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: .85rem .9rem;
+      text-decoration: none;
+      color: var(--text-primary);
+      background: var(--card-bg);
+      transition: all .18s;
+      display: block;
+      position: relative;
+      overflow: hidden;
+    }
+    .cat-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+      background: var(--accent);
+      border-radius: 3px 0 0 3px;
+      opacity: 0;
+      transition: opacity .18s;
+    }
+    .cat-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 4px 18px rgba(37,99,235,.13);
+      transform: translateY(-2px);
+      color: var(--text-primary);
+    }
+    .cat-card:hover::before { opacity: 1; }
+    .cat-card-head {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-bottom: .55rem;
+    }
+    .cat-prefix {
+      width: 28px; height: 28px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+      color: #fff;
+      font-weight: 700;
+      font-size: .82rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .cat-card-name {
+      font-weight: 600;
+      font-size: .85rem;
+      line-height: 1.25;
+      color: var(--text-primary);
+    }
+    .cat-stat-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .3rem;
+      margin-bottom: .4rem;
+    }
+    .cat-stat {
+      font-size: .7rem;
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: .18rem;
+      background: var(--body-bg);
+      border-radius: 4px;
+      padding: .12rem .3rem;
+    }
+    .cat-stat i { font-size: .68rem; }
+    .cat-stat.active-borrow { background: #fffbeb; color: #92400e; }
+    .cat-fill-bar {
+      height: 4px;
+      border-radius: 999px;
+      background: var(--border);
+      overflow: hidden;
+      margin-top: .4rem;
+    }
+    .cat-fill-inner {
+      height: 100%;
+      border-radius: 999px;
+      background: var(--accent);
+      transition: width .4s ease;
+    }
+    .cat-fill-inner.warn   { background: #f59e0b; }
+    .cat-fill-inner.danger { background: #ef4444; }
+    .cat-fill-label {
+      font-size: .67rem;
+      color: var(--text-muted);
+      margin-top: .15rem;
+    }
+    .cat-mega-footer {
+      padding: .75rem 1.5rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    /* Per-shelf breakdown inside category card */
+    .cat-shelf-list {
+      margin-top: .45rem;
+      padding-top: .4rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: .22rem;
+    }
+    .cat-shelf-row {
+      display: grid;
+      grid-template-columns: 3rem 1fr 2rem 3.2rem;
+      align-items: center;
+      gap: .25rem;
+    }
+    .cat-shelf-code {
+      font-size: .64rem;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cat-shelf-row .cat-fill-bar { margin: 0; }
+    .cat-shelf-pct {
+      font-size: .63rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-align: right;
+    }
+    .cat-shelf-nums {
+      font-size: .61rem;
+      color: var(--text-muted);
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    /* Dropdown — orodha zinazoshuka (user menu, actions, n.k.) */
+    .dropdown-menu {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-md);
+      font-size: .82rem;
+      padding: .35rem;
+    }
+    .dropdown-item { border-radius: 6px; padding: .45rem .75rem; color: var(--text-primary); }
+    .dropdown-item:hover { background: var(--body-bg); }
+    .dropdown-item i { width: 16px; margin-right: .4rem; color: var(--text-muted); }
+    .dropdown-divider { border-color: var(--border); margin: .35rem 0; }
+
+    /* Mobile — mabadiliko kwa simu/tablet (responsive design) */
+    .offcanvas-sidebar { background: var(--sidebar-bg) !important; width: var(--sidebar-width) !important; }
+    .offcanvas-sidebar .offcanvas-body {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+    .offcanvas-sidebar .offcanvas-body::-webkit-scrollbar { width: 4px; }
+    .offcanvas-sidebar .offcanvas-body::-webkit-scrollbar-track { background: transparent; }
+    .offcanvas-sidebar .offcanvas-body::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,.15);
+      border-radius: 4px;
+    }
+    .offcanvas-sidebar .offcanvas-body::-webkit-scrollbar-thumb:hover {
+      background: rgba(255,255,255,.3);
+    }
+    .offcanvas-sidebar .offcanvas-body { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.15) transparent; }
+
+    @media (max-width: 767.98px) {
+      .layout-wrapper { margin-left: 0; }
+      .sidebar { display: none !important; }
+      .topbar-toggle { display: flex !important; align-items: center; }
+      .main-content { padding: 1rem; }
+    }
+
+    /* Page header helper — vichwa vya kurasa */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: .75rem;
+    }
+    .page-header h4, .page-header h5 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.1rem;
+      color: var(--text-primary);
+    }
+
+    /* Scrollbar — muundo wa scrollbar (side ya kupiga scroll) */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  </style>
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+<!-- ============================================================
+     10. LOADING SPINNER (Kidude cha Kusubiri)
+     Inaonyesha wakati wa kutuma form au kubonyeza link — inazima ukurasa ukimaliza load.
+     ============================================================ -->
+<!-- ── Global Page Loading Spinner ──────────────────────────── -->
+<div id="globalLoader" style="
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(15,23,42,0.45);
+  z-index:99999;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:16px;
+  backdrop-filter:blur(2px);
+">
+  <div style="
+    width:52px;height:52px;
+    border:4px solid rgba(255,255,255,0.15);
+    border-top-color:#2563eb;
+    border-radius:50%;
+    animation:loaderSpin .7s linear infinite;
+  "></div>
+  <div style="color:#fff;font-size:.85rem;font-weight:500;letter-spacing:.03em;opacity:.9;">Loading…</div>
+</div>
+<style>
+@keyframes loaderSpin { to { transform: rotate(360deg); } }
+</style>
+
+<!-- ============================================================
+     11. SIDEBAR YA DESKTOP (Upau wa Kando — Kompyuta)
+     Inaonekana upande wa kushoto kwa watumiaji waliokuingia.
+     Inajumuisha: logo, wasifu wa mtumiaji, navigation links, sign out.
+     ============================================================ -->
+<!-- ── Desktop Sidebar ──────────────────────────────────── -->
+{% if user.is_authenticated %}
+<aside class="sidebar">
+  <a href="{% url 'home' %}" class="sidebar-logo text-decoration-none">
+    {% if active_logo and active_logo.image %}
+      <img src="{{ active_logo.image.url }}" alt="MSICT">
+    {% else %}
+      <div style="width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;">
+        <i class="bi bi-book-half text-white fs-5"></i>
+      </div>
+    {% endif %}
+    <div>
+      <div class="brand-text">MSICT OLMS</div>
+      <div class="brand-sub">Library System</div>
+    </div>
+  </a>
+
+  <!-- User chip -->
+  <div class="sidebar-user">
+    {% if user.photo %}
+    <img src="{{ user.photo.url }}" alt="" class="avatar">
+    {% else %}
+    <div class="avatar">{{ user.first_name.0|default:user.username.0|upper }}{{ user.surname.0|default:''|upper }}</div>
+    {% endif %}
+    <div>
+      <div class="u-name">{{ user.get_short_name|default:user.username }}</div>
+      <div class="u-role">{{ user.role }}</div>
+    </div>
+  </div>
+
+  <nav class="flex-grow-1 px-1 pb-3">
+    {% include 'partials/sidebar_nav.html' %}
+  </nav>
+
+  <div class="sidebar-bottom">
+    <a href="{% url 'logout' %}" class="nav-link">
+      <i class="bi bi-box-arrow-right"></i> Sign Out
+    </a>
+  </div>
+</aside>
+{% endif %}
+
+<!-- ============================================================
+     12. SIDEBAR YA SIMU (Mobile Offcanvas)
+     Inaonekana kwa simu/tablet wakati unabonyeza hamburger menu.
+     ============================================================ -->
+<!-- ── Mobile Sidebar (offcanvas) ──────────────────────── -->
+{% if user.is_authenticated %}
+<div class="offcanvas offcanvas-start offcanvas-sidebar" tabindex="-1" id="mobileSidebar">
+  <div class="offcanvas-header" style="border-bottom:1px solid rgba(255,255,255,.08);">
+    <a href="{% url 'home' %}" class="sidebar-logo text-decoration-none">
+      {% if active_logo and active_logo.image %}
+        <img src="{{ active_logo.image.url }}" style="max-height:36px;">
+      {% else %}
+        <i class="bi bi-book-half fs-4" style="color:var(--gold)"></i>
+      {% endif %}
+      <div class="brand-text">MSICT OLMS</div>
+    </a>
+    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
+  </div>
+  <div class="sidebar-user mx-2 my-2">
+    {% if user.photo %}
+    <img src="{{ user.photo.url }}" alt="" class="avatar">
+    {% else %}
+    <div class="avatar">{{ user.first_name.0|default:user.username.0|upper }}</div>
+    {% endif %}
+    <div>
+      <div class="u-name">{{ user.get_short_name|default:user.username }}</div>
+      <div class="u-role">{{ user.role }}</div>
+    </div>
+  </div>
+  <div class="offcanvas-body p-1 overflow-auto">
+    {% include 'partials/sidebar_nav.html' %}
+  </div>
+</div>
+{% endif %}
+
+<!-- ============================================================
+     13. MUUNDO MKUU (Main Wrapper)
+     Hapa ndipo content yote ya ukurasa inakaa (topbar, content, footer).
+     ============================================================ -->
+<!-- ── Main wrapper ─────────────────────────────────────── -->
+<div class="{% if user.is_authenticated %}layout-wrapper{% endif %}">
+
+  <!-- Top bar — upau wa juu na search, theme toggle, avatar -->
+  <header class="topbar">
+    {% if user.is_authenticated %}
+    <button class="topbar-toggle" data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar">
+      <i class="bi bi-list"></i>
+    </button>
+    {% endif %}
+    <div class="topbar-title d-none d-md-block">{% block page_title %}{% endblock %}</div>
+    <div class="topbar-actions ms-auto">
+      <!-- Global search — visible on md+ screens -->
+      <div class="position-relative d-none d-md-flex align-items-center" id="topbarSearchWrap">
+        <form action="{% url 'catalog_search' %}" method="get" class="d-flex align-items-center gap-1" autocomplete="off" data-no-loader>
+          <input type="text" name="q" id="topbarSearch" class="topbar-search"
+                 placeholder="Search title, author, ISBN, accession…"
+                 autocomplete="off" spellcheck="false">
+          <button type="submit" class="topbar-icon-btn" title="Search catalog" style="flex-shrink:0">
+            <i class="bi bi-search"></i>
+          </button>
+        </form>
+        <div id="topbarSearchDrop"
+             style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:360px;max-width:480px;
+                    max-height:320px;overflow-y:auto;z-index:3000;
+                    background:var(--card-bg);border:1px solid var(--border);
+                    border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.15)">
+        </div>
+      </div>
+      <!-- Mobile: icon fallback -->
+      <a href="{% url 'catalog_search' %}" class="topbar-icon-btn d-md-none" title="Search catalog">
+        <i class="bi bi-search"></i>
+      </a>
+      {% if user.is_authenticated %}
+      <button id="themeToggleBtn" class="topbar-icon-btn" title="Toggle dark / light mode" style="background:none;border:none;cursor:pointer">
+        <i class="bi {% if user.theme == 'dark' %}bi-sun-fill{% else %}bi-moon-stars{% endif %}"></i>
+      </button>
+      {% endif %}
+      {% if user.is_authenticated %}
+      <div class="dropdown">
+        <div class="topbar-avatar dropdown-toggle d-flex align-items-center justify-content-center" data-bs-toggle="dropdown" style="padding-right: 2px;">
+          {% if user.photo %}
+            <img src="{{ user.photo.url }}" alt="">
+          {% else %}
+            <span style="display: flex; align-items: center; justify-content: center; height: 100%; width: 100%;">
+              {{ user.first_name.0|default:user.username.0|upper }}{{ user.surname.0|default:''|upper }}
+            </span>
+          {% endif %}
+        </div>
+        <ul class="dropdown-menu dropdown-menu-end" style="min-width:200px;">
+          <li>
+            <div class="px-3 py-2 border-bottom" style="border-color:var(--border)!important;">
+              <div class="fw-600" style="font-weight:600;font-size:.82rem;">{{ user.get_full_name|default:user.username }}</div>
+              <div class="text-muted" style="font-size:.72rem;">{{ user.email }}</div>
+              <span class="badge mt-1
+                {% if user.role == 'admin' %}badge-role-admin
+                {% elif user.role == 'librarian' %}badge-role-librarian
+                {% else %}badge-role-member{% endif %}">
+                {{ user.role|title }}
+              </span>
+            </div>
+          </li>
+          <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="bi bi-person"></i> Profile</a></li>
+          <li><a class="dropdown-item" href="{% url 'virtual_card' %}"><i class="bi bi-credit-card-2-front"></i> My Card</a></li>
+          <li><a class="dropdown-item" href="{% url 'change_password' %}"><i class="bi bi-key"></i> Change Password</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item text-danger" href="{% url 'logout' %}"><i class="bi bi-box-arrow-right text-danger"></i> Sign Out</a></li>
+        </ul>
+      </div>
+      {% else %}
+      <a href="{% url 'login' %}" class="btn btn-msict btn-sm">Sign In</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ============================================================
+     14. NAVBAR YA MAKATEGORIA (Category Mega Menu)
+     Inaonyesha makategoria yote na rafu zake kwenye dropdown kubwa.
+     ============================================================ -->
+<!-- ── Category mega nav ───────────────────────────── -->
+  {% if cat_menu %}
+  <nav class="catbar" id="catbar" aria-label="Category navigation">
+    <button class="catbar-link" id="catTrigger" aria-expanded="false" aria-haspopup="true">
+      <i class="bi bi-grid-3x3-gap-fill"></i>
+      Categories
+      <i class="bi bi-chevron-down" style="font-size:.6rem;margin-left:.15rem;transition:transform .2s" id="catChevron"></i>
+    </button>
+    <span class="catbar-sep">|</span>
+    <a href="{% url 'catalog_search' %}" class="catbar-link">
+      <i class="bi bi-book-half"></i> Browse All
+    </a>
+    <a href="{% url 'catalog_search' %}?sort=new" class="catbar-link d-none d-md-inline-flex">
+      <i class="bi bi-stars"></i> New Arrivals
+    </a>
+    <span class="catbar-count d-none d-sm-block">{{ cat_menu|length }} categor{{ cat_menu|pluralize:"y,ies" }}</span>
+  </nav>
+
+  <div class="cat-mega {% if user.is_authenticated %}cat-mega--auth{% endif %}" id="catMega" role="dialog" aria-label="Browse categories">
+    <div class="cat-mega-header">
+      <div>
+        <strong style="font-size:.86rem"><i class="bi bi-grid-3x3-gap-fill text-primary me-1"></i> Library Categories</strong>
+        <span class="text-muted ms-2 d-none d-md-inline" style="font-size:.74rem">Click a category card to filter books</span>
+      </div>
+      <button class="btn-close" id="catClose" style="font-size:.7rem" aria-label="Close categories"></button>
+    </div>
+
+    <div class="cat-mega-grid">
+      {% for cat in cat_menu %}
+      <a href="{% url 'catalog_search' %}?category={{ cat.pk }}" class="cat-card">
+
+        <!-- Category header -->
+        <div class="cat-card-head">
+          <div class="cat-prefix">{{ cat.shelf_prefix|default:cat.name.0|upper }}</div>
+          <div>
+            <div class="cat-card-name">{{ cat.name }}</div>
+            <div style="font-size:.68rem;color:var(--text-muted);margin-top:.05rem">
+              {{ cat.book_count }} title{{ cat.book_count|pluralize }}
+              · {{ cat.shelf_count }} shelf{{ cat.shelf_count|pluralize:"ves" }}
+            </div>
+          </div>
+        </div>
+
+        <!-- Copy type counts -->
+        <div class="cat-stat-row">
+          <span class="cat-stat" title="Hardcopy books available for borrowing">
+            <i class="bi bi-bookshelf"></i> {{ cat.hardcopy_count }} hard
+          </span>
+          {% if cat.softcopy_count %}
+          <span class="cat-stat" title="Digital / softcopy books">
+            <i class="bi bi-file-earmark-pdf"></i> {{ cat.softcopy_count }} soft
+          </span>
+          {% endif %}
+          {% if cat.active_borrows %}
+          <span class="cat-stat active-borrow" title="Currently borrowed or overdue">
+            <i class="bi bi-arrow-left-right"></i> {{ cat.active_borrows }} active
+          </span>
+          {% endif %}
+        </div>
+
+        <!-- Per-shelf capacity breakdown -->
+        {% if cat.cat_shelves %}
+        <div class="cat-shelf-list">
+          {% for shelf in cat.cat_shelves %}
+          <div class="cat-shelf-row" title="{{ shelf.code }}{% if shelf.name %} — {{ shelf.name }}{% endif %}: {{ shelf.fill }} / {{ shelf.capacity }} books">
+            <span class="cat-shelf-code">{{ shelf.code }}</span>
+            <div class="cat-fill-bar">
+              <div class="cat-fill-inner {{ shelf.cls }}" style="width:{{ shelf.pct }}%"></div>
+            </div>
+            <span class="cat-shelf-pct {% if shelf.cls == 'danger' %}text-danger{% elif shelf.cls == 'warn' %}text-warning{% endif %}">{{ shelf.pct }}%</span>
+            <span class="cat-shelf-nums">{{ shelf.fill }}/{{ shelf.capacity }}</span>
+          </div>
+          {% endfor %}
+          {% if cat.shelf_count > 1 %}
+          <div class="cat-shelf-row" style="margin-top:.1rem;opacity:.7">
+            <span class="cat-shelf-code" style="font-size:.58rem;color:var(--text-muted)">Total</span>
+            <div class="cat-fill-bar">
+              <div class="cat-fill-inner {{ cat.fill_cls }}" style="width:{{ cat.fill_pct }}%"></div>
+            </div>
+            <span class="cat-shelf-pct {% if cat.fill_cls == 'danger' %}text-danger{% elif cat.fill_cls == 'warn' %}text-warning{% endif %}" style="font-weight:700">{{ cat.fill_pct }}%</span>
+            <span class="cat-shelf-nums">{{ cat.total_capacity }} cap.</span>
+          </div>
+          {% endif %}
+        </div>
+        {% elif cat.fill_pct > 0 %}
+        <div class="cat-fill-bar mt-2">
+          <div class="cat-fill-inner {{ cat.fill_cls }}" style="width:{{ cat.fill_pct }}%"></div>
+        </div>
+        <div class="cat-fill-label">Overall {{ cat.fill_pct }}% full</div>
+        {% endif %}
+
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="cat-mega-footer">
+      <a href="{% url 'catalog_search' %}" class="btn btn-msict btn-sm">
+        <i class="bi bi-book-half"></i> Browse Full Catalog
+      </a>
+      <span class="text-muted small">{{ cat_menu|length }} categories · {{ cat_menu|length }} total</span>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- ============================================================
+       15. CONTENT BLOCK (Sehemu ya Maudhui)
+       Hapa ndipo content ya kila ukurasa inakaa. Templeti zote zina { % block content % }
+       ============================================================ -->
+  <!-- Content -->
+  <main class="main-content">
+    {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-3" role="alert">
+        <i class="bi {% if message.tags == 'success' %}bi-check-circle{% elif message.tags == 'danger' or message.tags == 'error' %}bi-x-circle{% elif message.tags == 'warning' %}bi-exclamation-triangle{% else %}bi-info-circle{% endif %} me-2"></i>
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    {% endfor %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <span>&copy; {% now "Y" %} MSICT Online Library Management System</span>
+    <span class="d-none d-md-inline">Military School of Information and Technology</span>
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js"></script>
+<script>
+/* ============================================================
+   JAVASCRIPT — Mfumo wa Harakati za Ukurasa
+   ============================================================ */
+
+/* ── 1. Category Mega Menu ─────────────────────────────────*/
+/* JScript ya kufungua/funga menu kubwa ya makategoria */
+(function () {
+  const trigger  = document.getElementById('catTrigger');
+  const mega     = document.getElementById('catMega');
+  const catbar   = document.getElementById('catbar');
+  const closeBtn = document.getElementById('catClose');
+  const chevron  = document.getElementById('catChevron');
+  if (!trigger || !mega) return;
+
+  let openTimer = null, closeTimer = null;
+
+  function _set(open) {
+    mega.classList.toggle('open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+    trigger.classList.toggle('active', open);
+    if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+  }
+  function scheduleOpen()  {
+    clearTimeout(closeTimer);
+    openTimer = setTimeout(function () { _set(true); }, 90);
+  }
+  function scheduleClose() {
+    clearTimeout(openTimer);
+    closeTimer = setTimeout(function () { _set(false); }, 180);
+  }
+  function forceClose() {
+    clearTimeout(openTimer); clearTimeout(closeTimer); _set(false);
+  }
+
+  /* Hover on trigger button */
+  trigger.addEventListener('mouseenter', scheduleOpen);
+  trigger.addEventListener('mouseleave', scheduleClose);
+
+  /* Hover on mega panel — keep it open */
+  mega.addEventListener('mouseenter', function () { clearTimeout(closeTimer); });
+  mega.addEventListener('mouseleave', scheduleClose);
+
+  /* Click toggle — for touch devices and keyboard */
+  trigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    clearTimeout(openTimer); clearTimeout(closeTimer);
+    _set(!mega.classList.contains('open'));
+  });
+
+  /* Close button */
+  if (closeBtn) closeBtn.addEventListener('click', forceClose);
+
+  /* Click outside */
+  document.addEventListener('click', function (e) {
+    if (!mega.contains(e.target) && e.target !== trigger) forceClose();
+  });
+
+  /* Escape key */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') forceClose();
+  });
+})();
+
+/* ── 2. Dark/Light Mode Toggle ─────────────────────────────*/
+/* Kubadili kati ya mandhari ya giza na mwanga kwa kutuma ombi kwa server */
+(function () {
+  const btn = document.getElementById('themeToggleBtn');
+  if (!btn) return;
+  btn.addEventListener('click', function () {
+    fetch('{% url "toggle_theme" %}', {
+      method: 'POST',
+      headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+    })
+    .then(r => r.json())
+    .then(() => location.reload());
+  });
+})();
+
+/* ── 3. Image Preview ───────────────────────────
+   Kutazama picha moja kwa moja baada ya kuchagua faili.
+   Automatically injects a live preview below every
+   input[type=file][accept*="image"] unless the input
+   has data-no-auto-preview attribute.                    */
+(function () {
+  function initPreviews() {
+    document.querySelectorAll('input[type="file"][accept*="image"]:not([data-no-auto-preview])').forEach(function (inp) {
+      if (inp.dataset.previewInit) return;
+      inp.dataset.previewInit = '1';
+
+      /* Wrapper so the preview sits right below the input */
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'display:none;margin-top:.5rem';
+
+      const img = document.createElement('img');
+      img.style.cssText = 'max-height:110px;max-width:220px;object-fit:contain;border-radius:8px;border:1px solid #e2e8f0;background:#f8fafc;padding:3px';
+
+      const label = document.createElement('div');
+      label.style.cssText = 'font-size:.7rem;color:#64748b;margin-top:3px';
+
+      wrap.appendChild(img);
+      wrap.appendChild(label);
+      inp.insertAdjacentElement('afterend', wrap);
+
+      inp.addEventListener('change', function () {
+        const file = this.files && this.files[0];
+        if (!file) { wrap.style.display = 'none'; return; }
+        const reader = new FileReader();
+        reader.onload = function (e) {
+          img.src = e.target.result;
+          label.textContent = file.name + ' (' + (file.size / 1024).toFixed(1) + ' KB)';
+          wrap.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+  }
+
+  /* Run after DOM and after any dynamic content (e.g. modals) */
+  document.addEventListener('DOMContentLoaded', initPreviews);
+  document.addEventListener('shown.bs.modal', initPreviews);
+})();
+</script>
+{% block extra_js %}{% endblock %}
+<script>
+/* ── 4. Global Loader (Kidude cha Kusubiri) ───────────────
+   Inaonyesha spinner wakati wa kutuma form au kubonyeza link */
+/* Global loader — shows on form submit and slow navigations */
+(function() {
+  var loader = document.getElementById('globalLoader');
+  if (!loader) return;
+  var safetyTimer = null;
+
+  function show() {
+    loader.style.display = 'flex';
+    // Safety: auto-hide after 20 seconds in case page never responds
+    clearTimeout(safetyTimer);
+    safetyTimer = setTimeout(hide, 20000);
+  }
+
+  function hide() {
+    loader.style.display = 'none';
+    clearTimeout(safetyTimer);
+  }
+
+  // Show on every form submit
+  document.addEventListener('submit', function(e) {
+    var form = e.target;
+    if (form.dataset.noLoader) return;
+    show();
+  });
+
+  // Show on regular link clicks (not external, not hash, not new-tab)
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a');
+    if (!a) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (a.dataset.noLoader) return;
+    if (!a.href) return;
+    var href = a.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript') || href.startsWith('mailto')) return;
+    if (a.target === '_blank') return;
+    try {
+      var url = new URL(a.href, window.location.href);
+      if (url.hostname !== window.location.hostname) return;
+    } catch(err) { return; }
+    show();
+  });
+
+  // Always hide when page is visible (covers normal load, bfcache, and back/forward)
+  window.addEventListener('pageshow', hide);
+  window.addEventListener('load', hide);
+  // Hide on any JS error to avoid blocking the UI
+  window.addEventListener('error', hide);
+})();
+
+/* ── 4. Sidebar — Auto-expand active group ─────────────────*/
+(function () {
+  const cur = window.location.pathname;
+  /* Mark active plain links */
+  document.querySelectorAll('.sidebar > nav a.nav-link:not([data-bs-toggle])').forEach(function (a) {
+    try {
+      if (new URL(a.href, window.location.origin).pathname === cur) a.classList.add('active');
+    } catch(e) {}
+  });
+  /* Auto-open collapse group that contains the active link */
+  document.querySelectorAll('.sidebar-submenu').forEach(function (sub) {
+    var found = false;
+    sub.querySelectorAll('a.nav-link').forEach(function (a) {
+      try {
+        if (new URL(a.href, window.location.origin).pathname === cur) {
+          a.classList.add('active'); found = true;
+        }
+      } catch(e) {}
+    });
+    if (found) {
+      sub.classList.add('show');
+      var trigger = document.querySelector('[data-bs-target="#' + sub.id + '"]');
+      if (trigger) { trigger.setAttribute('aria-expanded', 'true'); trigger.classList.add('active'); }
+    }
+  });
+})();
+
+/* ── 5. Topbar Global Real-Time Search Autocomplete ───────*/
+(function () {
+  const inp = document.getElementById('topbarSearch');
+  const box = document.getElementById('topbarSearchDrop');
+  if (!inp || !box) return;
+
+  const API = '{% url "catalog_autocomplete" %}';
+  let timer;
+
+  const esc = s => String(s).replace(/[&<>"']/g, m =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const hi = (s, q) => esc(s).replace(
+    new RegExp('(' + esc(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'gi'),
+    '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 1px">$1</mark>'
+  );
+
+  function showBox(html) { box.innerHTML = html; box.style.display = 'block'; }
+  function hideBox() { box.style.display = 'none'; }
+
+  inp.addEventListener('input', function () {
+    clearTimeout(timer);
+    const q = this.value.trim();
+    if (q.length < 1) { hideBox(); return; }
+    showBox('<div style="padding:.6rem 1rem;color:#94a3b8;font-size:.8rem;text-align:center">' +
+            '<i class="bi bi-arrow-repeat" style="animation:spin .7s linear infinite"></i> Searching…</div>');
+    timer = setTimeout(function () {
+      fetch(API + '?q=' + encodeURIComponent(q))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data.results || !data.results.length) {
+            showBox('<div style="padding:.65rem 1rem;color:#94a3b8;font-size:.8rem;text-align:center">' +
+                    '<i class="bi bi-search me-1"></i>No results for "<b>' + esc(q) + '</b>"</div>');
+            return;
+          }
+          var rows = data.results.map(function (b) {
+            var sub = b.author ? esc(b.author) : '';
+            if (b.accession_no) sub += (sub ? ' &nbsp;·&nbsp; ' : '') +
+              '<code style="font-size:.68rem;background:rgba(99,102,241,.12);color:#6366f1;border-radius:3px;padding:0 3px">' + esc(b.accession_no) + '</code>';
+            if (b.isbn && !b.accession_no) sub += (sub ? ' &nbsp;·&nbsp; ' : '') + esc(b.isbn);
+            return '<a href="/books/' + b.id + '/" data-no-loader' +
+              ' style="display:flex;align-items:center;gap:.65rem;padding:.55rem .9rem;' +
+              'text-decoration:none;color:var(--text-primary);border-bottom:1px solid var(--border);' +
+              'font-size:.82rem;transition:background .1s" ' +
+              'onmouseover="this.style.background=\'var(--body-bg)\'" ' +
+              'onmouseout="this.style.background=\'\'">' +
+              '<span style="width:28px;height:28px;background:#eff6ff;border-radius:6px;display:flex;' +
+              'align-items:center;justify-content:center;color:#2563eb;flex-shrink:0;font-size:.8rem">' +
+              '<i class="bi bi-book"></i></span>' +
+              '<span style="min-width:0">' +
+              '<span style="font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + hi(b.title, q) + '</span>' +
+              '<span style="font-size:.7rem;color:var(--text-muted)">' + sub + '</span>' +
+              '</span></a>';
+          }).join('');
+          rows += '<a href="/catalog/?q=' + encodeURIComponent(q) + '" data-no-loader' +
+            ' style="display:block;text-align:center;padding:.45rem .9rem;font-size:.74rem;' +
+            'color:#2563eb;font-weight:600;border-top:1px solid var(--border);text-decoration:none;' +
+            'background:var(--body-bg)">' +
+            'View all results for "' + esc(q) + '" →</a>';
+          showBox(rows);
+        })
+        .catch(function () { hideBox(); });
+    }, 150);
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!box.contains(e.target) && e.target !== inp) hideBox();
+  });
+
+  inp.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') { hideBox(); this.blur(); }
+  });
+})();
+</script>
+
+<!-- ── Real-time search: debounce text inputs, instant-submit selects ── -->
+<script>
+(function () {
+  var DEBOUNCE_MS = 380;
+
+  /* Find every GET form that has a search text input named "q" */
+  var forms = Array.prototype.filter.call(
+    document.querySelectorAll('form[method="get"]'),
+    function (f) { return f.querySelector('input[name="q"]'); }
+  );
+
+  forms.forEach(function (form) {
+    var timer;
+
+    /* Text / search inputs — submit after user stops typing */
+    form.querySelectorAll('input[type="text"], input[type="search"]').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        clearTimeout(timer);
+        /* Show a subtle spinner on the search button while waiting */
+        var btn = form.querySelector('button[type="submit"]');
+        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        timer = setTimeout(function () { form.submit(); }, DEBOUNCE_MS);
+      });
+    });
+
+    /* Select dropdowns — submit immediately on change */
+    form.querySelectorAll('select').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        clearTimeout(timer);
+        form.submit();
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>

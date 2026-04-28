@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}System Preferences{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h4 class="fw-bold mb-0"><i class="bi bi-gear"></i> System Preferences</h4>
+    </div>
+    <div class="alert alert-info small">
+      <i class="bi bi-info-circle"></i>
+      Changes here take effect <strong>immediately</strong> system-wide — loan periods, fines, renewals, and reservations will all use the updated values.
+    </div>
+    <div class="card p-4">
+      <form method="post">{% csrf_token %}
+        <div class="row g-3">
+          {% for pref in prefs %}
+          <div class="col-md-6">
+            <div class="card bg-light border-0 p-3 h-100">
+              <label class="form-label fw-semibold mb-1">
+                {% if pref.key == 'LOAN_PERIOD_DAYS' %}<i class="bi bi-calendar-check text-primary"></i> Hardcopy Loan Period
+                {% elif pref.key == 'SOFTCOPY_LOAN_PERIOD_DAYS' %}<i class="bi bi-calendar-check text-info"></i> Softcopy Loan Period
+                {% elif pref.key == 'MAX_RENEWALS' %}<i class="bi bi-arrow-clockwise text-success"></i> Max Renewals
+                {% elif pref.key == 'MAX_COPIES_PER_BORROW' %}<i class="bi bi-collection text-warning"></i> Max Borrows Per Member
+                {% elif pref.key == 'FINE_PER_DAY' %}<i class="bi bi-cash text-danger"></i> Overdue Fine Per Day
+                {% elif pref.key == 'RESERVATION_EXPIRY_DAYS' %}<i class="bi bi-bookmark-check text-secondary"></i> Reservation Expiry
+                {% else %}<i class="bi bi-sliders"></i> {{ pref.key }}{% endif %}
+              </label>
+              <div class="input-group">
+                <input type="number" name="pref_{{ pref.key }}" class="form-control" value="{{ pref.value }}" min="0" step="{% if pref.key == 'FINE_PER_DAY' %}50{% else %}1{% endif %}" required>
+                <span class="input-group-text">
+                  {% if pref.key == 'FINE_PER_DAY' %}TZS/day
+                  {% elif pref.key in 'LOAN_PERIOD_DAYS,SOFTCOPY_LOAN_PERIOD_DAYS,RESERVATION_EXPIRY_DAYS' %}days
+                  {% elif pref.key == 'MAX_RENEWALS' or pref.key == 'MAX_COPIES_PER_BORROW' %}times{% endif %}
+                </span>
+              </div>
+              {% if pref.description %}
+              <div class="form-text mt-1">{{ pref.description }}</div>
+              {% endif %}
+            </div>
+          </div>
+          {% empty %}
+          <div class="col-12"><p class="text-muted">No preferences found.</p></div>
+          {% endfor %}
+        </div>
+        <div class="mt-4">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save All Preferences</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

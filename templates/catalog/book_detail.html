@@ -1,0 +1,238 @@
+{% extends 'base.html' %}
+{% block title %}{{ book.title }}{% endblock %}
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="{% url 'book_list' %}">Books</a></li>
+    <li class="breadcrumb-item active">{{ book.title|truncatechars:40 }}</li>
+  </ol>
+</nav>
+<div class="row g-4">
+  <div class="col-md-3">
+    {% if book.cover_image %}
+      <img src="{{ book.cover_image.url }}" class="img-fluid rounded shadow w-100" style="max-height:280px;object-fit:contain">
+    {% else %}
+      <div class="bg-light rounded d-flex align-items-center justify-content-center" style="height:200px">
+        <i class="bi bi-book text-muted" style="font-size:5rem"></i>
+      </div>
+    {% endif %}
+    <div class="card mt-3 p-3">
+      <div class="small"><b>ISBN:</b> {{ book.isbn|default:"N/A" }}</div>
+      <div class="small"><b>Publisher:</b> {{ book.publisher|default:"N/A" }}</div>
+      <div class="small"><b>Year:</b> {{ book.year|default:"N/A" }}</div>
+      <div class="small"><b>Category:</b> {{ book.category.name|default:"N/A" }}</div>
+      {% if book.show_in_carousel %}<div class="small text-success mt-1"><i class="bi bi-images"></i> In Carousel</div>{% endif %}
+    </div>
+    <div class="d-grid gap-2 mt-3">
+      <a href="{% url 'book_edit' book.pk %}" class="btn btn-outline-primary"><i class="bi bi-pencil"></i> Edit Book</a>
+      <a href="{% url 'copy_create' book.pk %}" class="btn btn-msict" data-bs-toggle="modal" data-bs-target="#addCopyModal"><i class="bi bi-plus-circle"></i> Add Copy</a>
+    </div>
+  </div>
+  <div class="col-md-9">
+    <h4 class="fw-bold">{{ book.title }}</h4>
+    <p class="text-muted fs-5"><i class="bi bi-person"></i> {{ book.author }}</p>
+    {% if book.courses.all %}
+    <div class="mb-2">
+      {% for c in book.courses.all %}<span class="badge bg-primary me-1">{{ c.course_name }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    {% if book.summary %}<p class="text-secondary">{{ book.summary }}</p>{% endif %}
+    <h6 class="fw-bold mt-3">Copies ({{ copies.count }})</h6>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover">
+        <thead><tr><th>Accession No</th><th>Type</th><th>Access</th><th>Status</th><th>Location</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for copy in copies %}
+          <tr>
+            <td><code>{{ copy.accession_no }}</code></td>
+            <td>
+              {% if copy.copy_type == 'hardcopy' %}
+                <span class="badge bg-primary"><i class="bi bi-book"></i> Hardcopy</span>
+              {% else %}
+                <span class="badge bg-info text-dark"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'hardcopy' %}
+                <span class="badge bg-primary"><i class="bi bi-arrow-return-right"></i> Borrowing</span>
+              {% elif copy.access_type == 'free' %}
+                <span class="badge bg-success"><i class="bi bi-download"></i> Free Download</span>
+              {% elif copy.access_type == 'borrow' %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special Borrow</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'softcopy' %}
+                <span class="badge bg-success">Always Available</span>
+              {% elif copy.status == 'available' %}
+                <span class="badge bg-success">Available</span>
+              {% elif copy.status == 'borrowed' %}
+                <span class="badge bg-warning text-dark">Borrowed</span>
+              {% elif copy.status == 'reserved' %}
+                <span class="badge bg-info">Reserved</span>
+              {% elif copy.status == 'lost' %}
+                <span class="badge bg-danger">Lost</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ copy.status|title }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if copy.copy_type == 'hardcopy' %}
+                {{ copy.shelf_location|default:"—" }}
+              {% elif copy.file_path %}
+                <span class="text-success small"><i class="bi bi-check-circle"></i> File uploaded</span>
+              {% else %}
+                <span class="text-danger small"><i class="bi bi-exclamation-circle"></i> No file</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="btn-group">
+                <a href="{% url 'copy_edit' copy.pk %}" class="btn btn-sm btn-outline-primary py-0" title="Edit"><i class="bi bi-pencil"></i></a>
+                {% if copy.copy_type == 'softcopy' and copy.file_path %}
+                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview PDF"><i class="bi bi-eye"></i></a>
+                {% endif %}
+                {% if copy.status != 'lost' and copy.copy_type == 'hardcopy' %}
+                <a href="{% url 'copy_mark_lost' copy.pk %}" class="btn btn-sm btn-outline-danger py-0" title="Mark Lost"
+                  onclick="return confirm('Mark copy {{ copy.accession_no }} as lost?')"><i class="bi bi-x-circle"></i></a>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center text-muted">No copies yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if reservations %}
+    <h6 class="fw-bold mt-2">Reservation Queue ({{ reservations.count }})</h6>
+    <table class="table table-sm">
+      <thead><tr><th>#</th><th>Member</th><th>Requested</th></tr></thead>
+      <tbody>
+        {% for r in reservations %}
+        <tr><td>{{ r.position }}</td><td>{{ r.user.get_full_name }}</td><td>{{ r.created_at|date:"d M Y" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Add Copy Modal -->
+<div class="modal fade" id="addCopyModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form action="{% url 'copy_create' book.pk %}" method="post" enctype="multipart/form-data">{% csrf_token %}
+        <div class="modal-header"><h5 class="modal-title">Add Copy – {{ book.title }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Copy Type</label>
+            <select name="copy_type" id="copyTypeSelect" class="form-select" onchange="toggleAccessType()">
+              <option value="hardcopy">Hardcopy</option>
+              <option value="softcopy" {% if has_softcopy %}disabled{% endif %}>
+                Softcopy{% if has_softcopy %} (already exists — edit the existing copy){% endif %}
+              </option>
+            </select>
+            {% if has_softcopy %}
+            <div class="alert alert-warning mt-2 py-2 small mb-0">
+              <i class="bi bi-info-circle"></i> This book already has a softcopy. Only <strong>1 softcopy per book</strong> is allowed.
+              Edit the existing softcopy copy using the <i class="bi bi-pencil"></i> button in the table above.
+            </div>
+            {% endif %}
+          </div>
+          <div id="accessTypeGroup" style="display:none" class="mb-3">
+            <label class="form-label">Access Type</label>
+            <select name="access_type" class="form-select">
+              <option value="free">Free Soft Copy</option>
+              <option value="borrow">Special Soft Copy (Borrow Required)</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Accession Number <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="text" name="accession_no" id="accessionNoInput" class="form-control font-monospace fw-bold" placeholder="Loading..." required>
+              <button type="button" class="btn btn-outline-secondary" onclick="fetchNextAccession()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+            <div class="form-text text-success"><i class="bi bi-info-circle"></i> Auto-generated. You may edit if needed.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Shelf Location</label>
+            <select name="shelf_location" id="copyShelfSelect" class="form-select">
+              <option value="">-- No shelf / Load after selecting category --</option>
+            </select>
+            <div class="form-text">Book category: <strong>{{ book.category.name|default:"None" }}</strong></div>
+          </div>
+          <div id="fileGroup" style="display:none" class="mb-3">
+            <label class="form-label">Upload PDF File</label>
+            <input type="file" name="file_path" class="form-control" accept=".pdf">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-msict">Add Copy</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleAccessType() {
+  var t = document.getElementById('copyTypeSelect').value;
+  document.getElementById('accessTypeGroup').style.display = t === 'softcopy' ? 'block' : 'none';
+  document.getElementById('fileGroup').style.display = t === 'softcopy' ? 'block' : 'none';
+}
+
+const nextAccessionUrl = "{% url 'next_accession_api' %}";
+const accessionInput = document.getElementById('accessionNoInput');
+
+function fetchNextAccession() {
+  if (!accessionInput) return;
+  accessionInput.placeholder = 'Generating...';
+  fetch(nextAccessionUrl)
+    .then(r => r.json())
+    .then(data => {
+      accessionInput.value = data.accession_no;
+      accessionInput.placeholder = '';
+    })
+    .catch(() => { accessionInput.placeholder = 'Error – type manually'; });
+}
+
+// Auto-fetch when modal opens
+const addCopyModal = document.getElementById('addCopyModal');
+if (addCopyModal) {
+  addCopyModal.addEventListener('show.bs.modal', () => {
+    fetchNextAccession();
+  });
+}
+
+// Load shelves for this book's category
+const bookCategoryId = "{{ book.category_id|default:'' }}";
+const copyShelfSelect = document.getElementById('copyShelfSelect');
+const shelfApiBase = "{% url 'shelves_by_category_api' 0 %}".replace('/0/', '/');
+
+if (bookCategoryId && copyShelfSelect) {
+  fetch(shelfApiBase + bookCategoryId + '/')
+    .then(r => r.json())
+    .then(data => {
+      copyShelfSelect.innerHTML = '<option value="">-- No shelf --</option>';
+      if (data.shelves.length === 0) {
+        copyShelfSelect.innerHTML = '<option value="">No shelves for this category</option>';
+        return;
+      }
+      data.shelves.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.code;
+        opt.textContent = s.code + (s.name ? ' \u2013 ' + s.name : '');
+        copyShelfSelect.appendChild(opt);
+      });
+    });
+}
+</script>
+{% endblock %}

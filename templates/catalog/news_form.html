@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% block title %}{% if news %}Edit Post{% else %}New Post{% endif %}{% endblock %}
+{% block content %}
+
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <a href="{% url 'news_list' %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <h4 class="fw-bold mb-0">
+        {% if news %}<i class="bi bi-pencil-square"></i> Edit Post{% else %}<i class="bi bi-plus-circle"></i> New Post{% endif %}
+      </h4>
+    </div>
+
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+
+      <!-- Basic Info -->
+      <div class="card p-4 mb-3">
+        <h6 class="fw-bold mb-3 border-bottom pb-2"><i class="bi bi-info-circle"></i> Basic Information</h6>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+            <input type="text" name="title" class="form-control" value="{{ news.title|default:'' }}"
+                   placeholder="Enter headline..." required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Type</label>
+            <select name="news_type" class="form-select">
+              {% for val, label in type_choices %}
+              <option value="{{ val }}" {% if news.news_type == val %}selected{% elif not news and val == 'news' %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Expires At <small class="text-muted">(optional)</small></label>
+            <input type="datetime-local" name="expires_at" class="form-control"
+                   value="{% if news.expires_at %}{{ news.expires_at|date:'Y-m-d\TH:i' }}{% endif %}">
+            <div class="form-text">Leave blank for no expiry</div>
+          </div>
+          <div class="col-md-4 d-flex flex-column justify-content-center gap-2 pt-4">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
+                     {% if not news or news.is_active %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="is_active">
+                <i class="bi bi-eye"></i> Published
+              </label>
+            </div>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" name="is_featured" id="is_featured"
+                     {% if news.is_featured %}checked{% endif %}>
+              <label class="form-check-label fw-semibold" for="is_featured">
+                <i class="bi bi-star"></i> Featured (pinned)
+              </label>
+            </div>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold">Content</label>
+            <textarea name="content" class="form-control" rows="5"
+                      placeholder="Write full content here...">{{ news.content|default:'' }}</textarea>
+          </div>
+        </div>
+      </div>
+
+      <!-- Media -->
+      <div class="card p-4 mb-3">
+        <h6 class="fw-bold mb-3 border-bottom pb-2"><i class="bi bi-images"></i> Media</h6>
+        <div class="row g-3">
+
+          <!-- Image -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold"><i class="bi bi-image text-primary"></i> Cover Image</label>
+            {% if news.image %}
+            <div class="mb-2">
+              <img src="{{ news.image.url }}" alt="Cover" class="rounded border"
+                   style="max-height:120px;max-width:100%;object-fit:cover;">
+              <div class="form-check mt-1">
+                <input type="checkbox" name="clear_image" id="clear_image" class="form-check-input">
+                <label for="clear_image" class="form-check-label small text-danger">Remove image</label>
+              </div>
+            </div>
+            {% endif %}
+            <input type="file" name="image" class="form-control" accept="image/*"
+                   id="imageInput" onchange="previewImage(this)" data-no-auto-preview>
+            <div class="form-text">JPG, PNG — recommended 1200×630px</div>
+            <img id="imagePreview" src="" alt="" class="mt-2 rounded d-none" style="max-height:100px;">
+          </div>
+
+          <!-- Video -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold"><i class="bi bi-play-circle text-danger"></i> Video URL</label>
+            <input type="url" name="video_url" class="form-control"
+                   placeholder="https://www.youtube.com/watch?v=..."
+                   value="{{ news.video_url|default:'' }}"
+                   id="videoUrlInput" oninput="updateVideoPreview()">
+            <div class="form-text">YouTube or Vimeo URL — auto-converted to embed</div>
+            <div id="videoPreviewContainer" class="mt-2 d-none">
+              <div class="ratio ratio-16x9" style="max-height:120px;">
+                <iframe id="videoPreviewFrame" src="" allowfullscreen loading="lazy"
+                        style="border-radius:6px;border:none;"></iframe>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Links & Attachment -->
+      <div class="card p-4 mb-3">
+        <h6 class="fw-bold mb-3 border-bottom pb-2"><i class="bi bi-link-45deg"></i> Links & Attachment</h6>
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label fw-semibold"><i class="bi bi-globe text-success"></i> External Link URL</label>
+            <input type="url" name="link_url" class="form-control"
+                   placeholder="https://example.com/more-info"
+                   value="{{ news.link_url|default:'' }}">
+            <div class="form-text">Optional "Read More" / "Learn More" button on homepage</div>
+          </div>
+          <div class="col-12">
+            <label class="form-label fw-semibold"><i class="bi bi-paperclip text-warning"></i> Attachment</label>
+            {% if news.attachment %}
+            <div class="mb-2 p-2 bg-light rounded d-flex align-items-center gap-2">
+              <i class="bi bi-file-earmark-text fs-4 text-muted"></i>
+              <a href="{{ news.attachment.url }}" target="_blank" class="text-decoration-none small">
+                {{ news.attachment.name|slice:"16:" }}
+              </a>
+              <div class="form-check ms-auto">
+                <input type="checkbox" name="clear_attachment" id="clear_attachment" class="form-check-input">
+                <label for="clear_attachment" class="form-check-label small text-danger">Remove</label>
+              </div>
+            </div>
+            {% endif %}
+            <input type="file" name="attachment" class="form-control"
+                   accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+            <div class="form-text">PDF, Word, Excel, PowerPoint, ZIP</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <div class="d-flex gap-2">
+        <button type="submit" class="btn btn-msict">
+          <i class="bi bi-save"></i> {% if news %}Save Changes{% else %}Publish Post{% endif %}
+        </button>
+        <a href="{% url 'news_list' %}" class="btn btn-outline-secondary">Cancel</a>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+{% block extra_js %}
+<script>
+function previewImage(input) {
+  const preview = document.getElementById('imagePreview');
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      preview.src = e.target.result;
+      preview.classList.remove('d-none');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function toEmbedUrl(url) {
+  if (!url) return '';
+  if (url.includes('embed')) return url;
+  let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);
+  if (m) return 'https://www.youtube.com/embed/' + m[1];
+  m = url.match(/vimeo\.com\/(\d+)/);
+  if (m) return 'https://player.vimeo.com/video/' + m[1];
+  return url;
+}
+
+function updateVideoPreview() {
+  const url = document.getElementById('videoUrlInput').value.trim();
+  const embed = toEmbedUrl(url);
+  const container = document.getElementById('videoPreviewContainer');
+  const frame = document.getElementById('videoPreviewFrame');
+  if (embed) {
+    frame.src = embed;
+    container.classList.remove('d-none');
+  } else {
+    container.classList.add('d-none');
+    frame.src = '';
+  }
+}
+
+// On load: show video preview if editing existing post
+document.addEventListener('DOMContentLoaded', function() {
+  const url = document.getElementById('videoUrlInput').value.trim();
+  if (url) updateVideoPreview();
+});
+</script>
+{% endblock %}

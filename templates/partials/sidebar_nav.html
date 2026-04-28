@@ -1,0 +1,156 @@
+{% if user.role == 'admin' %}
+
+  {# ── ADMIN ─────────────────────────────────────────────── #}
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Overview</div>
+    <a href="{% url 'admin_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
+    <a href="{% url 'user_list' %}" class="nav-link"><i class="bi bi-people"></i> Members</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Security</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#adm-security" aria-expanded="false">
+      <i class="bi bi-shield-lock"></i> Security
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="adm-security">
+      <a href="{% url 'audit_logs' %}" class="nav-link"><i class="bi bi-journal-text"></i> Audit Logs</a>
+      <a href="{% url 'user_list' %}?status=locked" class="nav-link"><i class="bi bi-person-x"></i> Locked Accounts</a>
+      <a href="{% url 'suspicious_activity' %}" class="nav-link"><i class="bi bi-shield-exclamation"></i> Suspicious IPs</a>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">System</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#adm-system" aria-expanded="false">
+      <i class="bi bi-gear"></i> System
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="adm-system">
+      <a href="{% url 'system_preferences' %}" class="nav-link"><i class="bi bi-sliders"></i> Preferences</a>
+      <a href="{% url 'reports_home' %}" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
+      <a href="{% url 'sql_report' %}" class="nav-link"><i class="bi bi-code-slash"></i> SQL Query</a>
+      <a href="{% url 'admin:index' %}" class="nav-link"><i class="bi bi-tools"></i> Django Admin</a>
+    </div>
+  </div>
+
+{% elif user.role == 'librarian' %}
+
+  {# ── LIBRARIAN ─────────────────────────────────────────── #}
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Overview</div>
+    <a href="{% url 'librarian_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Catalog</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#lib-catalog" aria-expanded="false">
+      <i class="bi bi-book"></i> Books &amp; Catalog
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="lib-catalog">
+      <a href="{% url 'book_list' %}" class="nav-link"><i class="bi bi-book-half"></i> Books</a>
+      <a href="{% url 'copy_list' %}" class="nav-link"><i class="bi bi-collection"></i> Copies</a>
+      <a href="{% url 'category_list' %}" class="nav-link"><i class="bi bi-tags"></i> Categories</a>
+      <a href="{% url 'course_list' %}" class="nav-link"><i class="bi bi-mortarboard"></i> Courses</a>
+      <a href="{% url 'shelf_list_all' %}" class="nav-link"><i class="bi bi-bookshelf"></i> Shelves</a>
+      <a href="{% url 'shelf_location' %}" class="nav-link"><i class="bi bi-graph-up"></i> Shelf Analytics</a>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Circulation</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#lib-circ" aria-expanded="false">
+      <i class="bi bi-arrow-left-right"></i> Circulation
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="lib-circ">
+      <a href="{% url 'all_requests' %}" class="nav-link"><i class="bi bi-inbox"></i> Borrow Requests</a>
+      <a href="{% url 'reservation_list' %}" class="nav-link"><i class="bi bi-bookmark-check"></i> Reservations &amp; Queue</a>
+      <a href="{% url 'all_borrowings' %}" class="nav-link"><i class="bi bi-journal-text"></i> All Borrowings</a>
+      <a href="{% url 'return_desk' %}" class="nav-link"><i class="bi bi-arrow-return-left"></i> Return Desk</a>
+      <a href="{% url 'return_history' %}" class="nav-link"><i class="bi bi-clock-history"></i> Return History</a>
+      <a href="{% url 'overdue_list' %}" class="nav-link"><i class="bi bi-exclamation-circle text-danger"></i> Overdue</a>
+      <a href="{% url 'fine_list' %}" class="nav-link"><i class="bi bi-cash-coin"></i> Fines</a>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Members &amp; Media</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#lib-members" aria-expanded="false">
+      <i class="bi bi-people"></i> Members &amp; Media
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="lib-members">
+      <a href="{% url 'user_list' %}" class="nav-link"><i class="bi bi-people"></i> Members</a>
+      <a href="{% url 'create_user' %}" class="nav-link"><i class="bi bi-person-plus"></i> Add Member</a>
+      <a href="{% url 'news_list' %}" class="nav-link"><i class="bi bi-newspaper"></i> News</a>
+      <a href="{% url 'media_slide_list' %}" class="nav-link"><i class="bi bi-images"></i> Media &amp; Carousel</a>
+      <a href="{% url 'external_library_list' %}" class="nav-link"><i class="bi bi-globe2"></i> Ext. Libraries</a>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Acquisitions</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#lib-acq" aria-expanded="false">
+      <i class="bi bi-cart3"></i> Acquisitions
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="lib-acq">
+      <a href="{% url 'vendor_list' %}" class="nav-link"><i class="bi bi-shop"></i> Vendors</a>
+      <a href="{% url 'purchase_order_list' %}" class="nav-link"><i class="bi bi-cart3"></i> Orders</a>
+      <a href="{% url 'ill_request_list' %}" class="nav-link"><i class="bi bi-arrow-left-right"></i> ILL Requests</a>
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Other</div>
+    <a href="{% url 'reports_home' %}" class="nav-link"><i class="bi bi-bar-chart-line"></i> Reports</a>
+    <a href="{% url 'system_appearance' %}" class="nav-link"><i class="bi bi-palette"></i> Appearance</a>
+  </div>
+
+{% else %}
+
+  {# ── MEMBER ────────────────────────────────────────────── #}
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Overview</div>
+    <a href="{% url 'member_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> My Dashboard</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Library</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#mem-books" aria-expanded="false">
+      <i class="bi bi-book"></i> Books
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="mem-books">
+      <a href="{% url 'book_list' %}" class="nav-link"><i class="bi bi-book"></i> Book Catalog</a>
+      <a href="{% url 'borrow_catalog' %}" class="nav-link"><i class="bi bi-bag-plus"></i> Borrow a Book</a>
+      <a href="{% url 'softcopy_library' %}" class="nav-link"><i class="bi bi-file-earmark-text"></i> Softcopy Library</a>
+      {#<a href="{% url 'shelf_location' %}" class="nav-link"><i class="bi bi-bookshelf"></i> Shelf Locations</a>#}
+    </div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">My Activity</div>
+    <button class="nav-link nav-group" type="button"
+            data-bs-toggle="collapse" data-bs-target="#mem-borrow" aria-expanded="false">
+      <i class="bi bi-journals"></i> My Borrowings
+      <i class="bi bi-chevron-down sidebar-chevron"></i>
+    </button>
+    <div class="collapse sidebar-submenu" id="mem-borrow">
+      <a href="{% url 'member_msict_borrowings' %}" class="nav-link"><i class="bi bi-book-half"></i> MSICT Borrowings</a>
+      <a href="{% url 'member_ill_borrowings' %}" class="nav-link"><i class="bi bi-arrow-left-right"></i> ILL Borrowings</a>
+      <a href="{% url 'ill_request_create' %}" class="nav-link"><i class="bi bi-plus-circle"></i> ILL Request</a>
+    </div>
+    <a href="{% url 'my_reservations' %}" class="nav-link"><i class="bi bi-bookmark-star"></i> My Reservations</a>
+  </div>
+
+{% endif %}

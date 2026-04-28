@@ -1,0 +1,367 @@
+{% extends 'base.html' %}
+{% block title %}{% if book %}Edit Book{% else %}Add Book{% endif %}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-9">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-book"></i> {% if book %}Edit: {{ book.title }}{% else %}Add New Book{% endif %}</h5>
+      <form method="post" enctype="multipart/form-data">{% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+            <input type="text" name="title" class="form-control" value="{{ book.title|default:'' }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">ISBN</label>
+            <input type="text" name="isbn" class="form-control" value="{{ book.isbn|default:'' }}" maxlength="13">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Author <span class="text-danger">*</span></label>
+            <input type="text" name="author" class="form-control" value="{{ book.author|default:'' }}" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Publisher</label>
+            <input type="text" name="publisher" class="form-control" value="{{ book.publisher|default:'' }}">
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Year</label>
+            <input type="number" name="year" class="form-control" value="{{ book.year|default:'' }}" min="1800" max="2099">
+          </div>
+          <!-- Book Type selector -->
+          <div class="col-12">
+            <label class="form-label fw-semibold">Book Type <span class="text-danger">*</span></label>
+            <div class="d-flex flex-wrap gap-4 mt-1">
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="book_type" id="typeHard" value="hardcopy" checked>
+                <label class="form-check-label" for="typeHard"><i class="bi bi-book"></i> Hardcopy only</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="book_type" id="typeSoft" value="softcopy">
+                <label class="form-check-label" for="typeSoft"><i class="bi bi-file-earmark-pdf"></i> Softcopy only</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="radio" name="book_type" id="typeBoth" value="both">
+                <label class="form-check-label" for="typeBoth"><i class="bi bi-layers"></i> Both (Hardcopy + Softcopy)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Category</label>
+            <select name="category" class="form-select">
+              <option value="">-- None --</option>
+              {% for cat in categories %}
+              <option value="{{ cat.pk }}" {% if book and book.category_id == cat.pk %}selected{% endif %}>{{ cat.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Related Courses <small class="text-muted">(hold Ctrl to multi-select)</small></label>
+            <select name="courses" class="form-select" multiple style="height:100px">
+              {% for c in courses %}
+              <option value="{{ c.pk }}" {% if c.pk in selected_courses %}selected{% endif %}>{{ c.course_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Summary / Description</label>
+            <textarea name="summary" class="form-control" rows="3">{{ book.summary|default:'' }}</textarea>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Cover Image</label>
+            <input type="file" name="cover_image" class="form-control" accept="image/*">
+            {% if book and book.cover_image %}
+            <div class="mt-2"><img src="{{ book.cover_image.url }}" height="80" class="rounded"></div>
+            {% endif %}
+          </div>
+          <!-- ── Hardcopy fields ─────────────────────────────── -->
+          <div class="col-12" id="hardcopySection">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label fw-semibold">Number of Copies</label>
+                <input type="number" name="number_of_copies" id="numberCopies" class="form-control" value="1" min="0" max="100">
+                <div class="form-text">Physical copies to register.</div>
+              </div>
+              <div class="col-md-9" id="shelfGroup">
+                <label class="form-label">Shelf Location</label>
+                <select name="shelf_location" id="shelfSelect" class="form-select mb-2" style="max-width:300px">
+                  <option value="">-- Select category first --</option>
+                  {% if book and book.shelf_location %}
+                  <option value="{{ book.shelf_location }}" selected>{{ book.shelf_location }}</option>
+                  {% endif %}
+                </select>
+                <div id="shelfCapacityBadge" class="mb-1" style="display:none"></div>
+                <div id="shelfShiftAlert" class="alert py-2 mb-1 small" style="display:none;max-width:480px"></div>
+                <div id="shelfPreview" style="display:none"></div>
+                <div class="form-text">Shelves load when you choose a category. Full shelves are skipped automatically.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Softcopy fields ─────────────────────────────── -->
+          <div class="col-12" id="softcopySection" style="display:none">
+            <div class="alert alert-info py-2 mb-2 small">
+              <i class="bi bi-info-circle-fill"></i>
+              <strong>1 softcopy copy will be created.</strong>
+              Softcopy books are accessed via a <strong>time-limited secure link</strong> — only 1 copy per book is allowed.
+              The access link expires automatically on the due date. Users must renew to restore access.
+            </div>
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">Softcopy Access Type <span class="text-danger">*</span></label>
+                <select name="access_type" id="accessTypeSelect" class="form-select">
+                  <option value="free">🟢 Free Download (any logged-in user)</option>
+                  <option value="borrow">🟡 Special – Borrow Only (librarian approves)</option>
+                </select>
+                <div class="form-text" id="accessTypeNote">Free = immediate download. Special = user requests, link expires on due date.</div>
+                <input type="hidden" id="accessTypeHidden" name="access_type_forced" value="">
+                <div id="accessTypeLockNote" class="alert alert-warning py-1 mt-1 mb-0 small" style="display:none">
+                  <i class="bi bi-lock-fill me-1"></i> Locked to <strong>Special – Borrow Only</strong> because this book also has a hardcopy (both must require borrowing).
+                </div>
+              </div>
+              <div class="col-md-4">
+                <label class="form-label fw-semibold">PDF / eBook File</label>
+                <input type="file" name="softcopy_file" id="softcopyFile" class="form-control" accept=".pdf,.epub,.doc,.docx">
+                <div class="form-text">Upload the digital file (PDF, EPUB, etc.).</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> {% if book %}Update{% else %}Create{% endif %} Book</button>
+          <a href="{% url 'book_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const apiBase      = "{% url 'shelves_by_category_api' 0 %}".replace('/0/', '/');
+const categorySelect = document.querySelector('select[name="category"]');
+const shelfSelect    = document.getElementById('shelfSelect');
+const currentShelf   = "{{ book.shelf_location|default:'' }}";
+
+const hardcopySection  = document.getElementById('hardcopySection');
+const softcopySection  = document.getElementById('softcopySection');
+const numberCopies     = document.getElementById('numberCopies');
+const softcopyFile     = document.getElementById('softcopyFile');
+
+const accessTypeSelect   = document.getElementById('accessTypeSelect');
+const accessTypeLockNote = document.getElementById('accessTypeLockNote');
+const accessTypeNote     = document.getElementById('accessTypeNote');
+const accessTypeHidden   = document.getElementById('accessTypeHidden');
+
+/* ── Toggle sections based on book type radio ─── */
+function applyBookType(val) {
+  const showHard = (val === 'hardcopy' || val === 'both');
+  const showSoft = (val === 'softcopy' || val === 'both');
+  hardcopySection.style.display = showHard ? '' : 'none';
+  softcopySection.style.display = showSoft ? '' : 'none';
+  if (!showHard) numberCopies.value = 0;
+  else if (numberCopies.value == 0) numberCopies.value = 1;
+
+  /* When 'both': force softcopy to Special Borrow and lock */
+  if (val === 'both') {
+    accessTypeSelect.value    = 'borrow';
+    accessTypeSelect.disabled = true;
+    if (accessTypeHidden)   accessTypeHidden.value           = 'borrow';
+    if (accessTypeLockNote) accessTypeLockNote.style.display = 'block';
+    if (accessTypeNote)     accessTypeNote.style.display     = 'none';
+  } else {
+    accessTypeSelect.disabled = false;
+    if (accessTypeHidden)   accessTypeHidden.value           = '';
+    if (accessTypeLockNote) accessTypeLockNote.style.display = 'none';
+    if (accessTypeNote)     accessTypeNote.style.display     = '';
+  }
+}
+
+document.querySelectorAll('input[name="book_type"]').forEach(r => {
+  r.addEventListener('change', () => applyBookType(r.value));
+});
+// Run on load
+const checkedType = document.querySelector('input[name="book_type"]:checked');
+if (checkedType) applyBookType(checkedType.value);
+
+/* ── Shelf capacity helpers ──────────────────── */
+const shelfPreview       = document.getElementById('shelfPreview');
+const shelfCapacityBadge = document.getElementById('shelfCapacityBadge');
+const shelfShiftAlert    = document.getElementById('shelfShiftAlert');
+let   _shelves           = [];    // cached shelf data for current category
+
+function pctBar(used, cap) {
+  const p = cap > 0 ? Math.min(Math.round((used / cap) * 100), 100) : 0;
+  const color = p >= 90 ? '#dc2626' : p >= 70 ? '#d97706' : '#059669';
+  return `<div style="height:5px;border-radius:3px;background:#e2e8f0;margin-top:3px;overflow:hidden">
+    <div style="height:5px;border-radius:3px;background:${color};width:${p}%;transition:width .4s"></div></div>
+    <div style="font-size:.67rem;color:#64748b;margin-top:2px">${used}/${cap} books · ${p}%</div>`;
+}
+
+function capacityBadgeHTML(s) {
+  const avail = (s.capacity || 0) - (s.book_count || 0);
+  const p     = s.capacity > 0 ? Math.min(Math.round((s.book_count / s.capacity) * 100), 100) : 0;
+  if (avail <= 0) return `<span class="badge" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca"><i class="bi bi-x-circle-fill me-1"></i>${s.code} — FULL (${s.capacity}/${s.capacity})</span>`;
+  const col = p >= 70 ? '#92400e' : '#065f46';
+  const bg  = p >= 70 ? '#fef3c7' : '#d1fae5';
+  return `<span class="badge" style="background:${bg};color:${col};border:1px solid ${p>=70?'#fde68a':'#a7f3d0'};font-size:.75rem">
+    <i class="bi bi-check-circle me-1"></i>${s.code} — ${avail} space${avail===1?'':'s'} free (${p}% full)</span>`;
+}
+
+function checkShiftNeeded() {
+  if (!_shelves.length) { shelfShiftAlert.style.display='none'; shelfCapacityBadge.style.display='none'; return; }
+  const selCode  = shelfSelect.value;
+  const numBooks = parseInt(numberCopies.value, 10) || 0;
+  const sel      = _shelves.find(s => s.code === selCode);
+  if (!sel) { shelfShiftAlert.style.display='none'; shelfCapacityBadge.style.display='none'; return; }
+
+  /* inline capacity badge */
+  shelfCapacityBadge.innerHTML = capacityBadgeHTML(sel);
+  shelfCapacityBadge.style.display = 'block';
+
+  const avail = (sel.capacity || 0) - (sel.book_count || 0);
+  if (avail >= numBooks && avail > 0) {
+    shelfShiftAlert.style.display = 'none';
+    return;
+  }
+
+  /* Need to shift — find next shelf with enough space */
+  const next = _shelves.find(s => s.code !== selCode && ((s.capacity||0) - (s.book_count||0)) >= Math.max(numBooks, 1));
+
+  if (avail <= 0) {
+    /* Current shelf is completely full */
+    if (next) {
+      shelfShiftAlert.className = 'alert alert-warning py-2 mb-1 small';
+      shelfShiftAlert.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <strong>${sel.code}</strong> is <strong>full</strong> (${sel.book_count}/${sel.capacity}).
+        <button type="button" class="btn btn-warning btn-sm py-0 ms-2" onclick="autoShift('${next.code}')">
+          Auto-shift to ${next.code} (${(next.capacity-next.book_count)} free)
+        </button>`;
+    } else {
+      shelfShiftAlert.className = 'alert alert-danger py-2 mb-1 small';
+      shelfShiftAlert.innerHTML = `<i class="bi bi-x-circle-fill me-1"></i>
+        <strong>${sel.code}</strong> is full and no other shelf in this category has space.
+        <a href="/catalog/shelves/create/" target="_blank" class="alert-link ms-2">Add a new shelf →</a>`;
+    }
+  } else {
+    /* Partially insufficient */
+    if (next) {
+      shelfShiftAlert.className = 'alert alert-warning py-2 mb-1 small';
+      shelfShiftAlert.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <strong>${sel.code}</strong> only has <strong>${avail}</strong> space${avail===1?'':'s'} but you are adding <strong>${numBooks}</strong> cop${numBooks===1?'y':'ies'}.
+        <button type="button" class="btn btn-warning btn-sm py-0 ms-2" onclick="autoShift('${next.code}')">
+          Use ${next.code} instead (${(next.capacity-next.book_count)} free)
+        </button>`;
+    } else {
+      shelfShiftAlert.className = 'alert alert-warning py-2 mb-1 small';
+      shelfShiftAlert.innerHTML = `<i class="bi bi-exclamation-triangle-fill me-1"></i>
+        <strong>${sel.code}</strong> only has ${avail} space${avail===1?'':'s'} remaining. No other shelf has enough space for all copies.`;
+    }
+  }
+  shelfShiftAlert.style.display = 'block';
+}
+
+function autoShift(code) {
+  shelfSelect.value = code;
+  checkShiftNeeded();
+  /* Re-render preview to highlight new selection */
+  renderPreview();
+}
+
+function renderPreview() {
+  if (!_shelves.length) { shelfPreview.style.display='none'; return; }
+  const rows = _shelves.map(s => {
+    const avail = (s.capacity||0) - (s.book_count||0);
+    const p = s.capacity > 0 ? Math.min(Math.round((s.book_count/s.capacity)*100),100) : 0;
+    const isSel = s.code === shelfSelect.value;
+    const statusBadge = avail <= 0
+      ? `<span style="font-size:.65rem;color:#dc2626;font-weight:600">FULL</span>`
+      : `<span style="font-size:.65rem;color:#059669">${avail} free</span>`;
+    return `
+      <div class="d-flex align-items-start gap-2 py-1 border-bottom" style="border-color:#f1f5f9!important;${isSel?'background:#eff6ff;':''};border-radius:${isSel?'6px':0}">
+        <div style="min-width:100px">
+          <span class="badge" style="background:${isSel?'#2563eb':'#eff6ff'};color:${isSel?'#fff':'#2563eb'};font-size:.72rem;font-weight:600">${s.code}</span>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.76rem;font-weight:600;color:#0f172a;display:flex;align-items:center;gap:.4rem">
+            ${s.name || '&mdash;'} ${statusBadge}
+          </div>
+          ${pctBar(s.book_count, s.capacity)}
+        </div>
+        ${s.notes ? `<div class="text-muted" style="font-size:.68rem;max-width:110px;text-align:right">${s.notes}</div>` : ''}
+      </div>`;
+  }).join('');
+  shelfPreview.innerHTML = `
+    <div style="border:1px solid #e2e8f0;border-radius:10px;background:#fff;max-width:500px;overflow:hidden">
+      <div style="background:#eff6ff;padding:.5rem .85rem;border-bottom:1px solid #dbeafe;display:flex;align-items:center;gap:.5rem">
+        <i class="bi bi-bookshelf" style="color:#2563eb"></i>
+        <span style="font-weight:600;font-size:.8rem;color:#1e40af">Shelf Capacity</span>
+        <span class="ms-auto" style="font-size:.7rem;color:#64748b">Click a shelf to select it</span>
+      </div>
+      <div style="padding:.25rem .5rem">${rows}</div>
+    </div>`;
+  shelfPreview.style.display = 'block';
+  /* Make preview rows clickable */
+  shelfPreview.querySelectorAll('[data-shelf]').forEach(el => {
+    el.addEventListener('click', () => { shelfSelect.value = el.dataset.shelf; checkShiftNeeded(); renderPreview(); });
+  });
+}
+
+function loadShelves(catId) {
+  _shelves = [];
+  shelfSelect.innerHTML = '<option value="">-- No shelf --</option>';
+  shelfPreview.style.display = 'none';
+  shelfShiftAlert.style.display = 'none';
+  shelfCapacityBadge.style.display = 'none';
+  if (!catId) return;
+
+  fetch(apiBase + catId + '/')
+    .then(r => r.json())
+    .then(data => {
+      if (!data.shelves.length) {
+        shelfPreview.innerHTML = `<div class="alert alert-warning py-2 small mb-0"
+          style="border-radius:8px;max-width:480px">
+          <i class="bi bi-exclamation-triangle-fill me-1"></i>
+          Category <strong>${data.category}</strong> has no shelves.
+          <a href="/catalog/shelves/create/" target="_blank" class="alert-link ms-1">Create a shelf →</a>
+        </div>`;
+        shelfPreview.style.display = 'block';
+        return;
+      }
+      _shelves = data.shelves;  // cache
+
+      /* Populate select with capacity info in option text */
+      let firstAvailable = null;
+      data.shelves.forEach(s => {
+        const avail = (s.capacity || 0) - (s.book_count || 0);
+        const p     = s.capacity > 0 ? Math.min(Math.round((s.book_count / s.capacity) * 100), 100) : 0;
+        const opt   = document.createElement('option');
+        opt.value   = s.code;
+        if (avail <= 0) {
+          opt.textContent = `${s.code} — FULL (${s.book_count}/${s.capacity})`;
+          opt.style.color = '#dc2626';
+        } else {
+          opt.textContent = `${s.code}${s.name?' – '+s.name:''} (${avail} free · ${p}% full)`;
+        }
+        if (s.code === currentShelf) { opt.selected = true; }
+        else if (!firstAvailable && avail > 0) { firstAvailable = s.code; }
+        shelfSelect.appendChild(opt);
+      });
+
+      /* Auto-select: prefer saved shelf, else first available */
+      if (!currentShelf && firstAvailable) shelfSelect.value = firstAvailable;
+
+      renderPreview();
+      checkShiftNeeded();
+    });
+}
+
+if (categorySelect) {
+  categorySelect.addEventListener('change', () => loadShelves(categorySelect.value));
+  if (categorySelect.value) loadShelves(categorySelect.value);
+}
+
+shelfSelect.addEventListener('change', () => { checkShiftNeeded(); renderPreview(); });
+numberCopies.addEventListener('input', checkShiftNeeded);
+</script>
+{% endblock %}

@@ -1,0 +1,388 @@
+{% extends 'base.html' %}
+{% block title %}Search Catalog{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-search"></i> Catalog Search</h4>
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2">
+    <div class="col-md-4 position-relative">
+      <input type="text" name="q" id="searchInput" class="form-control" placeholder="Title, author, ISBN, accession no…" value="{{ query }}" autocomplete="off">
+      <!-- Autocomplete Dropdown -->
+      <div id="autocompleteResults" class="list-group position-absolute w-100 shadow-sm" style="display: none; z-index: 1000; max-height: 300px; overflow-y: auto;">
+      </div>
+    </div>
+    <div class="col-md-2">
+      <select name="course" class="form-select">
+        <option value="">All Courses</option>
+        {% for c in courses %}<option value="{{ c.pk }}" {% if selected_course == c.pk|stringformat:"i" %}selected{% endif %}>{{ c.course_name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="category" class="form-select">
+        <option value="">All Categories</option>
+        {% for c in categories %}<option value="{{ c.pk }}" {% if selected_category == c.pk|stringformat:"i" %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i> Search</button>
+    </div>
+    <div class="col-md-2">
+      <a href="{% url 'catalog_search' %}" class="btn btn-outline-secondary w-100">Clear</a>
+    </div>
+    {% if active_ext_libs %}
+    <div class="col-12 mt-2">
+      <label class="form-label small fw-semibold"><i class="bi bi-globe"></i> Federated Search (External Libraries):</label>
+      <div class="d-flex flex-wrap gap-3">
+        {% for lib in active_ext_libs %}
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="federated" value="{{ lib.pk }}" id="fed_{{ lib.pk }}" {% if lib.pk|stringformat:"i" in federated_selected %}checked{% endif %}>
+          <label class="form-check-label small" for="fed_{{ lib.pk }}">{{ lib.name }}</label>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </form>
+</div>
+
+{% if active_ext_libs %}
+<div id="fedPanel"
+     data-query="{{ query|escapejs }}"
+     data-proxy="{% url 'federated_proxy' %}"
+     data-libs='[{% for lib in active_ext_libs %}{"id":{{ lib.pk }},"name":"{{ lib.name|escapejs }}","type":"{{ lib.lib_type }}","checked":{% if lib.pk|stringformat:"i" in federated_selected %}true{% else %}false{% endif %}}{% if not forloop.last %},{% endif %}{% endfor %}]'
+     style="display:none">
+</div>
+<div id="fedResults"></div>
+{% endif %}
+
+<div class="row g-3">
+  {% for book in books %}
+  <div class="col-md-4 col-lg-3">
+    <div class="card h-100">
+      <div class="text-center pt-3" style="height:160px;overflow:hidden">
+        {% if book.cover_image %}
+          <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" class="img-fluid h-100" style="object-fit:contain">
+        {% else %}
+          <div class="d-flex align-items-center justify-content-center h-100 bg-light">
+            <i class="bi bi-book text-secondary" style="font-size:4rem"></i>
+          </div>
+        {% endif %}
+      </div>
+      <div class="card-body p-2">
+        <div class="fw-semibold small" style="line-height:1.3">{{ book.title|truncatechars:50 }}</div>
+        <div class="text-muted small">{{ book.author|truncatechars:30 }}</div>
+        <div class="mt-1">
+          {% if book.has_free_softcopy %}<span class="badge bg-success small">Free PDF</span>{% endif %}
+          {% if book.has_special_softcopy %}<span class="badge bg-warning text-dark small">Special</span>{% endif %}
+          {% if book.available_hardcopy_count > 0 %}<span class="badge bg-primary small">Available</span>
+          {% elif book.total_hardcopies > 0 %}<span class="badge bg-secondary small">Borrowed</span>
+          {% else %}<span class="badge bg-light text-dark border small">No Copies</span>{% endif %}
+        </div>
+      </div>
+      <div class="card-footer p-2 bg-transparent">
+        <div class="d-grid gap-2">
+          <a href="{% url 'book_detail_public' book.pk %}" class="btn btn-sm btn-msict">View Details</a>
+          {% if user.is_authenticated and book.total_hardcopies > 0 and book.available_hardcopy_count == 0 %}
+          <a href="{% url 'reserve_book' book.pk %}" class="btn btn-sm btn-outline-warning">
+            <i class="bi bi-bookmark-plus"></i> Reserve
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col-12">
+    <div class="text-center py-5">
+      <i class="bi bi-search text-muted" style="font-size:4rem"></i>
+      {% if has_course_filter == '1' %}
+        <h5 class="text-muted mt-3">No books are linked to any course yet.</h5>
+        <p class="text-muted small">Librarians can assign books to courses from the book management panel.</p>
+      {% elif selected_copy_type == 'softcopy' %}
+        <h5 class="text-muted mt-3">No books with free soft copies found.</h5>
+      {% elif selected_copy_type == 'hardcopy' %}
+        <h5 class="text-muted mt-3">No books with hardcopy found.</h5>
+      {% elif query %}
+        <h5 class="text-muted mt-3">No books found for "{{ query }}"</h5>
+      {% else %}
+        <h5 class="text-muted mt-3">No books found.</h5>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<nav aria-label="Page navigation" class="mt-4">
+  <ul class="pagination justify-content-center">
+    <!-- Previous -->
+    {% if page_obj.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="?{% if query %}q={{ query|urlencode }}&{% endif %}{% if selected_course %}course={{ selected_course }}&{% endif %}{% if selected_category %}category={{ selected_category }}&{% endif %}page={{ page_obj.previous_page_number }}" aria-label="Previous">
+          <span aria-hidden="true">&larr; Previous</span>
+        </a>
+      </li>
+    {% else %}
+      <li class="page-item disabled">
+        <span class="page-link">&larr; Previous</span>
+      </li>
+    {% endif %}
+
+    <!-- Page Numbers -->
+    {% for num in page_obj.paginator.page_range %}
+      {% if num == page_obj.number %}
+        <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+      {% elif num > page_obj.number|add:-3 and num < page_obj.number|add:3 %}
+        <li class="page-item">
+          <a class="page-link" href="?{% if query %}q={{ query|urlencode }}&{% endif %}{% if selected_course %}course={{ selected_course }}&{% endif %}{% if selected_category %}category={{ selected_category }}&{% endif %}page={{ num }}">{{ num }}</a>
+        </li>
+      {% elif num == 1 or num == page_obj.paginator.num_pages %}
+        <li class="page-item">
+          <a class="page-link" href="?{% if query %}q={{ query|urlencode }}&{% endif %}{% if selected_course %}course={{ selected_course }}&{% endif %}{% if selected_category %}category={{ selected_category }}&{% endif %}page={{ num }}">{{ num }}</a>
+        </li>
+      {% elif num == page_obj.number|add:-3 or num == page_obj.number|add:3 %}
+        <li class="page-item disabled"><span class="page-link">...</span></li>
+      {% endif %}
+    {% endfor %}
+
+    <!-- Next -->
+    {% if page_obj.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="?{% if query %}q={{ query|urlencode }}&{% endif %}{% if selected_course %}course={{ selected_course }}&{% endif %}{% if selected_category %}category={{ selected_category }}&{% endif %}page={{ page_obj.next_page_number }}" aria-label="Next">
+          <span aria-hidden="true">Next &rarr;</span>
+        </a>
+      </li>
+    {% else %}
+      <li class="page-item disabled">
+        <span class="page-link">Next &rarr;</span>
+      </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
+
+</div>
+
+<style>
+  /* Pagination styling */
+  .pagination {
+    gap: 4px;
+  }
+  .pagination .page-link {
+    border: none;
+    color: #374151;
+    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+  .pagination .page-link:hover {
+    background-color: #f3f4f6;
+    color: #111827;
+  }
+  .pagination .page-item.active .page-link {
+    background-color: #f3f4f6;
+    color: #111827;
+    font-weight: 600;
+  }
+  .pagination .page-item.disabled .page-link {
+    color: #9ca3af;
+    background-color: transparent;
+  }
+
+  #autocompleteResults {
+    border-radius: 12px !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12) !important;
+    overflow: hidden;
+    animation: dropIn .15s ease;
+  }
+  @keyframes dropIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+  #autocompleteResults .ac-item {
+    display:flex; align-items:center; gap:.7rem;
+    padding:.6rem .9rem; cursor:pointer;
+    text-decoration:none; color:#0f172a;
+    border-bottom:1px solid #f1f5f9;
+    transition:background .1s;
+  }
+  #autocompleteResults .ac-item:last-child { border-bottom:none; }
+  #autocompleteResults .ac-item:hover,
+  #autocompleteResults .ac-item.active { background:#eff6ff; }
+  #autocompleteResults .ac-icon {
+    width:32px;height:32px;background:#eff6ff;border-radius:7px;
+    display:flex;align-items:center;justify-content:center;
+    color:#2563eb;flex-shrink:0;font-size:.85rem;
+  }
+  #autocompleteResults .ac-title { font-weight:600;font-size:.82rem;line-height:1.2; }
+  #autocompleteResults .ac-sub   { font-size:.7rem;color:#64748b; }
+  #autocompleteResults .ac-msg   { padding:.75rem 1rem;color:#94a3b8;font-size:.8rem;text-align:center; }
+  #autocompleteResults .ac-footer {
+    padding:.45rem 1rem;background:#f8fafc;font-size:.73rem;
+    color:#64748b;text-align:center;border-top:1px solid #e2e8f0;
+  }
+</style>
+<script>
+(function () {
+  const input = document.getElementById('searchInput');
+  const box   = document.getElementById('autocompleteResults');
+  const API   = '{% url "catalog_autocomplete" %}';
+  let timer, activeIdx = -1;
+
+  if (!input || !box) return;
+
+  const esc = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  const hi  = (s, q) => esc(s).replace(new RegExp(`(${esc(q)})`, 'gi'), '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 1px">$1</mark>');
+
+  function show(html) { box.innerHTML = html; box.style.display = 'block'; }
+  function hide() { box.style.display = 'none'; activeIdx = -1; }
+
+  function build(results, q) {
+    if (!results.length)
+      return `<div class="ac-msg"><i class="bi bi-search me-1"></i>No matches for "<b>${esc(q)}</b>"</div>`;
+    let html = results.map(b => `
+      <a class="ac-item" href="/books/${b.id}/">
+        <div class="ac-icon"><i class="bi bi-book"></i></div>
+        <div>
+          <div class="ac-title">${hi(b.title, q)}</div>
+          <div class="ac-sub">${esc(b.author)}
+            ${b.accession_no ? ' &nbsp;·&nbsp; <code style="font-size:.65rem;background:rgba(99,102,241,.12);color:#6366f1;border-radius:3px;padding:0 3px">' + hi(b.accession_no, q) + '</code>' : ''}
+            ${b.isbn && !b.accession_no ? ' &nbsp;·&nbsp; ' + esc(b.isbn) : ''}
+          </div>
+        </div>
+      </a>`).join('');
+    html += `<div class="ac-footer"><a href="/catalog/?q=${encodeURIComponent(q)}" style="color:#2563eb;font-weight:600;">View all results for "${esc(q)}" →</a></div>`;
+    return html;
+  }
+
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    const q = this.value.trim();
+    activeIdx = -1;
+    if (q.length < 1) { hide(); return; }
+    show('<div class="ac-msg"><i class="bi bi-arrow-repeat" style="animation:spin .7s linear infinite"></i> Searching…</div>');
+    timer = setTimeout(() => {
+      fetch(`${API}?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(d => show(build(d.results || [], q)))
+        .catch(() => show('<div class="ac-msg text-danger">Search error</div>'));
+    }, 180);
+  });
+
+  input.addEventListener('keydown', function (e) {
+    const items = box.querySelectorAll('.ac-item');
+    if (!items.length) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); activeIdx = Math.min(activeIdx+1, items.length-1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); activeIdx = Math.max(activeIdx-1, 0); }
+    else if (e.key === 'Escape') { hide(); return; }
+    else if (e.key === 'Enter' && activeIdx >= 0) { e.preventDefault(); items[activeIdx].click(); return; }
+    else return;
+    items.forEach((el,i) => el.classList.toggle('active', i===activeIdx));
+    if (activeIdx >= 0) items[activeIdx].scrollIntoView({block:'nearest'});
+  });
+
+  document.addEventListener('click', e => { if (!input.contains(e.target) && !box.contains(e.target)) hide(); });
+  input.addEventListener('focus', function () { if (this.value.trim().length>=1 && box.innerHTML) box.style.display='block'; });
+})();
+
+/* ── Real-time federated search ──────────────────────── */
+(function () {
+  const panel = document.getElementById('fedPanel');
+  const out   = document.getElementById('fedResults');
+  if (!panel || !out) return;
+
+  const PROXY = panel.dataset.proxy;
+  const query = panel.dataset.query.trim();
+  let   libs  = [];
+  try { libs = JSON.parse(panel.dataset.libs); } catch(e) {}
+
+  const checkedLibs = libs.filter(l => l.checked);
+  if (!checkedLibs.length || !query) return;
+
+  const esc = s => String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+
+  /* Build a placeholder row for each library */
+  out.innerHTML = `
+    <div class="card mb-3" style="border-left:4px solid #0ea5e9">
+      <div class="card-body py-2 px-3">
+        <h6 class="fw-bold mb-2" style="color:#0369a1"><i class="bi bi-globe2 me-1"></i>Federated Search — External Libraries</h6>
+        <div id="fedRows">${checkedLibs.map(l => `
+          <div id="fedRow_${l.id}" class="fed-row mb-2 pb-2 border-bottom">
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge" style="background:#e0f2fe;color:#0369a1;font-size:.72rem">${esc(l.type.toUpperCase())}</span>
+              <strong style="font-size:.82rem">${esc(l.name)}</strong>
+              <span id="fedStatus_${l.id}" class="ms-auto text-muted small">
+                <i class="bi bi-arrow-repeat" style="animation:spin .7s linear infinite"></i> Searching…
+              </span>
+            </div>
+            <div id="fedBody_${l.id}" class="mt-1"></div>
+          </div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+
+  checkedLibs.forEach(lib => {
+    fetch(`${PROXY}?lib_id=${lib.id}&q=${encodeURIComponent(query)}`)
+      .then(r => r.json())
+      .then(data => renderLib(lib, data))
+      .catch(err => renderLib(lib, {status: 'error', error: String(err), results: [], total: 0, search_url: ''}));
+  });
+
+  function renderLib(lib, data) {
+    const statusEl = document.getElementById(`fedStatus_${lib.id}`);
+    const bodyEl   = document.getElementById(`fedBody_${lib.id}`);
+    if (!statusEl || !bodyEl) return;
+
+    if (data.status === 'timeout') {
+      statusEl.innerHTML = `<span class="text-warning"><i class="bi bi-clock"></i> Timed out</span>`;
+      bodyEl.innerHTML   = `<div class="text-muted small">The external library took too long to respond.
+        <a href="${esc(data.search_url)}" target="_blank" class="ms-1">Open manually ↗</a></div>`;
+      return;
+    }
+    if (data.status === 'error') {
+      statusEl.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle"></i> Unreachable</span>`;
+      bodyEl.innerHTML   = data.search_url
+        ? `<a href="${esc(data.search_url)}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1">
+             <i class="bi bi-box-arrow-up-right"></i> Search on ${esc(lib.name)} ↗</a>`
+        : `<span class="text-muted small">${esc(data.error||'Connection failed')}</span>`;
+      return;
+    }
+
+    /* opac / z3950 — server fetched but no parsed results; show link */
+    if (lib.type !== 'api' || !data.results.length) {
+      const badge = data.total > 0
+        ? `<span class="badge bg-primary ms-1">${data.total} found</span>` : '';
+      statusEl.innerHTML = `<span class="text-muted small">${badge} <i class="bi bi-check-circle text-success"></i></span>`;
+      bodyEl.innerHTML   = `
+        <a href="${esc(data.search_url)}" target="_blank" class="btn btn-sm btn-outline-info mt-1">
+          <i class="bi bi-box-arrow-up-right"></i> Open results on ${esc(lib.name)} ↗
+        </a>
+        ${data.total > 0 ? `<span class="text-muted small ms-2">${data.total} records available</span>` : ''}`;
+      return;
+    }
+
+    /* api with parsed results */
+    statusEl.innerHTML = `<span class="text-success"><i class="bi bi-check-circle-fill"></i> ${data.total} found</span>`;
+    const rows = data.results.map(r => `
+      <a href="${esc(r.url)}" target="_blank" rel="noopener"
+         class="d-flex align-items-center gap-2 py-1 text-decoration-none fed-result-row">
+        <div style="width:28px;height:28px;background:#eff6ff;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <i class="bi bi-book" style="color:#2563eb;font-size:.75rem"></i>
+        </div>
+        <div style="min-width:0;flex:1">
+          <div style="font-weight:600;font-size:.8rem;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.title)}</div>
+          <div style="font-size:.7rem;color:#64748b">${esc(r.author)}${r.year ? ' · '+esc(r.year) : ''}${r.isbn ? ' · ISBN '+esc(r.isbn) : ''}</div>
+        </div>
+        <i class="bi bi-box-arrow-up-right" style="color:#94a3b8;font-size:.7rem;flex-shrink:0"></i>
+      </a>`).join('');
+    bodyEl.innerHTML = `<div class="mt-1">${rows}
+      <a href="${esc(data.search_url)}" target="_blank" class="d-block text-center small mt-1" style="color:#2563eb">
+        View all ${data.total} results on ${esc(lib.name)} ↗
+      </a></div>`;
+  }
+})();
+</script>
+<style>
+  .fed-result-row:hover { background:#f8fafc; border-radius:6px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+{% endblock %}

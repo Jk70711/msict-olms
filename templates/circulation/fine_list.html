@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Fines (POS){% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-cash-coin"></i> Fines — Point of Sale</h4>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead><tr><th>S/N</th><th>Member</th><th>Reason</th><th>Amount</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+      <tbody>
+        {% for fine in fines %}
+        <tr class="{% if not fine.paid %}table-warning{% endif %}">
+          <td>{{ forloop.counter }}</td>
+          <td><small class="fw-semibold">{{ fine.user.get_full_name }}<br><span class="text-muted">{{ fine.user.army_no }}</span></small></td>
+          <td><small>{{ fine.reason|truncatechars:55 }}</small></td>
+          <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:2 }}</td>
+          <td>{% if fine.paid %}<span class="badge bg-success">Paid</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+          <td><small class="text-muted">{{ fine.created_at|date:"d M Y" }}</small></td>
+          <td>
+            {% if not fine.paid %}
+            <a href="{% url 'record_fine_payment' fine.pk %}" class="btn btn-sm btn-success py-0">
+              <i class="bi bi-cash-stack"></i> Record Payment
+            </a>
+            {% else %}
+            <small class="text-muted">{{ fine.payment_method }} {{ fine.paid_at|date:"d M" }}</small>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center py-4 text-muted">No fines recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

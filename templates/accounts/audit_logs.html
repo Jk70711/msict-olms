@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% block title %}Audit Logs{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <h4 class="fw-bold mb-0"><i class="bi bi-journal-text text-primary"></i> Audit Logs</h4>
+  <form method="post" action="{% url 'clear_audit_logs' %}"
+        onsubmit="return confirm('Clear ALL audit logs? This cannot be undone.');">
+    {% csrf_token %}
+    <button class="btn btn-sm btn-danger"><i class="bi bi-trash3"></i> Clear All Logs</button>
+  </form>
+</div>
+
+<div class="card p-3 mb-4 shadow-sm border-0">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small text-muted mb-1">Search Action</label>
+      <input type="text" name="q" class="form-control form-control-sm" placeholder="e.g. login, deleted..." value="{{ request.GET.q }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">Username</label>
+      <input type="text" name="user" class="form-control form-control-sm" placeholder="e.g. admin" value="{{ request.GET.user }}">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small text-muted mb-1">Date</label>
+      <input type="date" name="date" class="form-control form-control-sm" value="{{ request.GET.date }}">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-filter"></i> Filter</button>
+    </div>
+  </form>
+</div>
+
+<div class="card p-0 shadow-sm border-0">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th style="width: 4%">#</th>
+          <th style="width: 14%">Timestamp</th>
+          <th style="width: 12%">User</th>
+          <th style="width: 48%">Action</th>
+          <th style="width: 14%">IP Address</th>
+          <th style="width: 8%">Delete</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td class="text-muted small">{{ forloop.counter }}</td>
+          <td><small class="text-muted">{{ log.timestamp|date:"Y-m-d H:i:s" }}</small></td>
+          <td>
+            {% if log.user %}
+              <span class="badge bg-secondary">{{ log.user.username }}</span>
+            {% else %}
+              <span class="badge bg-dark">system</span>
+            {% endif %}
+          </td>
+          <td><small>{{ log.action }}</small></td>
+          <td><code class="small">{{ log.ip_address|default:"-" }}</code></td>
+          <td>
+            <form method="post" action="{% url 'delete_audit_log' log.pk %}">
+              {% csrf_token %}
+              <input type="hidden" name="next" value="audit_logs">
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete"
+                onclick="return confirm('Delete this log entry?')">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="6" class="text-center py-4 text-muted">No audit logs found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

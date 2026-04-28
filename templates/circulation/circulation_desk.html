@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Circulation Desk{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-4"><i class="bi bi-building"></i> Circulation Desk</h4>
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-plus-circle-fill fs-1 text-primary mb-2"></i>
+      <h6 class="fw-bold">Process Borrow Requests</h6>
+      <p class="text-muted small">Review and approve pending borrow requests from members.</p>
+      <a href="{% url 'all_requests' %}?status=pending" class="btn btn-msict mt-auto">Go to Requests</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-arrow-return-left fs-1 text-success mb-2"></i>
+      <h6 class="fw-bold">Return Desk</h6>
+      <p class="text-muted small">Scan barcode to process hardcopy book returns and calculate fines.</p>
+      <a href="{% url 'return_desk' %}" class="btn btn-success mt-auto">Open Return Desk</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-cash-coin fs-1 text-danger mb-2"></i>
+      <h6 class="fw-bold">Fine Collection (POS)</h6>
+      <p class="text-muted small">Record fine payments and print receipts for members.</p>
+      <a href="{% url 'fine_list' %}" class="btn btn-danger mt-auto">Open POS</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-exclamation-triangle-fill fs-1 text-warning mb-2"></i>
+      <h6 class="fw-bold">Overdue Management</h6>
+      <p class="text-muted small">View and manage overdue borrowing transactions.</p>
+      <a href="{% url 'overdue_list' %}" class="btn btn-warning mt-auto">View Overdue</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-people-fill fs-1 text-info mb-2"></i>
+      <h6 class="fw-bold">Member Management</h6>
+      <p class="text-muted small">Add, edit members and reset passwords.</p>
+      <a href="{% url 'user_list' %}" class="btn btn-info text-white mt-auto">Manage Members</a>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 text-center h-100">
+      <i class="bi bi-bar-chart-fill fs-1 text-secondary mb-2"></i>
+      <h6 class="fw-bold">Reports</h6>
+      <p class="text-muted small">Generate circulation, member, and fine reports.</p>
+      <a href="{% url 'reports_home' %}" class="btn btn-secondary mt-auto">View Reports</a>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block title %}{% if slide %}Edit{% else %}Create{% endif %} Media Slide{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-image"></i> {% if slide %}Edit{% else %}Create{% endif %} Media Slide</h5>
+      </div>
+      <div class="card-body">
+        <form method="post" enctype="multipart/form-data">
+          {% csrf_token %}
+          
+          <div class="mb-3">
+            <label for="title" class="form-label fw-bold">Title <span class="text-danger">*</span></label>
+            <input type="text" name="title" id="title" class="form-control" value="{{ slide.title|default:'' }}" required maxlength="255">
+            <div class="form-text">Slide title (displayed on hover or below image)</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="slide_type" class="form-label fw-bold">Slide Type <span class="text-danger">*</span></label>
+            <select name="slide_type" id="slide_type" class="form-select" required>
+              <option value="carousel" {% if slide.slide_type == 'carousel' %}selected{% endif %}>Homepage Carousel</option>
+              <option value="advertisement" {% if slide.slide_type == 'advertisement' %}selected{% endif %}>Advertisement</option>
+              <option value="news" {% if slide.slide_type == 'news' %}selected{% endif %}>News Banner</option>
+              <option value="announcement" {% if slide.slide_type == 'announcement' %}selected{% endif %}>Announcement</option>
+              <option value="logo" {% if slide.slide_type == 'logo' %}selected{% endif %}>System Logo</option>
+              <option value="home_bg" {% if slide.slide_type == 'home_bg' %}selected{% endif %}>Home Page Background</option>
+            </select>
+            <div class="form-text">
+              <strong>System Logo:</strong> Only one logo can be active at a time.<br>
+              <strong>Home Page Background:</strong> Appears as a faded watermark behind all home page content. Only one can be active at a time. Recommended: high-resolution landscape image (1920×1080px+).
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label for="description" class="form-label fw-bold">Description</label>
+            <textarea name="description" id="description" class="form-control" rows="3">{{ slide.description|default:'' }}</textarea>
+            <div class="form-text">Optional description or caption</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="image" class="form-label fw-bold">{% if slide %}Update{% else %}Upload{% endif %} Image {% if not slide %}<span class="text-danger">*</span>{% endif %}</label>
+            <input type="file" name="image" id="image" class="form-control" accept="image/*" {% if not slide %}required{% endif %}>
+            <div class="form-text">
+              Recommended size: 1200x400px for carousel, 800x400px for ads.<br>
+              Supported formats: JPG, PNG, GIF
+            </div>
+            {% if slide and slide.image %}
+            <div class="mt-2">
+              <small class="text-muted">Current image:</small><br>
+              <img src="{{ slide.image.url }}" style="max-height: 100px; max-width: 200px;" class="img-thumbnail">
+            </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3" id="bg_color_field" style="display: {% if slide.slide_type == 'carousel' %}block{% else %}none{% endif %};">
+            <label for="bg_color" class="form-label fw-bold">Carousel Background Color</label>
+            <div class="input-group">
+              <input type="color" name="bg_color" id="bg_color" class="form-control form-control-color" value="{{ slide.bg_color|default:'#001a33' }}" style="width: 60px;">
+              <input type="text" name="bg_color_text" id="bg_color_text" class="form-control" value="{{ slide.bg_color|default:'#001a33' }}" placeholder="#001a33" maxlength="20">
+            </div>
+            <div class="form-text">Background color for the new books carousel (hex code, e.g., #001a33). Only applies to carousel slides.</div>
+          </div>
+
+          <div class="mb-3">
+            <label for="link_url" class="form-label fw-bold">Link URL</label>
+            <input type="url" name="link_url" id="link_url" class="form-control" value="{{ slide.link_url|default:'' }}" placeholder="https://example.com">
+            <div class="form-text">Optional - users will be redirected here when clicking the slide</div>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label for="display_order" class="form-label fw-bold">Display Order</label>
+              <input type="number" name="display_order" id="display_order" class="form-control" value="{{ slide.display_order|default:'0' }}" min="0">
+              <div class="form-text">Lower numbers display first</div>
+            </div>
+            <div class="col-md-6 mb-3">
+              <label for="expires_at" class="form-label fw-bold">Expiry Date</label>
+              <input type="date" name="expires_at" id="expires_at" class="form-control" value="{{ slide.expires_at|date:'Y-m-d'|default:'' }}">
+              <div class="form-text">Leave blank for permanent display</div>
+            </div>
+          </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" name="is_active" id="is_active" class="form-check-input" {% if slide.is_active|default:True %}checked{% endif %}>
+            <label for="is_active" class="form-check-label fw-bold">Active (visible on homepage)</label>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle"></i> {% if slide %}Update{% else %}Create{% endif %} Slide</button>
+            <a href="{% url 'media_slide_list' %}" class="btn btn-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const slideTypeSelect = document.getElementById('slide_type');
+  const bgColorField = document.getElementById('bg_color_field');
+
+  function toggleBgColorField() {
+    if (slideTypeSelect.value === 'carousel') {
+      bgColorField.style.display = 'block';
+    } else {
+      bgColorField.style.display = 'none';
+    }
+  }
+
+  // Sync color picker and text input
+  const colorPicker = document.getElementById('bg_color');
+  const colorText = document.getElementById('bg_color_text');
+
+  colorPicker.addEventListener('input', function () {
+    colorText.value = this.value;
+  });
+  colorText.addEventListener('input', function () {
+    if (/^#[0-9A-Fa-f]{6}$/.test(this.value)) {
+      colorPicker.value = this.value;
+    }
+  });
+
+  // Toggle on change
+  slideTypeSelect.addEventListener('change', toggleBgColorField);
+  // Run on page load
+  toggleBgColorField();
+})();
+</script>
+{% endblock %}

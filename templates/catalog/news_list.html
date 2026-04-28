@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+{% block title %}News Management{% endblock %}
+{% block content %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-newspaper"></i> News & Announcements</h4>
+  <a href="{% url 'news_create' %}" class="btn btn-msict">
+    <i class="bi bi-plus-circle"></i> New Post
+  </a>
+</div>
+
+<!-- Summary Stats -->
+<div class="row g-2 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card text-center p-2">
+      <div class="fw-bold fs-4 text-primary">{{ counts.active }}</div>
+      <div class="small text-muted">Active Posts</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card text-center p-2">
+      <div class="fw-bold fs-4 text-warning">{{ counts.featured }}</div>
+      <div class="small text-muted">Featured</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card text-center p-2">
+      <div class="fw-bold fs-4 text-info">{{ counts.announcement }}</div>
+      <div class="small text-muted">Announcements</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card stat-card text-center p-2">
+      <div class="fw-bold fs-4 text-success">{{ counts.event }}</div>
+      <div class="small text-muted">Events</div>
+    </div>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label small fw-semibold mb-1">Type</label>
+      <select name="type" class="form-select form-select-sm">
+        <option value="" {% if not type_filter %}selected{% endif %}>All Types</option>
+        {% for val, label in type_choices %}
+        <option value="{{ val }}" {% if type_filter == val %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label small fw-semibold mb-1">Status</label>
+      <select name="status" class="form-select form-select-sm">
+        <option value="active"   {% if status_filter == 'active' %}selected{% endif %}>Active</option>
+        <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+        <option value=""         {% if not status_filter %}selected{% endif %}>All</option>
+      </select>
+    </div>
+    <div class="col-md-5">
+      <label class="form-label small fw-semibold mb-1">Search</label>
+      <input type="text" name="q" class="form-control form-control-sm" placeholder="Search title or content..." value="{{ query }}">
+    </div>
+    <div class="col-md-2">
+      <button type="submit" class="btn btn-msict btn-sm w-100"><i class="bi bi-search"></i> Filter</button>
+    </div>
+  </form>
+</div>
+
+<!-- News Cards Grid -->
+{% if news %}
+<div class="row g-3">
+  {% for item in news %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card h-100 shadow-sm border-0 {% if not item.is_active %}opacity-50{% endif %}">
+
+      <!-- Cover image or video thumbnail -->
+      {% if item.image %}
+      <div style="height:160px;overflow:hidden;border-radius:0.5rem 0.5rem 0 0;position:relative;">
+        <img src="{{ item.image.url }}" alt="{{ item.title }}"
+             style="width:100%;height:100%;object-fit:cover;">
+        {% if item.is_featured %}
+        <span class="badge bg-warning text-dark position-absolute top-0 start-0 m-2">
+          <i class="bi bi-star-fill"></i> Featured
+        </span>
+        {% endif %}
+      </div>
+      {% elif item.video_url %}
+      <div style="height:160px;background:#000;border-radius:0.5rem 0.5rem 0 0;position:relative;overflow:hidden;">
+        <iframe src="{{ item.embed_video_url }}" style="width:100%;height:100%;border:none;" allowfullscreen loading="lazy"></iframe>
+        {% if item.is_featured %}
+        <span class="badge bg-warning text-dark position-absolute top-0 start-0 m-2" style="z-index:5;">
+          <i class="bi bi-star-fill"></i> Featured
+        </span>
+        {% endif %}
+      </div>
+      {% else %}
+      <div style="height:80px;background:linear-gradient(135deg,#001a33,#004080);border-radius:0.5rem 0.5rem 0 0;position:relative;"
+           class="d-flex align-items-center justify-content-center">
+        {% if item.news_type == 'announcement' %}
+          <i class="bi bi-megaphone text-white" style="font-size:2.5rem;opacity:0.4;"></i>
+        {% elif item.news_type == 'event' %}
+          <i class="bi bi-calendar-event text-white" style="font-size:2.5rem;opacity:0.4;"></i>
+        {% elif item.news_type == 'advertisement' %}
+          <i class="bi bi-badge-ad text-white" style="font-size:2.5rem;opacity:0.4;"></i>
+        {% else %}
+          <i class="bi bi-newspaper text-white" style="font-size:2.5rem;opacity:0.4;"></i>
+        {% endif %}
+        {% if item.is_featured %}
+        <span class="badge bg-warning text-dark position-absolute top-0 start-0 m-2">
+          <i class="bi bi-star-fill"></i> Featured
+        </span>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <div class="card-body d-flex flex-column p-3">
+        <!-- Type & Status badges -->
+        <div class="mb-1 d-flex gap-1 flex-wrap">
+          {% if item.news_type == 'news' %}
+            <span class="badge bg-primary">News</span>
+          {% elif item.news_type == 'announcement' %}
+            <span class="badge bg-info text-dark">Announcement</span>
+          {% elif item.news_type == 'event' %}
+            <span class="badge bg-success">Event</span>
+          {% elif item.news_type == 'advertisement' %}
+            <span class="badge bg-warning text-dark">Ad</span>
+          {% endif %}
+          {% if item.is_active %}
+            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Live</span>
+          {% else %}
+            <span class="badge bg-secondary bg-opacity-10 text-secondary border">Draft</span>
+          {% endif %}
+          {% if item.attachment %}
+            <span class="badge bg-light text-dark border"><i class="bi bi-paperclip"></i> File</span>
+          {% endif %}
+          {% if item.video_url %}
+            <span class="badge bg-danger bg-opacity-10 text-danger border"><i class="bi bi-play-circle"></i> Video</span>
+          {% endif %}
+        </div>
+
+        <h6 class="fw-bold mb-1" style="line-height:1.3;">{{ item.title|truncatechars:70 }}</h6>
+        <p class="text-muted small mb-2" style="flex:1;">{{ item.content|truncatechars:120 }}</p>
+
+        <!-- Meta info -->
+        <div class="small text-muted mb-2">
+          <i class="bi bi-clock"></i> {{ item.created_at|date:"d M Y" }}
+          {% if item.posted_by %}· <i class="bi bi-person"></i> {{ item.posted_by.get_full_name }}{% endif %}
+          {% if item.expires_at %}
+            · <i class="bi bi-calendar-x {% if item.is_expired %}text-danger{% endif %}"></i>
+            <span class="{% if item.is_expired %}text-danger fw-bold{% endif %}">
+              Exp: {{ item.expires_at|date:"d M Y" }}
+            </span>
+          {% endif %}
+        </div>
+
+        <!-- Links row -->
+        {% if item.link_url %}
+        <div class="mb-2">
+          <a href="{{ item.link_url }}" target="_blank" class="small text-primary text-decoration-none">
+            <i class="bi bi-link-45deg"></i> {{ item.link_url|truncatechars:40 }}
+          </a>
+        </div>
+        {% endif %}
+        {% if item.attachment %}
+        <div class="mb-2">
+          <a href="{{ item.attachment.url }}" target="_blank" class="small text-success text-decoration-none">
+            <i class="bi bi-file-earmark-arrow-down"></i> Download Attachment
+          </a>
+        </div>
+        {% endif %}
+
+        <!-- Actions -->
+        <div class="d-flex gap-1 mt-auto">
+          <a href="{% url 'news_edit' item.pk %}" class="btn btn-sm btn-outline-primary flex-fill">
+            <i class="bi bi-pencil"></i> Edit
+          </a>
+          <form method="post" action="{% url 'news_toggle' item.pk %}" class="flex-fill">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm w-100 {% if item.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+              {% if item.is_active %}<i class="bi bi-eye-slash"></i> Hide{% else %}<i class="bi bi-eye"></i> Show{% endif %}
+            </button>
+          </form>
+          <a href="{% url 'news_delete' item.pk %}" class="btn btn-sm btn-outline-danger">
+            <i class="bi bi-trash"></i>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card text-center py-5">
+  <i class="bi bi-newspaper fs-1 text-muted d-block mb-2"></i>
+  <p class="text-muted mb-3">No news posts found.</p>
+  <div><a href="{% url 'news_create' %}" class="btn btn-msict"><i class="bi bi-plus-circle"></i> Create First Post</a></div>
+</div>
+{% endif %}
+
+{% endblock %}

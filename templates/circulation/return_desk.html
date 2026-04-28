@@ -1,0 +1,301 @@
+{% extends 'base.html' %}
+{% block title %}Return Desk{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+
+    <h5 class="fw-bold mb-4"><i class="bi bi-arrow-return-left"></i> Return Desk – Process Returns</h5>
+
+    {# ── Row: two side-by-side lookup panels ─────────────────────────────── #}
+    <div class="row g-3 mb-3">
+
+      {# Panel 1 – Barcode / Accession No (book-based) #}
+      <div class="col-md-6">
+        <div class="card p-4 h-100 border-start border-4" style="border-color:var(--accent)!important">
+          <h6 class="fw-semibold mb-1"><i class="bi bi-upc-scan"></i> By Barcode / Accession No</h6>
+          <p class="text-muted small mb-3">Scan the book barcode or type its accession number to return it directly.</p>
+          <form method="post">{% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Barcode or Accession Number</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-upc-scan"></i></span>
+                <input type="text" name="barcode" id="barcode_input"
+                       class="form-control form-control-lg"
+                       placeholder="Scan or type e.g. MSICT/000001"
+                       autofocus>
+              </div>
+              <div class="form-text text-muted">
+                <i class="bi bi-info-circle"></i> Accepts: Barcode scan OR Accession No (e.g. MSICT/000001)
+              </div>
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-msict">
+                <i class="bi bi-check-circle"></i> Process Return
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      {# Panel 2 – Card No (member-based) #}
+      <div class="col-md-6">
+        <div class="card p-4 h-100 border-start border-4 border-warning">
+          <h6 class="fw-semibold mb-1"><i class="bi bi-credit-card-2-front"></i> By Library Card No</h6>
+          <p class="text-muted small mb-3">Enter the member's unique Card No to view all their active hardcopy borrows.</p>
+          <form method="post">{% csrf_token %}
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Library Card Number</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-credit-card"></i></span>
+                <input type="text" name="card_no" id="card_no_input"
+                       class="form-control form-control-lg"
+                       placeholder="e.g. MSICT-CARD-000001">
+              </div>
+              <div class="form-text text-muted">
+                <i class="bi bi-info-circle"></i> Printed on the member's virtual library card
+              </div>
+            </div>
+            <div class="d-grid">
+              <button type="submit" class="btn btn-warning text-dark fw-semibold">
+                <i class="bi bi-person-lines-fill"></i> Find Member Borrows
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+    </div>{# /row #}
+
+    {# ── Barcode lookup preview (shown after accession-no search) ────────── #}
+    {% if lookup_tx %}
+    <div class="card mt-3 border-primary border-2">
+      {# Book + borrower info banner #}
+      <div class="card-header d-flex align-items-center gap-3" style="background:rgba(13,110,253,.08);">
+        <i class="bi bi-upc-scan fs-3 text-primary"></i>
+        <div class="flex-grow-1">
+          <div class="fw-bold fs-6">{{ lookup_tx.copy.book.title }}</div>
+          <div class="small text-muted d-flex flex-wrap gap-3 mt-1">
+            <span><i class="bi bi-person-lines-fill"></i> {{ lookup_tx.copy.book.author }}</span>
+            <span><i class="bi bi-upc"></i> Acc. No: <code>{{ lookup_tx.copy.accession_no }}</code></span>
+            <span><i class="bi bi-book"></i>
+              <span class="badge bg-secondary ms-1">Hardcopy</span>
+            </span>
+          </div>
+        </div>
+        <span class="badge {{ lookup_tx.time_remaining_badge_class }} fs-6">
+          <i class="bi bi-clock"></i> {{ lookup_tx.time_remaining_display }}
+        </span>
+      </div>
+
+      {# Borrower info + confirm return #}
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <table class="table table-sm table-borderless mb-0">
+              <tr>
+                <th class="text-muted fw-normal" style="width:130px;">Borrower</th>
+                <td class="fw-semibold">{{ lookup_tx.user.get_full_name }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Username</th>
+                <td>{{ lookup_tx.user.username }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Army No</th>
+                <td>{{ lookup_tx.user.army_no|default:"—" }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Borrow Date</th>
+                <td>{{ lookup_tx.borrow_date|date:"d M Y H:i" }}</td>
+              </tr>
+              <tr>
+                <th class="text-muted fw-normal">Due Date</th>
+                <td class="{% if lookup_tx.status == 'overdue' %}text-danger fw-bold{% endif %}">
+                  {{ lookup_tx.due_date|date:"d M Y H:i" }}
+                  {% if lookup_tx.status == 'overdue' %}
+                  <span class="badge bg-danger ms-1">OVERDUE</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div class="col-md-4 text-center mt-3 mt-md-0">
+            <form method="post"
+                  onsubmit="return confirm('Confirm return of \'{{ lookup_tx.copy.book.title|truncatechars:35 }}\' for {{ lookup_tx.user.get_full_name }}?');">
+              {% csrf_token %}
+              <input type="hidden" name="copy_pk" value="{{ lookup_tx.copy.pk }}">
+              <button type="submit" class="btn btn-success btn-lg fw-semibold w-100">
+                <i class="bi bi-check-circle-fill"></i><br>Confirm Return
+              </button>
+            </form>
+            <div class="text-muted small mt-2">
+              <i class="bi bi-info-circle"></i>
+              {% if lookup_tx.status == 'overdue' %}
+              Overdue fine will be calculated automatically.
+              {% else %}
+              No fine. Book returned on time.
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {# ── Member-borrow results (shown after card_no lookup) ─────────────── #}
+    {% if member %}
+    <div class="card mt-3 border-warning border-2">
+      {# Member info banner #}
+      <div class="card-header d-flex align-items-center gap-3" style="background:rgba(255,193,7,.12);">
+        <i class="bi bi-person-badge-fill fs-3 text-warning"></i>
+        <div class="flex-grow-1">
+          <div class="fw-bold fs-6">{{ member.get_full_name }}</div>
+          <div class="small text-muted d-flex flex-wrap gap-3 mt-1">
+            <span><i class="bi bi-person"></i> {{ member.username }}</span>
+            <span><i class="bi bi-shield"></i> {{ member.army_no|default:"—" }}</span>
+            <span><i class="bi bi-envelope"></i> {{ member.email|default:"—" }}</span>
+            <span><i class="bi bi-credit-card"></i>
+              <span class="badge bg-warning text-dark ms-1">{{ card_input }}</span>
+            </span>
+          </div>
+        </div>
+        <span class="badge {% if member_borrows %}bg-danger{% else %}bg-success{% endif %} fs-6">
+          {{ member_borrows|length|default:"0" }} active borrow{{ member_borrows|length|pluralize }}
+        </span>
+      </div>
+
+      {# Borrowings table #}
+      <div class="card-body p-0">
+        {% if member_borrows %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>Book Title</th>
+                <th>Type</th>
+                <th>Acc. No</th>
+                <th>Borrow Date</th>
+                <th>Due Date</th>
+                <th>Time Left</th>
+                <th class="text-center">Return</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in member_borrows %}
+              <tr class="{% if tx.status == 'overdue' %}table-danger{% endif %}">
+                <td>
+                  <span class="fw-semibold small">{{ tx.copy.book.title|truncatechars:45 }}</span>
+                  <div class="text-muted" style="font-size:.72rem;">{{ tx.copy.book.author|truncatechars:30 }}</div>
+                </td>
+                <td>
+                  {% if tx.copy.copy_type == 'hardcopy' %}
+                  <span class="badge bg-secondary"><i class="bi bi-book"></i> Hard</span>
+                  {% else %}
+                  <span class="badge bg-primary"><i class="bi bi-file-earmark-pdf"></i> Soft</span>
+                  {% endif %}
+                </td>
+                <td><code class="small">{{ tx.copy.accession_no }}</code></td>
+                <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y" }}</small></td>
+                <td><small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% else %}text-muted{% endif %}">{{ tx.due_date|date:"d M Y H:i" }}</small></td>
+                <td>
+                  <span class="badge {{ tx.time_remaining_badge_class }}">
+                    <i class="bi bi-clock"></i> {{ tx.time_remaining_display }}
+                  </span>
+                </td>
+                <td class="text-center">
+                  <form method="post" class="d-inline"
+                        onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="copy_pk"        value="{{ tx.copy.pk }}">
+                    <input type="hidden" name="return_card_no" value="{{ card_input }}">
+                    <button type="submit" class="btn btn-sm btn-success fw-semibold">
+                      <i class="bi bi-check-circle"></i> Return
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-center text-muted">
+          <i class="bi bi-check-all fs-2 d-block mb-2 text-success"></i>
+          <strong>{{ member.get_full_name }}</strong> has no active borrowings.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="alert alert-info mt-3 small">
+      <i class="bi bi-info-circle"></i>
+      For softcopy returns, members can return early from their dashboard.
+      Overdue fines are calculated automatically at <b>TZS 500/day</b>.
+    </div>
+
+  </div>
+</div>
+
+{# ── Recent Returns ───────────────────────────────────────────────────────── #}
+{% if recent_returns %}
+<div class="mt-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h6 class="fw-bold mb-0"><i class="bi bi-clock-history"></i> Recently Returned Copies</h6>
+    <a href="{% url 'return_history' %}" class="btn btn-sm btn-outline-secondary">View Full History</a>
+  </div>
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0 align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>#</th>
+            <th>Book Title</th>
+            <th>Member</th>
+            <th>Army No</th>
+            <th>Acc. No</th>
+            <th>Type</th>
+            <th>Return Date &amp; Time</th>
+            <th>Approved By</th>
+            <th>Borrow Date</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in recent_returns %}
+          <tr>
+            <td class="text-muted small">{{ forloop.counter }}</td>
+            <td><small class="fw-semibold">{{ tx.copy.book.title|truncatechars:40 }}</small></td>
+            <td><small>{{ tx.user.get_full_name }}</small></td>
+            <td><small class="text-muted">{{ tx.user.army_no|default:"—" }}</small></td>
+            <td><code class="small">{{ tx.copy.accession_no }}</code></td>
+            <td>
+              {% if tx.borrow_type == 'hardcopy' %}
+              <span class="badge bg-secondary"><i class="bi bi-book"></i> Hard</span>
+              {% else %}
+              <span class="badge bg-primary"><i class="bi bi-file-earmark-pdf"></i> Soft</span>
+              {% endif %}
+            </td>
+            <td>
+              <small class="text-success fw-semibold">{{ tx.return_date|date:"d M Y" }}</small>
+              <span class="text-muted small"> {{ tx.return_date|date:"H:i" }}</span>
+            </td>
+            <td>
+              {% if tx.borrow_type == 'hardcopy' %}
+                <small class="text-muted">{{ tx.approved_by.get_full_name|default:"—" }}</small>
+              {% else %}
+                <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y" }}</small></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>document.getElementById('barcode_input').focus();</script>
+{% endblock %}

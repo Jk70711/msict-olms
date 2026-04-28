@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Record Fine Payment{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-cash-stack"></i> Record Fine Payment</h5>
+      <div class="alert alert-info mb-3">
+        <b>Member:</b> {{ fine.user.get_full_name }} ({{ fine.user.army_no }})<br>
+        <b>Reason:</b> {{ fine.reason }}<br>
+        <b>Amount:</b> <span class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:2 }}</span>
+      </div>
+      <form method="post">{% csrf_token %}
+        <div class="mb-3">
+          <label class="form-label">Payment Method</label>
+          <select name="payment_method" class="form-select">
+            <option value="cash">Cash</option>
+            <option value="mobile_money">Mobile Money</option>
+            <option value="bank">Bank Transfer</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Receipt Number <small class="text-muted">(optional)</small></label>
+          <input type="text" name="receipt_no" class="form-control" placeholder="e.g. RCT-2024-001">
+        </div>
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Confirm Payment</button>
+        <a href="{% url 'fine_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

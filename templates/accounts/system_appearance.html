@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block title %}System Appearance{% endblock %}
+{% block page_title %}System Appearance{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-1"><i class="bi bi-palette"></i> System Appearance Settings</h5>
+      <p class="text-muted small mb-4">These settings apply to <strong>all users</strong> across the system. Individual users can still override dark/light mode via the moon/sun button in the top bar.</p>
+
+      <form method="post">{% csrf_token %}
+        <div class="row g-4">
+
+          <!-- Font Family -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Font Family</label>
+            <select name="pref_APP_FONT_FAMILY" class="form-select">
+              {% for font in fonts %}
+              <option value="{{ font }}" {% if prefs.APP_FONT_FAMILY == font %}selected{% endif %}>{{ font }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Body text font used throughout the system.</div>
+          </div>
+
+          <!-- Font Size -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Font Size</label>
+            <select name="pref_APP_FONT_SIZE" class="form-select">
+              <option value="sm" {% if prefs.APP_FONT_SIZE == 'sm' %}selected{% endif %}>Small (13 px)</option>
+              <option value="md" {% if prefs.APP_FONT_SIZE == 'md' or not prefs.APP_FONT_SIZE %}selected{% endif %}>Medium (14 px) — default</option>
+              <option value="lg" {% if prefs.APP_FONT_SIZE == 'lg' %}selected{% endif %}>Large (15 px)</option>
+              <option value="xl" {% if prefs.APP_FONT_SIZE == 'xl' %}selected{% endif %}>X-Large (16 px)</option>
+              <option value="xxl" {% if prefs.APP_FONT_SIZE == 'xxl' %}selected{% endif %}>XX-Large (17 px)</option>
+              <option value="xxxl" {% if prefs.APP_FONT_SIZE == 'xxxl' %}selected{% endif %}>XXX-Large (18 px)</option>
+            </select>
+            <div class="form-text">Adjusts the base font size for all text.</div>
+          </div>
+
+          <!-- Font Colour -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Font / Text Colour</label>
+            <div class="input-group">
+              <input type="color" name="pref_APP_FONT_COLOR" class="form-control form-control-color"
+                     value="{{ prefs.APP_FONT_COLOR|default:'#0f172a' }}" style="max-width:48px">
+              <input type="text" class="form-control font-monospace" value="{{ prefs.APP_FONT_COLOR|default:'#0f172a' }}"
+                     oninput="syncColor(this, 'pref_APP_FONT_COLOR')" style="font-size:.85rem">
+            </div>
+            <div class="form-text">Main body text colour across the system.</div>
+          </div>
+
+          <!-- Page Background -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Page Background Colour</label>
+            <div class="input-group">
+              <input type="color" name="pref_APP_BODY_BG" class="form-control form-control-color"
+                     value="{{ prefs.APP_BODY_BG|default:'#f1f5f9' }}" style="max-width:48px">
+              <input type="text" class="form-control font-monospace" value="{{ prefs.APP_BODY_BG|default:'#f1f5f9' }}"
+                     oninput="syncColor(this, 'pref_APP_BODY_BG')" style="font-size:.85rem">
+            </div>
+            <div class="form-text">Main content area background.</div>
+          </div>
+
+          <!-- Sidebar Colour -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Sidebar Background Colour</label>
+            <div class="input-group">
+              <input type="color" name="pref_APP_SIDEBAR_BG" class="form-control form-control-color"
+                     value="{{ prefs.APP_SIDEBAR_BG|default:'#0f172a' }}" style="max-width:48px">
+              <input type="text" class="form-control font-monospace" value="{{ prefs.APP_SIDEBAR_BG|default:'#0f172a' }}"
+                     oninput="syncColor(this, 'pref_APP_SIDEBAR_BG')" style="font-size:.85rem">
+            </div>
+            <div class="form-text">Left navigation sidebar.</div>
+          </div>
+
+          <!-- Top Bar Colour -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Header / Top Bar Colour</label>
+            <div class="input-group">
+              <input type="color" name="pref_APP_TOPBAR_BG" class="form-control form-control-color"
+                     value="{{ prefs.APP_TOPBAR_BG|default:'#ffffff' }}" style="max-width:48px">
+              <input type="text" class="form-control font-monospace" value="{{ prefs.APP_TOPBAR_BG|default:'#ffffff' }}"
+                     oninput="syncColor(this, 'pref_APP_TOPBAR_BG')" style="font-size:.85rem">
+            </div>
+            <div class="form-text">Top bar / header strip.</div>
+          </div>
+
+          <!-- Footer Colour -->
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Footer Background Colour</label>
+            <div class="input-group">
+              <input type="color" name="pref_APP_FOOTER_BG" class="form-control form-control-color"
+                     value="{{ prefs.APP_FOOTER_BG|default:'#0f172a' }}" style="max-width:48px">
+              <input type="text" class="form-control font-monospace" value="{{ prefs.APP_FOOTER_BG|default:'#0f172a' }}"
+                     oninput="syncColor(this, 'pref_APP_FOOTER_BG')" style="font-size:.85rem">
+            </div>
+            <div class="form-text">Bottom footer strip.</div>
+          </div>
+
+        </div>
+
+        <!-- Live Preview Strip -->
+        <div class="mt-4 mb-3">
+          <div class="fw-semibold small mb-2 text-muted text-uppercase" style="letter-spacing:.08em">Live Preview</div>
+          <div id="previewStrip" style="display:flex;border-radius:10px;overflow:hidden;height:48px;border:1px solid var(--border)">
+            <div id="prevSidebar"  style="width:80px;background:{{ prefs.APP_SIDEBAR_BG|default:'#0f172a' }};display:flex;align-items:center;justify-content:center">
+              <i class="bi bi-layout-sidebar" style="color:rgba(255,255,255,.6)"></i>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column">
+              <div id="prevTopbar" style="height:18px;background:{{ prefs.APP_TOPBAR_BG|default:'#ffffff' }};border-bottom:1px solid #e2e8f0"></div>
+              <div id="prevBody"   style="flex:1;background:{{ prefs.APP_BODY_BG|default:'#f1f5f9' }}"></div>
+            </div>
+            <div id="prevFooter"  style="width:100%;position:absolute" ></div>
+          </div>
+          <div id="prevFooterBar" style="border-radius:0 0 10px 10px;height:12px;margin-top:-1px;background:{{ prefs.APP_FOOTER_BG|default:'#0f172a' }};border:1px solid var(--border);border-top:0"></div>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Settings</button>
+          <a href="{% url 'librarian_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function syncColor(textInput, colorName) {
+  const val = textInput.value;
+  const colorPicker = document.querySelector('input[type="color"][name="' + colorName + '"]');
+  if (colorPicker && /^#[0-9a-fA-F]{6}$/.test(val)) {
+    colorPicker.value = val;
+    updatePreview();
+  }
+}
+
+document.querySelectorAll('input[type="color"]').forEach(function(cp) {
+  cp.addEventListener('input', function () {
+    const textBox = this.nextElementSibling;
+    if (textBox) textBox.value = this.value;
+    updatePreview();
+  });
+});
+
+function updatePreview() {
+  const get = name => (document.querySelector('input[type="color"][name="' + name + '"]') || {}).value || '';
+  document.getElementById('prevSidebar').style.background  = get('pref_APP_SIDEBAR_BG');
+  document.getElementById('prevTopbar').style.background   = get('pref_APP_TOPBAR_BG');
+  document.getElementById('prevBody').style.background     = get('pref_APP_BODY_BG');
+  document.getElementById('prevFooterBar').style.background = get('pref_APP_FOOTER_BG');
+}
+</script>
+{% endblock %}

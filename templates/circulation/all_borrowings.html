@@ -1,0 +1,154 @@
+{% extends 'base.html' %}
+{% block title %}All Borrowings{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-journal-text"></i> All Borrowings</h4>
+  <a href="{% url 'return_desk' %}" class="btn btn-sm btn-msict"><i class="bi bi-arrow-return-left"></i> Return Desk</a>
+</div>
+
+{# Status summary tabs #}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <a href="{% url 'all_borrowings' %}" class="text-decoration-none">
+      <div class="card p-3 text-center {% if not status_filter %}border-primary{% endif %}">
+        <div class="fs-2 fw-bold">{{ counts.all }}</div>
+        <div class="small text-muted">All</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="{% url 'all_borrowings' %}?status=borrowed" class="text-decoration-none">
+      <div class="card p-3 text-center {% if status_filter == 'borrowed' %}border-success{% endif %}">
+        <div class="fs-2 fw-bold text-success">{{ counts.borrowed }}</div>
+        <div class="small text-muted">Borrowed</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="{% url 'all_borrowings' %}?status=overdue" class="text-decoration-none">
+      <div class="card p-3 text-center {% if status_filter == 'overdue' %}border-danger{% endif %}">
+        <div class="fs-2 fw-bold text-danger">{{ counts.overdue }}</div>
+        <div class="small text-muted">Overdue</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="{% url 'all_borrowings' %}?status=returned" class="text-decoration-none">
+      <div class="card p-3 text-center {% if status_filter == 'returned' %}border-secondary{% endif %}">
+        <div class="fs-2 fw-bold text-secondary">{{ counts.returned }}</div>
+        <div class="small text-muted">Returned</div>
+      </div>
+    </a>
+  </div>
+</div>
+
+{# Filters #}
+<div class="card p-3 mb-3">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <input type="text" name="q" class="form-control" placeholder="Search book, member, acc. no, army no..." value="{{ query }}">
+    </div>
+    <div class="col-md-2">
+      <select name="status" class="form-select">
+        <option value="">All Statuses</option>
+        <option value="borrowed"  {% if status_filter == 'borrowed' %}selected{% endif %}>Borrowed</option>
+        <option value="overdue"   {% if status_filter == 'overdue' %}selected{% endif %}>Overdue</option>
+        <option value="returned"  {% if status_filter == 'returned' %}selected{% endif %}>Returned</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <select name="copy_type" class="form-select">
+        <option value="">All Types</option>
+        <option value="hardcopy" {% if copy_type_filter == 'hardcopy' %}selected{% endif %}>Hardcopy</option>
+        <option value="softcopy" {% if copy_type_filter == 'softcopy' %}selected{% endif %}>Softcopy</option>
+      </select>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-msict w-100"><i class="bi bi-search"></i> Filter</button></div>
+    <div class="col-md-2"><a href="{% url 'all_borrowings' %}" class="btn btn-outline-secondary w-100">Clear</a></div>
+  </form>
+</div>
+
+{# Main table #}
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0 align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>S/N</th>
+          <th>Book Title</th>
+          <th>Member</th>
+          <th>Army No</th>
+          <th>Acc. No</th>
+          <th>Type</th>
+          <th>Borrow Date</th>
+          <th>Due Date</th>
+          <th>Status</th>
+          <th>Days Info</th>
+          <th>Approved By</th>
+          <th>Return Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr class="{% if tx.status == 'overdue' %}table-danger{% elif tx.status == 'returned' %}table-light{% endif %}">
+          <td class="text-muted small">{{ forloop.counter }}</td>
+          <td>
+            <small class="fw-semibold">{{ tx.copy.book.title|truncatechars:40 }}</small>
+            <div class="text-muted" style="font-size:.72rem;">{{ tx.copy.book.author|truncatechars:25 }}</div>
+          </td>
+          <td>
+            <small class="fw-semibold">{{ tx.user.get_full_name }}</small>
+            <div class="text-muted" style="font-size:.72rem;">{{ tx.user.username }}</div>
+          </td>
+          <td><small class="text-muted">{{ tx.user.army_no|default:"—" }}</small></td>
+          <td><code class="small">{{ tx.copy.accession_no }}</code></td>
+          <td>
+            {% if tx.borrow_type == 'hardcopy' %}
+            <span class="badge bg-secondary"><i class="bi bi-book"></i> Hard</span>
+            {% else %}
+            <span class="badge bg-primary"><i class="bi bi-file-earmark-pdf"></i> Soft</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y" }}</small></td>
+          <td><small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% else %}text-muted{% endif %}">{{ tx.due_date|date:"d M Y" }}</small></td>
+          <td>
+            {% if tx.status == 'borrowed' %}
+              <span class="badge bg-success">Borrowed</span>
+            {% elif tx.status == 'overdue' %}
+              <span class="badge bg-danger">Overdue</span>
+            {% elif tx.status == 'returned' %}
+              <span class="badge bg-secondary">Returned</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if tx.status == 'returned' and tx.return_date %}
+              <span class="badge bg-light text-dark border"><i class="bi bi-check-circle"></i> {{ tx.return_date|timesince:tx.borrow_date }}</span>
+            {% else %}
+              <span class="badge {{ tx.time_remaining_badge_class }}">
+                <i class="bi bi-clock"></i> {{ tx.time_remaining_display }}
+              </span>
+            {% endif %}
+          </td>
+          <td>
+            {% if tx.approved_by %}
+              <small><i class="bi bi-person-badge text-muted"></i> {{ tx.approved_by.get_full_name }}</small>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if tx.return_date %}
+              <small class="text-success">{{ tx.return_date|date:"d M Y H:i" }}</small>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="12" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

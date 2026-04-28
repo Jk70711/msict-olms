@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% block title %}Edit Book Copy{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+    <div class="card p-4">
+      <h5 class="fw-bold mb-3"><i class="bi bi-collection"></i> Edit Book Copy</h5>
+      <div class="alert alert-info small">
+        <strong>Book:</strong> {{ copy.book.title }}<br>
+        <strong>Current Accession:</strong> <code>{{ copy.accession_no }}</code><br>
+        <strong>Type:</strong> {{ copy.copy_type|title }}
+        {% if copy.copy_type == 'softcopy' %}({{ copy.access_type|title }}){% endif %}
+      </div>
+      <form method="post">{% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Accession Number <span class="text-danger">*</span></label>
+            <input type="text" name="accession_no" class="form-control" value="{{ copy.accession_no }}" placeholder="e.g. MSICT/000001" required>
+            <div class="form-text">Format: MSICT/XXXXXX (e.g. MSICT/000001)</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Barcode</label>
+            <input type="text" name="barcode" class="form-control" value="{{ copy.barcode|default:copy.accession_no }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Shelf Location</label>
+            <select name="shelf_location" id="editShelfSelect" class="form-select">
+              <option value="{{ copy.shelf_location }}">{{ copy.shelf_location|default:"-- No shelf --" }}</option>
+            </select>
+            <div class="form-text">Category: <strong>{{ copy.book.category.name|default:"None" }}</strong></div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Status <span class="text-danger">*</span></label>
+            <select name="status" class="form-select" required>
+              <option value="available" {% if copy.status == 'available' %}selected{% endif %}>Available</option>
+              <option value="borrowed" {% if copy.status == 'borrowed' %}selected{% endif %}>Borrowed</option>
+              <option value="reserved" {% if copy.status == 'reserved' %}selected{% endif %}>Reserved</option>
+              <option value="lost" {% if copy.status == 'lost' %}selected{% endif %}>Lost</option>
+            </select>
+          </div>
+        </div>
+        <div class="mt-4">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Changes</button>
+          <a href="{% url 'copy_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const editCatId = "{{ copy.book.category_id|default:'' }}";
+const editShelfSelect = document.getElementById('editShelfSelect');
+const editApiBase = "{% url 'shelves_by_category_api' 0 %}".replace('/0/', '/');
+const editCurrentShelf = "{{ copy.shelf_location|default:'' }}";
+
+if (editCatId && editShelfSelect) {
+  fetch(editApiBase + editCatId + '/')
+    .then(r => r.json())
+    .then(data => {
+      editShelfSelect.innerHTML = '<option value="">-- No shelf --</option>';
+      data.shelves.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.code;
+        opt.textContent = s.code + (s.name ? ' \u2013 ' + s.name : '');
+        if (s.code === editCurrentShelf) opt.selected = true;
+        editShelfSelect.appendChild(opt);
+      });
+    });
+}
+</script>
+{% endblock %}
