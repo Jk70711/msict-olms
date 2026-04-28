@@ -19,7 +19,7 @@ from decouple import config
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Funguo ya siri ya Django — lazima ibadilishwe kwenye VPS!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-!*8^5b)8!8k$z)3g&y66h-#%o)f&zwec$^l6ns$svphicp%srk')
+SECRET_KEY = config('SECRET_KEY')
 
 # True = maendeleo (inaonyesha makosa kwa undani). Weka False kwenye VPS!
 DEBUG = config('DEBUG', default=True, cast=bool)
@@ -105,9 +105,9 @@ WSGI_APPLICATION = 'OLMS.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.oracle',
-        'NAME': 'localhost:1521/FREEPDB1',
-        'USER': 'olms',
-        'PASSWORD': '12345',
+        'NAME': config('DB_NAME', default='localhost:1521/FREEPDB1'),
+        'USER': config('DB_USER', default='olms'),
+        'PASSWORD': config('DB_PASSWORD'),
     }
 }
 AUTH_USER_MODEL = 'accounts.OLMSUser'
@@ -146,12 +146,12 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='jk7college@gmail.com')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
-BEEM_API_KEY = config('BEEM_API_KEY', default='7a20aa440f62d83a')
-BEEM_SECRET_KEY = config('BEEM_SECRET_KEY', default='OTRhMzkzYzQyNTdhZGZkNmIzYWQzYmZlMDJmZDBlMGExYjA3MTBlNWUzMjk4MWM4ODY5N2E2Mzg4MDI5ZDgxMQ==')
+BEEM_API_KEY = config('BEEM_API_KEY')
+BEEM_SECRET_KEY = config('BEEM_SECRET_KEY')
 BEEM_SENDER_NAME = config('BEEM_SENDER_NAME', default='JK7')
 BEEM_SMS_URL = 'https://apisms.beem.africa/v1/send'
 
