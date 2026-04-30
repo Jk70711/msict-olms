@@ -117,7 +117,8 @@
       --topbar-bg:    #1e293b;
     }
     body { background: #0f172a; color: #f1f5f9; }
-    .card, .modal-content { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9; }
+    .card:not(.card-alert), .modal-content { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9; }
+    .card.card-alert { background: #fff0f0 !important; color: #7f1d1d !important; border-color: #fca5a5 !important; }
     .topbar { background: #1e293b !important; border-bottom-color: #334155 !important; }
     footer  { background: #020617 !important; border-top-color: #1e293b !important; color: #94a3b8; }
     .table  { --bs-table-color: #f1f5f9; --bs-table-bg: #1e293b; --bs-table-border-color: #334155; }
@@ -556,7 +557,7 @@
       margin-bottom: .6rem;
     }
     .stat-card .stat-value { font-size: 1.75rem; font-weight: 700; line-height: 1; color: var(--text-primary); }
-    .stat-card .stat-label { font-size: .73rem; color: var(--text-muted); margin-top: .2rem; }
+    .stat-card .stat-label { font-size: .75rem; font-weight: 500; color: #475569; margin-top: .2rem; }
 
     /* Color variants — left border + colored number + icon bg */
     .stat-card.blue,   .stat-card.primary  { border-left-color: #2563eb; }
@@ -605,8 +606,8 @@
     .table { font-size: .82rem; }
     .table thead th {
       background: #f8fafc;
-      color: var(--text-muted);
-      font-weight: 600;
+      color: #374151;
+      font-weight: 700;
       font-size: .72rem;
       text-transform: uppercase;
       letter-spacing: .05em;
@@ -649,7 +650,7 @@
       border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(37,99,235,.1);
     }
-    .form-label { font-weight: 500; font-size: .8rem; color: var(--text-muted); margin-bottom: .35rem; }
+    .form-label { font-weight: 600; font-size: .8rem; color: var(--text-primary); margin-bottom: .35rem; }
     .input-group-text { background: #f8fafc; border-color: var(--border); font-size: .83rem; }
 
     /* Footer — sehemu ya chini ya ukurasa (copyright) */

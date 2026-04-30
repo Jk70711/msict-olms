@@ -96,16 +96,43 @@ def send_sms(phone, message):
 
 
 def send_email_notification(to_email, subject, body):
+    import logging
+    logger = logging.getLogger(__name__)
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=True)
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=False)
+        logger.info(f"Email sent to {to_email}: {subject}")
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(f"Email failed to {to_email} [{subject}]: {e}")
         return False
 
 
 def create_notification(user, message, channel, priority='normal'):
     from circulation.models import Notification
     return Notification.objects.create(user=user, message=message, channel=channel, priority=priority)
+
+
+def notify_user(user, message, channel, subject=None, priority='normal'):
+    """Send notification via SMS or email AND record with proper sent/failed status."""
+    import logging
+    from django.utils import timezone as tz
+    from circulation.models import Notification
+    logger = logging.getLogger(__name__)
+    ok = False
+    if channel == 'sms':
+        ok = send_sms(user.phone, message)
+    elif channel == 'email':
+        ok = send_email_notification(user.email, subject or 'MSICT OLMS Notification', message)
+    else:
+        logger.warning(f"notify_user: unknown channel '{channel}'")
+    return Notification.objects.create(
+        user=user,
+        message=message,
+        channel=channel,
+        priority=priority,
+        status='sent' if ok else 'failed',
+        sent_at=tz.now() if ok else None,
+    )
 
 
 def log_audit(user, action, request=None):

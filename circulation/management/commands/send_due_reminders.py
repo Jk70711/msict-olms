@@ -16,7 +16,7 @@ from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from accounts.utils import create_notification, send_sms, send_email_notification
+from accounts.utils import notify_user
 from circulation.models import BorrowingTransaction
 
 
@@ -84,14 +84,9 @@ class Command(BaseCommand):
                 due       = timezone.localtime(tx.due_date)
                 msg       = msg_fn(book, copy_type, due)
 
-                create_notification(tx.user, msg, 'sms')
-                create_notification(tx.user, msg, 'email')
-                send_sms(tx.user.phone, msg)
-                send_email_notification(
-                    tx.user.email,
-                    f"MSICT OLMS – Due Date Reminder ({label.replace('-', ' ').title()})",
-                    msg,
-                )
+                notify_user(tx.user, msg, 'sms')
+                notify_user(tx.user, msg, 'email',
+                            subject=f"MSICT OLMS – Due Date Reminder ({label.replace('-', ' ').title()})")
                 total += 1
 
             self.stdout.write(self.style.WARNING(

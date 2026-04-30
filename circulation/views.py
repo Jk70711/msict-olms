@@ -15,7 +15,7 @@ from django.conf import settings
 from datetime import timedelta
 
 from accounts.views import librarian_required
-from accounts.utils import log_audit, send_sms, send_email_notification, create_notification
+from accounts.utils import log_audit, send_sms, send_email_notification, create_notification, notify_user
 from accounts.models import OLMSUser
 
 
@@ -292,12 +292,8 @@ def approve_borrow_request_view(request, request_id):
         msg_dashboard = (f"'{copy.book.title}' approved. Due: {tx.due_date.date()}. "
                          f"Go to the library with your card to collect the book.")
 
-    # In-app notification (dashboard)
-    create_notification(user, msg_dashboard, 'email')
-    # SMS
-    send_sms(user.phone, msg_sms)
-    # Email
-    send_email_notification(user.email, "MSICT OLMS - Borrow Approved", msg_email)
+    notify_user(user, msg_sms, 'sms')
+    notify_user(user, msg_email, 'email', subject='MSICT OLMS - Borrow Approved')
     if copy.copy_type == 'hardcopy':
         _notify_next_reservation(copy.book, request)
     log_audit(request.user, f"Approved borrow request for '{user.username}' – '{copy.book.title}'", request)
@@ -318,10 +314,8 @@ def reject_borrow_request_view(request, request_id):
     req.save()
 
     msg = f"MSICT OLMS: Your borrow request for '{req.copy.book.title}' was rejected. Reason: {reason}"
-    create_notification(req.user, msg, 'sms')
-    create_notification(req.user, msg, 'email')
-    send_sms(req.user.phone, msg)
-    send_email_notification(req.user.email, "Borrow Request Rejected", msg)
+    notify_user(req.user, msg, 'sms')
+    notify_user(req.user, msg, 'email', subject='Borrow Request Rejected')
     log_audit(request.user, f"Rejected borrow request for '{req.user.username}' – '{req.copy.book.title}'", request)
     messages.warning(request, f'Request rejected for {req.user.username}.')
     return redirect('librarian_dashboard')
@@ -335,10 +329,8 @@ def renew_transaction_view(request, transaction_id):
     tx = get_object_or_404(BorrowingTransaction, pk=transaction_id, user=request.user)
     if tx.renew():
         msg = f"MSICT OLMS: '{tx.copy.book.title}' renewed. New due date: {tx.due_date.date()}"
-        create_notification(request.user, msg, 'sms')
-        create_notification(request.user, msg, 'email')
-        send_sms(request.user.phone, msg)
-        send_email_notification(request.user.email, "Renewal Confirmation", msg)
+        notify_user(request.user, msg, 'sms')
+        notify_user(request.user, msg, 'email', subject='Renewal Confirmation')
         log_audit(request.user, f"Renewed '{tx.copy.book.title}'. New due: {tx.due_date.date()}", request)
         messages.success(request, f'Renewed successfully. New due date: {tx.due_date.date()}')
     else:
@@ -365,10 +357,8 @@ def return_early_view(request, transaction_id):
         f"MSICT OLMS: Your softcopy access for '{tx.copy.book.title}' has been returned. "
         f"Your read link has been removed from your dashboard. Thank you!"
     )
-    create_notification(request.user, msg, 'sms')
-    create_notification(request.user, msg, 'email')
-    send_sms(request.user.phone, msg)
-    send_email_notification(request.user.email, "Softcopy Returned – MSICT OLMS", msg)
+    notify_user(request.user, msg, 'sms')
+    notify_user(request.user, msg, 'email', subject='Softcopy Returned – MSICT OLMS')
     log_audit(request.user, f"Member returned softcopy: '{tx.copy.book.title}'", request)
     messages.success(request, f'"{tx.copy.book.title}" access returned. Read link removed.')
     return redirect('member_dashboard')
@@ -411,10 +401,8 @@ def _process_desk_return(request, copy_pk_str):
             f"MSICT OLMS: Overdue fine of TZS {fine_amount:,.0f} for '{copy.book.title}'. "
             f"Please pay at the library counter."
         )
-        create_notification(tx.user, fine_msg, 'sms')
-        create_notification(tx.user, fine_msg, 'email')
-        send_sms(tx.user.phone, fine_msg)
-        send_email_notification(tx.user.email, "Overdue Fine Notice – MSICT OLMS", fine_msg)
+        notify_user(tx.user, fine_msg, 'sms')
+        notify_user(tx.user, fine_msg, 'email', subject='Overdue Fine Notice – MSICT OLMS')
     else:
         messages.success(request, f'"{copy.book.title}" returned successfully.')
 
@@ -429,10 +417,8 @@ def _process_desk_return(request, copy_pk_str):
             f"MSICT OLMS: Your softcopy access for '{copy.book.title}' has been returned "
             f"by the librarian. Your read link has been removed from your dashboard."
         )
-    create_notification(tx.user, ret_msg, 'sms')
-    create_notification(tx.user, ret_msg, 'email')
-    send_sms(tx.user.phone, ret_msg)
-    send_email_notification(tx.user.email, "Book Returned – MSICT OLMS", ret_msg)
+    notify_user(tx.user, ret_msg, 'sms')
+    notify_user(tx.user, ret_msg, 'email', subject='Book Returned – MSICT OLMS')
 
     _notify_next_reservation(copy.book, request)
     log_audit(request.user,
@@ -536,10 +522,8 @@ def _process_reservation_expiry(book):
                 f"MSICT OLMS: Your reservation for '{book.title}' has expired "
                 f"(14 days elapsed). Queue position released."
             )
-            create_notification(res.user, exp_msg, 'sms')
-            create_notification(res.user, exp_msg, 'email')
-            send_sms(res.user.phone, exp_msg)
-            send_email_notification(res.user.email, "Reservation Expired", exp_msg)
+            notify_user(res.user, exp_msg, 'sms')
+            notify_user(res.user, exp_msg, 'email', subject='Reservation Expired')
             continue
         # Skip notified user who did not borrow within 24 hours
         if res.status == 'notified' and res.notified_at:
@@ -551,10 +535,8 @@ def _process_reservation_expiry(book):
                     f"MSICT OLMS: Your turn for '{book.title}' has been skipped. "
                     f"You did not borrow within 24 hours. Queue updated."
                 )
-                create_notification(res.user, skip_msg, 'sms')
-                create_notification(res.user, skip_msg, 'email')
-                send_sms(res.user.phone, skip_msg)
-                send_email_notification(res.user.email, "Queue Position Skipped", skip_msg)
+                notify_user(res.user, skip_msg, 'sms')
+                notify_user(res.user, skip_msg, 'email', subject='Queue Position Skipped')
 
     # Re-number remaining active queue (FIFO integrity)
     remaining = Reservation.objects.filter(
@@ -611,10 +593,8 @@ def _notify_next_reservation(book, request=None):
         f"Login to your dashboard and click 'Borrow Now' within 24 hours, "
         f"then wait for librarian approval."
     )
-    create_notification(next_res.user, first_msg, 'sms')
-    create_notification(next_res.user, first_msg, 'email')
-    send_sms(next_res.user.phone, first_msg)
-    send_email_notification(next_res.user.email, f"Your Turn: {book.title}", first_msg)
+    notify_user(next_res.user, first_msg, 'sms')
+    notify_user(next_res.user, first_msg, 'email', subject=f'Your Turn: {book.title}')
 
     # ── Broadcast update to ALL other waiting users ───────────────
     for res in queue:
@@ -631,10 +611,8 @@ def _notify_next_reservation(book, request=None):
             f"You are #{res.position} in queue ({ahead} {ahead_word} ahead). "
             f"Total in queue: {total_in_queue}.{est_info}"
         )
-        create_notification(res.user, broad_msg, 'sms')
-        create_notification(res.user, broad_msg, 'email')
-        send_sms(res.user.phone, broad_msg)
-        send_email_notification(res.user.email, f"Queue Update: {book.title}", broad_msg)
+        notify_user(res.user, broad_msg, 'sms')
+        notify_user(res.user, broad_msg, 'email', subject=f'Queue Update: {book.title}')
 
 
 # ============================================================
@@ -709,10 +687,8 @@ def reserve_book_view(request, book_id):
             f"{est_info} You will be notified when it's your turn."
         )
 
-    create_notification(request.user, msg, 'sms')
-    create_notification(request.user, msg, 'email')
-    send_sms(request.user.phone, msg)
-    send_email_notification(request.user.email, 'Book Reserved — Queue Confirmed', msg)
+    notify_user(request.user, msg, 'sms')
+    notify_user(request.user, msg, 'email', subject='Book Reserved — Queue Confirmed')
     log_audit(request.user, f"Reserved hardcopy '{book.title}' (position #{reservation.position})", request)
     messages.success(request, f'Reserved "{book.title}". You are #{reservation.position} in queue.')
     return redirect('my_reservations')
@@ -733,10 +709,8 @@ def cancel_reservation_view(request, reservation_id):
     res.save(update_fields=['status'])
 
     msg = f"MSICT OLMS: Your reservation for '{book.title}' has been cancelled. Queue updated."
-    create_notification(request.user, msg, 'sms')
-    create_notification(request.user, msg, 'email')
-    send_sms(request.user.phone, msg)
-    send_email_notification(request.user.email, 'Reservation Cancelled', msg)
+    notify_user(request.user, msg, 'sms')
+    notify_user(request.user, msg, 'email', subject='Reservation Cancelled')
     log_audit(request.user, f"Cancelled reservation for '{book.title}'", request)
 
     # Re-number queue and notify next user if the cancelled user was first
@@ -764,10 +738,8 @@ def librarian_cancel_reservation_view(request, reservation_id):
     res.save(update_fields=['status'])
     msg = (f"MSICT OLMS: Your reservation for '{book.title}' has been cancelled by the librarian. "
            f"Reason: {reason}")
-    create_notification(res.user, msg, 'sms')
-    create_notification(res.user, msg, 'email')
-    send_sms(res.user.phone, msg)
-    send_email_notification(res.user.email, 'Reservation Cancelled', msg)
+    notify_user(res.user, msg, 'sms')
+    notify_user(res.user, msg, 'email', subject='Reservation Cancelled')
     log_audit(request.user, f"Cancelled reservation #{res.pk} for '{res.user.username}' — '{book.title}'. Reason: {reason}", request)
     _process_reservation_expiry(book)
     messages.success(request, f'Reservation for {res.user.username} cancelled and user notified.')
@@ -829,10 +801,8 @@ def softcopy_queue_borrow_view(request, reservation_id):
         f"MSICT OLMS: Your borrow request for '{book.title}' has been submitted. "
         f"Please wait for librarian approval. You will receive an SMS/email once approved."
     )
-    create_notification(request.user, msg, 'sms')
-    create_notification(request.user, msg, 'email')
-    send_sms(request.user.phone, msg)
-    send_email_notification(request.user.email, 'Borrow Request Submitted', msg)
+    notify_user(request.user, msg, 'sms')
+    notify_user(request.user, msg, 'email', subject='Borrow Request Submitted')
     log_audit(request.user, f"Queue borrow submitted for '{book.title}' via reservation #{res.pk}", request)
     messages.success(request, f'Borrow request submitted for "{book.title}". Awaiting librarian approval.')
     return redirect('member_dashboard')
@@ -1137,10 +1107,8 @@ def reservation_list_view(request):
             f"MSICT OLMS: Your reservation for '{res.book.title}' has expired "
             f"(14 days elapsed). Please re-reserve if you still need the book."
         )
-        create_notification(res.user, exp_msg, 'sms')
-        create_notification(res.user, exp_msg, 'email')
-        send_sms(res.user.phone, exp_msg)
-        send_email_notification(res.user.email, 'Reservation Expired', exp_msg)
+        notify_user(res.user, exp_msg, 'sms')
+        notify_user(res.user, exp_msg, 'email', subject='Reservation Expired')
 
     reservations = Reservation.objects.select_related('user', 'book').order_by('book__title', 'position')
 
@@ -1188,10 +1156,8 @@ def renew_reservation_view(request, reservation_id):
             f"New expiry date: {new_expires.strftime('%d %b %Y')}. "
             f"You will be notified when it is your turn."
         )
-        create_notification(res.user, renew_msg, 'sms')
-        create_notification(res.user, renew_msg, 'email')
-        send_sms(res.user.phone, renew_msg)
-        send_email_notification(res.user.email, f"Reservation Renewed — {res.book.title}", renew_msg)
+        notify_user(res.user, renew_msg, 'sms')
+        notify_user(res.user, renew_msg, 'email', subject=f'Reservation Renewed — {res.book.title}')
         log_audit(request.user, f"Renewed reservation #{res.pk} for '{res.book.title}' by {res.user.get_full_name()}", request)
         messages.success(request, f"Reservation for '{res.book.title}' renewed for 14 more days. Member notified.")
     return redirect('reservation_list')

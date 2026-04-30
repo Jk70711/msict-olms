@@ -8,7 +8,7 @@ Run via cron or manually:
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from circulation.models import BorrowingTransaction
-from accounts.utils import create_notification, send_sms, send_email_notification
+from accounts.utils import notify_user
 
 
 class Command(BaseCommand):
@@ -36,10 +36,8 @@ class Command(BaseCommand):
                 f"{'Return the soft copy online or ' if tx.copy.copy_type == 'softcopy' else ''}"
                 f"Return immediately to avoid additional fines."
             )
-            create_notification(tx.user, msg, 'sms')
-            create_notification(tx.user, msg, 'email')
-            send_sms(tx.user.phone, msg)
-            send_email_notification(tx.user.email, "Overdue Notice – MSICT OLMS", msg)
+            notify_user(tx.user, msg, 'sms')
+            notify_user(tx.user, msg, 'email', subject='Overdue Notice – MSICT OLMS')
             updated += 1
 
         self.stdout.write(self.style.WARNING(

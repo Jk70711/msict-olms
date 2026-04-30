@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}My Dashboard{% endblock %}
 {% block content %}
-<h4 class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> My Library Dashboard</h4>
+<h4 style= "color: #0c4d4de8" class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> My Library Dashboard</h4>
 
 {% if has_overdue %}
 <div class="overdue-banner mb-3">
@@ -14,29 +14,29 @@
   <div class="col-6 col-md-3">
     <div class="card stat-card p-3 text-center">
       <i class="bi bi-book-fill fs-2 text-primary mb-1"></i>
-      <div class="fs-3 fw-bold">{{ active_transactions.count }}</div>
-      <div class="small text-muted">Active Borrows</div>
+      <div class="fs-3 fw-bold" style="color:#0f172a">{{ active_transactions.count }}</div>
+      <div class="small fw-medium" style="color:#475569">Active Borrows</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <div class="card stat-card danger p-3 text-center">
       <i class="bi bi-exclamation-triangle-fill fs-2 text-danger mb-1"></i>
       <div class="fs-3 fw-bold text-danger">{{ overdue_transactions.count }}</div>
-      <div class="small text-muted">Overdue</div>
+      <div class="small fw-medium" style="color:#475569">Overdue</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <div class="card stat-card warning p-3 text-center">
       <i class="bi bi-bookmark-fill fs-2 text-warning mb-1"></i>
-      <div class="fs-3 fw-bold">{{ reservations.count }}</div>
-      <div class="small text-muted">Reservations</div>
+      <div class="fs-3 fw-bold" style="color:#d97706">{{ reservations.count }}</div>
+      <div class="small fw-medium" style="color:#475569">Reservations</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <div class="card stat-card p-3 text-center">
       <i class="bi bi-cash-coin fs-2 text-danger mb-1"></i>
       <div class="fs-3 fw-bold text-danger">{{ total_fines|floatformat:0 }}</div>
-      <div class="small text-muted">Unpaid Fines (TZS)</div>
+      <div class="small fw-medium" style="color:#475569">Unpaid Fines (TZS)</div>
     </div>
   </div>
 </div>
@@ -184,8 +184,11 @@
       {% for notif in notifications %}
       <div class="border-bottom py-2">
         <div class="small">{{ notif.message|truncatechars:80 }}</div>
-        <div class="small text-muted">{{ notif.created_at|timesince }} ago
-          <span class="badge bg-{{ notif.channel|yesno:'primary,success' }} ms-1">{{ notif.channel }}</span>
+        <div class="small" style="color:#64748b">{{ notif.created_at|timesince }} ago
+          {% if notif.channel == 'sms' %}<span class="badge bg-success ms-1">SMS</span>
+          {% elif notif.channel == 'email' %}<span class="badge bg-primary ms-1">Email</span>
+          {% else %}<span class="badge bg-secondary ms-1">{{ notif.channel }}</span>{% endif %}
+          {% if notif.status == 'failed' %}<span class="badge bg-danger ms-1">failed</span>{% endif %}
         </div>
       </div>
       {% empty %}

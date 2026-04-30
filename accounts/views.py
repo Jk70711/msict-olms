@@ -22,7 +22,7 @@ from django.db.models import Q, Sum, Count
 from django.views.decorators.http import require_POST
 
 from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP
-from .utils import get_client_ip, create_otp_for_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_notification
+from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user
 from .forms import LoginForm
 
 
@@ -125,15 +125,11 @@ def login_view(request):
                             f"SECURITY ALERT: Account '{username}' permanently LOCKED after "
                             f"6 failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
-                        create_notification(db_user, lock_msg_user, 'email', priority='high')
-                        create_notification(db_user, lock_msg_user, 'sms', priority='high')
-                        send_email_notification(db_user.email, 'MSICT OLMS – Account Locked', lock_msg_user)
-                        send_sms(db_user.phone, lock_msg_user)
+                        notify_user(db_user, lock_msg_user, 'sms', priority='high')
+                        notify_user(db_user, lock_msg_user, 'email', subject='MSICT OLMS – Account Locked', priority='high')
                         for admin in admins:
-                            create_notification(admin, lock_msg_admin, 'email', priority='high')
-                            create_notification(admin, lock_msg_admin, 'sms', priority='high')
-                            send_email_notification(admin.email, 'SECURITY ALERT – Account Locked', lock_msg_admin)
-                            send_sms(admin.phone, lock_msg_admin)
+                            notify_user(admin, lock_msg_admin, 'sms', priority='high')
+                            notify_user(admin, lock_msg_admin, 'email', subject='SECURITY ALERT – Account Locked', priority='high')
                         messages.error(request, 'YOUR ACCOUNT HAS BEEN LOCKED. CONTACT ADMIN FOR UNLOCKING.')
 
                     elif total == 5:
@@ -156,15 +152,11 @@ def login_view(request):
                             f"Security Notice: Account '{username}' temporarily suspended (10 min) "
                             f"after 3 failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
-                        create_notification(db_user, susp_msg_user, 'email', priority='high')
-                        create_notification(db_user, susp_msg_user, 'sms', priority='high')
-                        send_email_notification(db_user.email, 'MSICT OLMS – Account Suspended', susp_msg_user)
-                        send_sms(db_user.phone, susp_msg_user)
+                        notify_user(db_user, susp_msg_user, 'sms', priority='high')
+                        notify_user(db_user, susp_msg_user, 'email', subject='MSICT OLMS – Account Suspended', priority='high')
                         for admin in admins:
-                            create_notification(admin, susp_msg_admin, 'email', priority='high')
-                            create_notification(admin, susp_msg_admin, 'sms', priority='high')
-                            send_email_notification(admin.email, 'Security Notice – Account Suspended', susp_msg_admin)
-                            send_sms(admin.phone, susp_msg_admin)
+                            notify_user(admin, susp_msg_admin, 'sms', priority='high')
+                            notify_user(admin, susp_msg_admin, 'email', subject='Security Notice – Account Suspended', priority='high')
                         messages.error(request, 'Account suspended for 10 minutes after 3 failed attempts. You will be notified. Try again after 10 minutes.')
 
                     elif total == 2:
@@ -420,8 +412,14 @@ def user_action_view(request, user_id, action):
         user_obj.is_active = True
         user_obj.failed_attempts = 0
         user_obj.save(update_fields=['is_active', 'failed_attempts'])
+        unlock_msg = (
+            f"MSICT OLMS: Your account '{user_obj.username}' has been UNLOCKED by the administrator. "
+            f"You may visit login page to login again. If you did not request this, contact the admin immediately."
+        )
+        notify_user(user_obj, unlock_msg, 'sms')
+        notify_user(user_obj, unlock_msg, 'email', subject='MSICT OLMS – Account Unlocked')
         log_audit(request.user, f"{request.user.role.capitalize()} manually unlocked account '{user_obj.username}'", request)
-        messages.success(request, f"Account '{user_obj.username}' unlocked.")
+        messages.success(request, f"Account '{user_obj.username}' unlocked. User notified via SMS and email.")
 
     elif action == 'delete':
         if is_librarian and user_obj.role != 'member':
@@ -506,18 +504,39 @@ def create_user_view(request):
         card = generate_virtual_card(user)
         card_no = card.card_no or 'N/A'
 
-        subject = "MSICT OLMS - Your Account Credentials"
+        role_label = dict(OLMSUser.ROLE_CHOICES).get(role, role).title()
+        type_label = dict(OLMSUser.MEMBER_TYPE_CHOICES).get(member_type, '') if member_type else ''
+        login_url = request.build_absolute_uri('/login/')
+
+        subject = "MSICT OLMS — Your Account Credentials"
         body = (
             f"Dear {user.get_full_name()},\n\n"
-            f"Your MSICT Library account has been created.\n"
-            f"Username: {username}\n"
-            f"Temporary Password: {initial_password}\n"
-            f"Library Card No: {card_no}\n"
-            f"Login URL: {request.build_absolute_uri('/login/')}\n\n"
-            f"You must change your password on first login.\n\nMSICT Library"
+            f"Your MSICT Library (OLMS) account has been created. Below are your login details:\n\n"
+            f"  Full Name    : {user.get_full_name()}\n"
+            f"  Army No      : {army_no}\n"
+            f"  Role         : {role_label}{(' — ' + type_label) if type_label else ''}\n"
+            f"  Username     : {username}\n"
+            f"  Password     : {initial_password}\n"
+            f"  Library Card : {card_no}\n"
+            f"  Login URL    : {login_url}\n\n"
+            f"IMPORTANT: You must change your password immediately on first login for security.\n"
+            f"  Steps: Login → Dashboard → Change Password\n\n"
+            f"Keep this message confidential. Do not share your credentials.\n\n"
+            f"Regards,\nMSICT Library Administration"
         )
-        send_email_notification(email, subject, body)
-        send_sms(phone, f"MSICT OLMS: Username={username} Pwd={initial_password} CardNo={card_no} Login: {request.build_absolute_uri('/login/')}")
+        sms_body = (
+            f"MSICT OLMS: Account created.\n"
+            f"Name: {user.get_full_name()}\n"
+            f"ArmyNo: {army_no}\n"
+            f"Username: {username}\n"
+            f"Pwd: {initial_password}\n"
+            f"Card: {card_no}\n"
+            f"Login: {login_url}\n"
+            f"IMPORTANT: Change your password on first login!"
+        )
+        sms_ok = notify_user(user, sms_body, 'sms')
+        email_ok = notify_user(user, body, 'email', subject=subject)
+        log_audit(request.user, f"Librarian '{request.user.username}' created user '{username}' (email={'sent' if email_ok.status == 'sent' else 'FAILED'}, sms={'sent' if sms_ok.status == 'sent' else 'FAILED'})", request)
         log_audit(request.user, f"Librarian '{request.user.username}' created user '{username}'", request)
 
         messages.success(request, f"User '{username}' created. Password: {initial_password}")
@@ -668,8 +687,14 @@ def unlock_account_view(request, user_id):
     user_obj.is_active = True
     user_obj.failed_attempts = 0
     user_obj.save(update_fields=['is_active', 'failed_attempts'])
+    unlock_msg = (
+        f"MSICT OLMS: Your account '{user_obj.username}' has been UNLOCKED by the administrator. "
+        f"You may visit now login to login again. If you did not request this, contact the admin immediately."
+    )
+    notify_user(user_obj, unlock_msg, 'sms')
+    notify_user(user_obj, unlock_msg, 'email', subject='MSICT OLMS – Account Unlocked')
     log_audit(request.user, f"Admin '{request.user.username}' unlocked account '{user_obj.username}'", request)
-    messages.success(request, f"Account '{user_obj.username}' unlocked.")
+    messages.success(request, f"Account '{user_obj.username}' unlocked. User notified via SMS and email.")
     return redirect('admin_dashboard')
 
 

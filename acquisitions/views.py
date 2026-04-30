@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from accounts.views import librarian_required
-from accounts.utils import log_audit, send_sms, send_email_notification, create_notification
+from accounts.utils import log_audit, notify_user, create_notification
 from accounts.models import OLMSUser
 from .models import Vendor, Budget, Fund, PurchaseOrder, PurchaseOrderItem, Invoice, ILLRequest
 
@@ -120,12 +120,10 @@ def ill_request_create_view(request):
         librarians = OLMSUser.objects.filter(role='librarian', is_active=True)
         for lib in librarians:
             msg = f"New ILL request from {request.user.get_full_name()}: '{ill.title}'"
-            create_notification(lib, msg, 'system')
-            send_email_notification(lib.email, "New ILL Request", msg)
+            notify_user(lib, msg, 'email', subject='New ILL Request')
         # Notify member that request was received
         member_msg = f"MSICT OLMS: Your ILL request for '{ill.title}' has been submitted and is pending review."
-        create_notification(request.user, member_msg, 'sms')
-        send_sms(request.user.phone, member_msg)
+        notify_user(request.user, member_msg, 'sms')
         log_audit(request.user, f"Created ILL request for '{request.POST.get('title')}'", request)
         messages.success(request, 'ILL Request submitted. Librarians have been notified.')
         return redirect('ill_request_list')
@@ -151,10 +149,8 @@ def ill_request_update_status_view(request, ill_id):
                 'cancelled': f"MSICT OLMS: Your ILL request for '{ill.title}' has been cancelled. Contact library for details.",
             }
             msg = status_messages.get(new_status, f"MSICT OLMS: Your ILL request for '{ill.title}' status changed to: {new_status}")
-            create_notification(ill.user, msg, 'sms')
-            create_notification(ill.user, msg, 'email')
-            send_sms(ill.user.phone, msg)
-            send_email_notification(ill.user.email, f"ILL Request {new_status.title()}", msg)
+            notify_user(ill.user, msg, 'sms')
+            notify_user(ill.user, msg, 'email', subject=f"ILL Request {new_status.title()}")
             log_audit(request.user, f"Updated ILL request '{ill.title}' status from {old_status} to {new_status}", request)
             messages.success(request, f'ILL request status updated to {new_status}. Member notified.')
         return redirect('ill_request_list')
