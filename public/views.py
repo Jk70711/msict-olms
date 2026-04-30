@@ -138,10 +138,11 @@ def catalog_search_view(request):
     books = Book.objects.select_related('category').prefetch_related('copies', 'courses')
 
     if query:
-        books = books.filter(
+        matched_ids = Book.objects.filter(
             Q(title__icontains=query) | Q(author__icontains=query)
             | Q(isbn__icontains=query) | Q(copies__accession_no__icontains=query)
-        ).distinct()
+        ).values('pk')
+        books = books.filter(pk__in=matched_ids)
     if course_id:
         course_book_ids = Book.objects.filter(courses__pk=course_id).values('pk')
         books = books.filter(pk__in=course_book_ids)

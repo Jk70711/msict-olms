@@ -30,12 +30,12 @@
     </div>
     {% if active_ext_libs %}
     <div class="col-12 mt-2">
-      <label class="form-label small fw-semibold"><i class="bi bi-globe"></i> Federated Search (External Libraries):</label>
+      <label class="form-label small fw-semibold" style="color:#0f172a"><i class="bi bi-globe"></i> Federated Search (External Libraries):</label>
       <div class="d-flex flex-wrap gap-3">
         {% for lib in active_ext_libs %}
         <div class="form-check">
           <input class="form-check-input" type="checkbox" name="federated" value="{{ lib.pk }}" id="fed_{{ lib.pk }}" {% if lib.pk|stringformat:"i" in federated_selected %}checked{% endif %}>
-          <label class="form-check-label small" for="fed_{{ lib.pk }}">{{ lib.name }}</label>
+          <label class="form-check-label small fw-medium" for="fed_{{ lib.pk }}" style="color:#1e293b">{{ lib.name }}</label>
         </div>
         {% endfor %}
       </div>
