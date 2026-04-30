@@ -56,6 +56,9 @@ def member_dashboard_view(request):
     notified_reservations = reservations.filter(status='notified')
     unpaid_fines = Fine.objects.filter(user=user, paid=False)
     notifications = Notification.objects.filter(user=user).order_by('-created_at')[:10]
+    borrow_history = BorrowingTransaction.objects.filter(
+        user=user, status='returned'
+    ).select_related('copy__book').order_by('-return_date')[:5]
 
     context = {
         'active_transactions': active_transactions,
@@ -67,6 +70,7 @@ def member_dashboard_view(request):
         'total_fines': sum(f.amount for f in unpaid_fines),
         'notifications': notifications,
         'has_overdue': overdue_transactions.exists(),
+        'borrow_history': borrow_history,
     }
     return render(request, 'circulation/member_dashboard.html', context)
 
@@ -907,6 +911,8 @@ def my_reservations_view(request):
     ).select_related('book').order_by('created_at')
 
     # Annotate each with queue context
+    loan_days  = int(_pref('LOAN_PERIOD_DAYS', 7))
+    skip_days  = 1  # 24-h borrow window each queue member gets
     annotated = []
     for res in active_reservations:
         total_q = Reservation.objects.filter(
@@ -918,11 +924,20 @@ def my_reservations_view(request):
             status__in=['borrowed', 'overdue']
         ).order_by('due_date')
         nearest = borrows.first()
+        # Estimate when the book will actually reach this user in queue.
+        # Each person ahead: 24h borrow window + loan_days before they return.
+        # Position #1 → base date (original borrower's return).
+        # Position #2 → base + 1×(1+7) = base + 8 days, etc.
+        if nearest and ahead > 0:
+            est_your_turn = nearest.due_date + timedelta(days=ahead * (skip_days + loan_days))
+        else:
+            est_your_turn = nearest.due_date if nearest else None
         annotated.append({
             'res': res,
             'total_queue': total_q,
             'ahead': ahead,
             'nearest_return': nearest,
+            'est_your_turn': est_your_turn,
             'hours_notified': res.hours_since_notified,
         })
 

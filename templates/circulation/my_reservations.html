@@ -56,16 +56,32 @@
 
         <!-- Availability -->
         <div class="col-md-4">
-          <div class="small text-muted">Nearest Expected Return</div>
+          <div class="small text-muted">Expected Availability</div>
           {% if item.nearest_return %}
-            <div class="fw-bold">{{ item.nearest_return.due_date|date:"d M Y" }}</div>
-            <div class="small text-muted">
-              {% if item.nearest_return.status == 'overdue' %}
-                <span class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Overdue borrower</span>
-              {% else %}
-                {{ item.nearest_return.due_date|timeuntil }} remaining
-              {% endif %}
-            </div>
+            {% if item.ahead > 0 and item.est_your_turn %}
+              <div class="fw-bold text-primary" style="font-size:.92rem;">
+                {{ item.nearest_return.due_date|date:"d M Y" }}
+                <i class="bi bi-arrow-right mx-1 text-muted"></i>
+                ~{{ item.est_your_turn|date:"d M Y" }}
+              </div>
+              <div class="small text-muted">
+                {% if item.nearest_return.status == 'overdue' %}
+                  <span class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Original borrower overdue</span>
+                {% else %}
+                  Orig. due: {{ item.nearest_return.due_date|timeuntil }} &mdash;
+                  est. your turn: ~{{ item.est_your_turn|date:"d M Y" }}
+                {% endif %}
+              </div>
+            {% else %}
+              <div class="fw-bold">{{ item.nearest_return.due_date|date:"d M Y" }}</div>
+              <div class="small text-muted">
+                {% if item.nearest_return.status == 'overdue' %}
+                  <span class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Overdue borrower</span>
+                {% else %}
+                  {{ item.nearest_return.due_date|timeuntil }} remaining
+                {% endif %}
+              </div>
+            {% endif %}
           {% else %}
             <div class="text-success fw-bold"><i class="bi bi-check-circle"></i> Copy may be available</div>
           {% endif %}
