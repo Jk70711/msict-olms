@@ -70,23 +70,38 @@
       <div class="card-body p-2">
         <div class="fw-semibold small" style="line-height:1.3">{{ book.title|truncatechars:50 }}</div>
         <div class="text-muted small">{{ book.author|truncatechars:30 }}</div>
-        <div class="mt-1">
-          {% if book.has_free_softcopy %}<span class="badge bg-success small">Free PDF</span>{% endif %}
-          {% if book.has_special_softcopy %}<span class="badge bg-warning text-dark small">Special</span>{% endif %}
+        <div class="mt-2 d-flex flex-column gap-1">
+          {# ── Hardcopy row ── #}
           {% if book.total_hardcopies > 0 %}
+          <div class="d-flex align-items-center gap-1" style="font-size:.72rem;">
+            <span class="text-muted fw-semibold" style="min-width:30px;">Hard:</span>
             {% if book.available_hardcopy_count > 0 %}
-              <span class="badge bg-primary small">
-                <i class="bi bi-book-fill"></i>
-                {{ book.available_hardcopy_count }}/{{ book.total_hardcopies }} Available
+              <span class="badge bg-primary">
+                <i class="bi bi-book-fill"></i> {{ book.available_hardcopy_count }}/{{ book.total_hardcopies }} Available
               </span>
             {% else %}
-              <span class="badge bg-secondary small">
-                <i class="bi bi-book"></i>
-                All Borrowed ({{ book.total_hardcopies }})
+              <span class="badge bg-secondary">
+                <i class="bi bi-book"></i> All Borrowed ({{ book.total_hardcopies }})
               </span>
             {% endif %}
+          </div>
           {% else %}
-            <span class="badge bg-light text-dark border small">No Copies</span>
+          <div class="d-flex align-items-center gap-1" style="font-size:.72rem;">
+            <span class="text-muted fw-semibold" style="min-width:30px;">Hard:</span>
+            <span class="badge bg-light text-dark border">No Copies</span>
+          </div>
+          {% endif %}
+          {# ── Softcopy row ── #}
+          {% if book.has_free_softcopy or book.has_special_softcopy %}
+          <div class="d-flex align-items-center gap-1" style="font-size:.72rem;">
+            <span class="text-muted fw-semibold" style="min-width:30px;">Soft:</span>
+            {% if book.has_free_softcopy %}
+              <span class="badge bg-success"><i class="bi bi-file-earmark-pdf-fill"></i> Free PDF</span>
+            {% endif %}
+            {% if book.has_special_softcopy %}
+              <span class="badge bg-warning text-dark"><i class="bi bi-lock-fill"></i> Special</span>
+            {% endif %}
+          </div>
           {% endif %}
         </div>
       </div>
