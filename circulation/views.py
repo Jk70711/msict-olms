@@ -124,6 +124,7 @@ def borrow_catalog_view(request):
     )
     from django.db.models.functions import Coalesce
 
+    _any_hard     = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy')
     _hard_avail   = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy', status='available')
     _soft_borrow  = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='borrow', status='available')
     _soft_free    = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='free')
@@ -141,13 +142,15 @@ def borrow_catalog_view(request):
         .select_related('category')
         .prefetch_related('courses')
         .filter(
-            Exists(_hard_avail) | Exists(_soft_borrow) | Exists(_soft_free)
+            # Show: available hardcopy OR all-borrowed hardcopy (reservable) OR softcopy
+            Exists(_any_hard) | Exists(_soft_borrow) | Exists(_soft_free)
         )
         .annotate(
             avail_hard=Coalesce(
                 Subquery(_avail_hard_count_sq, output_field=IntegerField()),
                 Value(0),
             ),
+            has_hard=Exists(_any_hard),          # book has at least one hardcopy (available or not)
             soft_borrow_avail=Exists(_soft_borrow),
             soft_free=Exists(_soft_free),
         )
@@ -166,6 +169,13 @@ def borrow_catalog_view(request):
     from catalog.models import Category
     categories = Category.objects.all()
 
+    # IDs of books the current user has already reserved (pending or notified) — for UI feedback
+    user_reserved_ids = list(
+        Reservation.objects.filter(
+            user=request.user, status__in=['pending', 'notified']
+        ).values_list('book_id', flat=True)
+    )
+
     return render(request, 'circulation/borrow_catalog.html', {
         'books': books,
         'query': query,
@@ -173,6 +183,7 @@ def borrow_catalog_view(request):
         'categories': categories,
         'selected_course': course_id,
         'selected_category': category_id,
+        'user_reserved_ids': user_reserved_ids,
     })
 
 
@@ -294,8 +305,6 @@ def approve_borrow_request_view(request, request_id):
 
     notify_user(user, msg_sms, 'sms')
     notify_user(user, msg_email, 'email', subject='MSICT OLMS - Borrow Approved')
-    if copy.copy_type == 'hardcopy':
-        _notify_next_reservation(copy.book, request)
     log_audit(request.user, f"Approved borrow request for '{user.username}' – '{copy.book.title}'", request)
     messages.success(request, f'Borrow approved for {user.username}.')
     return redirect('librarian_dashboard')
@@ -554,10 +563,15 @@ def _process_reservation_expiry(book):
 def _notify_next_reservation(book, request=None):
     """Called after a hardcopy is returned at the desk.
     1. Process expiry/skips first.
-    2. Notify first pending user (status → notified, 24-h window).
-    3. Broadcast queue update to ALL waiting users.
+    2. Confirm an available hardcopy exists before notifying anyone.
+    3. Notify first pending user (status → notified, 24-h window).
+    4. Broadcast queue update to ALL waiting users.
     """
     _process_reservation_expiry(book)
+
+    # Only notify if a physical copy is actually available now
+    if not book.copies.filter(copy_type='hardcopy', status='available').exists():
+        return
 
     queue = list(
         Reservation.objects.filter(
@@ -572,7 +586,7 @@ def _notify_next_reservation(book, request=None):
     # Find next pending user (not yet notified)
     next_res = next((r for r in queue if r.status == 'pending'), None)
     if not next_res:
-        return  # All active members are already notified
+        return  # First user already notified — wait for them to borrow or expire
 
     # Get estimated return dates of any remaining borrowed hardcopies
     active_borrows = BorrowingTransaction.objects.filter(
@@ -606,9 +620,9 @@ def _notify_next_reservation(book, request=None):
         if nearest_return:
             est_info = f" Nearest expected return: {nearest_return.due_date.strftime('%d %b %Y')}."
         broad_msg = (
-            f"MSICT OLMS: Update on '{book.title}'. "
-            f"A copy was returned. Member #{next_res.position} is now borrowing. "
-            f"You are #{res.position} in queue ({ahead} {ahead_word} ahead). "
+            f"MSICT OLMS: Queue update for '{book.title}'. "
+            f"A hardcopy has been returned and the next member (#1 in queue) has been notified to borrow. "
+            f"Your current position: #{res.position} ({ahead} {ahead_word} ahead of you). "
             f"Total in queue: {total_in_queue}.{est_info}"
         )
         notify_user(res.user, broad_msg, 'sms')

@@ -68,6 +68,7 @@
                 {% endif %}
                 <a href="{% url 'user_action' u.pk 'delete' %}" class="btn btn-sm btn-outline-dark" title="Delete User" onclick="return confirm('CRITICAL WARNING: Are you sure you want to PERMANENTLY DELETE {{ u.username }}? This cannot be undone.')"><i class="bi bi-trash"></i></a>
               {% elif user.role == 'librarian' and u.role == 'member' %}
+                <a href="{% url 'edit_user' u.pk %}" class="btn btn-sm btn-outline-primary" title="Edit Member"><i class="bi bi-pencil"></i></a>
                 <a href="{% url 'user_action' u.pk 'delete' %}" class="btn btn-sm btn-outline-danger" title="Delete Member" onclick="return confirm('Are you sure you want to permanently delete member {{ u.username }}? This cannot be undone.')"><i class="bi bi-trash"></i></a>
               {% endif %}
             </div>

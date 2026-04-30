@@ -39,15 +39,19 @@
         <div class="mt-2 d-flex flex-wrap gap-1">
           {% if book.avail_hard > 0 %}
             <span class="badge bg-primary">
-              <i class="bi bi-book"></i> {{ book.avail_hard }} Hard
+              <i class="bi bi-book"></i> {{ book.avail_hard }} Hardcopy
+            </span>
+          {% elif book.has_hard %}
+            <span class="badge bg-secondary">
+              <i class="bi bi-book"></i> All Borrowed
             </span>
           {% endif %}
-          {% if book.soft_borrow_avail > 0 %}
+          {% if book.soft_borrow_avail %}
             <span class="badge bg-warning text-dark">
               <i class="bi bi-file-earmark-lock"></i> Special
             </span>
           {% endif %}
-          {% if book.soft_free > 0 %}
+          {% if book.soft_free %}
             <span class="badge bg-success">
               <i class="bi bi-file-earmark-pdf"></i> Free PDF
             </span>
@@ -56,20 +60,30 @@
       </div>
       <div class="card-footer p-2 bg-transparent d-flex flex-column gap-1">
         {% if book.avail_hard > 0 %}
-        <a href="{% url 'request_borrow_book' book.pk %}" class="btn btn-sm btn-msict w-100">
-          <i class="bi bi-plus-circle"></i> Request Hardcopy
-          <span class="badge bg-white text-primary ms-1">{{ book.avail_hard }}</span>
-        </a>
+          <a href="{% url 'request_borrow_book' book.pk %}" class="btn btn-sm btn-msict w-100">
+            <i class="bi bi-plus-circle"></i> Borrow Hardcopy
+            <span class="badge bg-white text-primary ms-1">{{ book.avail_hard }}</span>
+          </a>
+        {% elif book.has_hard %}
+          {% if book.pk in user_reserved_ids %}
+            <span class="btn btn-sm btn-warning w-100 disabled">
+              <i class="bi bi-bookmark-check-fill"></i> In Queue
+            </span>
+          {% else %}
+            <a href="{% url 'reserve_book' book.pk %}" class="btn btn-sm btn-outline-warning w-100">
+              <i class="bi bi-bookmark-plus"></i> Reserve Hardcopy
+            </a>
+          {% endif %}
         {% endif %}
-        {% if book.soft_borrow_avail > 0 %}
-        <a href="{% url 'request_borrow_softcopy' book.pk %}" class="btn btn-sm btn-warning w-100">
-          <i class="bi bi-file-earmark-lock"></i> Request Special Soft Copy
-        </a>
+        {% if book.soft_borrow_avail %}
+          <a href="{% url 'request_borrow_softcopy' book.pk %}" class="btn btn-sm btn-warning w-100">
+            <i class="bi bi-file-earmark-lock"></i> Request Special Soft Copy
+          </a>
         {% endif %}
-        {% if book.soft_free > 0 %}
-        <a href="{% url 'download_free_book' book.pk %}" class="btn btn-sm btn-success w-100">
-          <i class="bi bi-download"></i> Download Free PDF
-        </a>
+        {% if book.soft_free %}
+          <a href="{% url 'download_free_book' book.pk %}" class="btn btn-sm btn-success w-100">
+            <i class="bi bi-download"></i> Download Free PDF
+          </a>
         {% endif %}
         <a href="{% url 'book_detail_public' book.pk %}" class="btn btn-sm btn-outline-secondary w-100">
           <i class="bi bi-eye"></i> Details
