@@ -73,9 +73,21 @@
         <div class="mt-1">
           {% if book.has_free_softcopy %}<span class="badge bg-success small">Free PDF</span>{% endif %}
           {% if book.has_special_softcopy %}<span class="badge bg-warning text-dark small">Special</span>{% endif %}
-          {% if book.available_hardcopy_count > 0 %}<span class="badge bg-primary small">Available</span>
-          {% elif book.total_hardcopies > 0 %}<span class="badge bg-secondary small">Borrowed</span>
-          {% else %}<span class="badge bg-light text-dark border small">No Copies</span>{% endif %}
+          {% if book.total_hardcopies > 0 %}
+            {% if book.available_hardcopy_count > 0 %}
+              <span class="badge bg-primary small">
+                <i class="bi bi-book-fill"></i>
+                {{ book.available_hardcopy_count }}/{{ book.total_hardcopies }} Available
+              </span>
+            {% else %}
+              <span class="badge bg-secondary small">
+                <i class="bi bi-book"></i>
+                All Borrowed ({{ book.total_hardcopies }})
+              </span>
+            {% endif %}
+          {% else %}
+            <span class="badge bg-light text-dark border small">No Copies</span>
+          {% endif %}
         </div>
       </div>
       <div class="card-footer p-2 bg-transparent">
