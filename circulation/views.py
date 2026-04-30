@@ -539,15 +539,17 @@ def _recalculate_reservation_expiries(book):
 
 # ============================================================
 # RESERVATION HELPER — auto-expire + skip stale notified users
-# Called on every reservation-related action and on softcopy return.
+# Sets had_notified_skip=True when a 'notified' user misses 24 h.
+# At the end, auto-notifies the next member if a copy is available.
 # ============================================================
 def _process_reservation_expiry(book):
     """Mark expired reservations, skip notified users who waited > 24 h, re-queue."""
+    had_notified_skip = False
     active = Reservation.objects.filter(
         book=book, status__in=['pending', 'notified']
     ).order_by('position')
     for res in active:
-        # Expire if past 14-day window
+        # Expire if past position-based deadline
         if timezone.now() > res.expires_at:
             res.status = 'expired'
             res.save(update_fields=['status'])
@@ -558,15 +560,17 @@ def _process_reservation_expiry(book):
             notify_user(res.user, exp_msg, 'sms')
             notify_user(res.user, exp_msg, 'email', subject='Reservation Expired')
             continue
-        # Skip notified user who did not borrow within 24 hours
+        # Skip notified user who did not request borrow within 24 hours
         if res.status == 'notified' and res.notified_at:
             hours_waited = (timezone.now() - res.notified_at).total_seconds() / 3600
             if hours_waited > 24:
                 res.status = 'expired'
                 res.save(update_fields=['status'])
+                had_notified_skip = True
                 skip_msg = (
-                    f"MSICT OLMS: Your turn for '{book.title}' has been skipped. "
-                    f"You did not borrow within 24 hours. Queue updated."
+                    f"MSICT OLMS: Your turn for '{book.title}' was SKIPPED — "
+                    f"you did not request borrow within 24 hours. "
+                    f"The next member in queue has been notified. Your reservation is closed."
                 )
                 notify_user(res.user, skip_msg, 'sms')
                 notify_user(res.user, skip_msg, 'email', subject='Queue Position Skipped')
@@ -582,22 +586,23 @@ def _process_reservation_expiry(book):
     # Recalculate position-based expiry for every remaining member
     _recalculate_reservation_expiries(book)
 
+    # A notified user was skipped — auto-notify next member if a copy is available
+    if had_notified_skip:
+        _notify_next_in_queue(book, reason='skip')
+
 
 # ============================================================
-# RESERVATION HELPER — notify next + broadcast to full queue
+# RESERVATION HELPER — core notify logic (no expiry processing)
+# reason='return' → triggered by desk return
+# reason='skip'   → triggered by 24-h timeout skip
+# Guards against over-notifying: available_copies > notified_count
 # ============================================================
-def _notify_next_reservation(book, request=None):
-    """Called after a hardcopy is returned at the desk.
-    1. Process expiry/skips first.
-    2. Confirm an available hardcopy exists before notifying anyone.
-    3. Notify first pending user (status → notified, 24-h window).
-    4. Broadcast queue update to ALL waiting users.
-    """
-    _process_reservation_expiry(book)
-
-    # Only notify if a physical copy is actually available now
-    if not book.copies.filter(copy_type='hardcopy', status='available').exists():
-        return
+def _notify_next_in_queue(book, reason='return'):
+    """Notify the next PENDING member if unmatched available copies exist."""
+    available = book.copies.filter(copy_type='hardcopy', status='available').count()
+    already_notified = Reservation.objects.filter(book=book, status='notified').count()
+    if available <= already_notified:
+        return  # Every available copy is already claimed by a notified user
 
     queue = list(
         Reservation.objects.filter(
@@ -608,36 +613,44 @@ def _notify_next_reservation(book, request=None):
         return
 
     total_in_queue = len(queue)
-
-    # Find next pending user (not yet notified)
     next_res = next((r for r in queue if r.status == 'pending'), None)
     if not next_res:
-        return  # First user already notified — wait for them to borrow or expire
+        return
 
-    # Get estimated return dates of any remaining borrowed hardcopies
-    active_borrows = BorrowingTransaction.objects.filter(
+    nearest_return = BorrowingTransaction.objects.filter(
         copy__book=book, copy__copy_type='hardcopy',
         status__in=['borrowed', 'overdue']
-    ).order_by('due_date')
-    nearest_return = active_borrows.first()
+    ).order_by('due_date').first()
 
-    # ── Notify the FIRST pending user — it's their turn ──────────
+    # ── Notify first pending user ───────────────────────────────
     next_res.status = 'notified'
     next_res.notified_at = timezone.now()
     next_res.expires_at = max(next_res.expires_at, timezone.now() + timedelta(hours=24))
     next_res.save(update_fields=['status', 'notified_at', 'expires_at'])
 
-    first_msg = (
-        f"MSICT OLMS: It's YOUR TURN! A hardcopy of '{book.title}' is now available. "
-        f"You are #1 of {total_in_queue} in queue. "
-        f"Log in and click 'Request Borrow' within 24 hours "
-        f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')}). "
-        f"Then wait for librarian approval."
-    )
+    if reason == 'skip':
+        first_msg = (
+            f"MSICT OLMS: It's YOUR TURN for '{book.title}'! "
+            f"The previous member was skipped (missed 24-hour window). "
+            f"You are now #1 of {total_in_queue} in queue. "
+            f"Log in and click 'Request Borrow' within 24 hours "
+            f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')})."
+        )
+        broad_event = "The previous member was skipped"
+    else:
+        first_msg = (
+            f"MSICT OLMS: It's YOUR TURN! A hardcopy of '{book.title}' is now available. "
+            f"You are #1 of {total_in_queue} in queue. "
+            f"Log in and click 'Request Borrow' within 24 hours "
+            f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')}). "
+            f"Then wait for librarian approval."
+        )
+        broad_event = "A hardcopy was returned"
+
     notify_user(next_res.user, first_msg, 'sms')
     notify_user(next_res.user, first_msg, 'email', subject=f'Your Turn: {book.title}')
 
-    # ── Broadcast update to ALL other waiting users ───────────────
+    # ── Broadcast to ALL other waiting members ──────────────────
     for res in queue:
         if res.pk == next_res.pk:
             continue
@@ -648,12 +661,24 @@ def _notify_next_reservation(book, request=None):
             est_info = f" Nearest expected return: {nearest_return.due_date.strftime('%d %b %Y')}."
         broad_msg = (
             f"MSICT OLMS: Queue update for '{book.title}'. "
-            f"A hardcopy was returned — member #1 in queue has been notified to borrow. "
-            f"Your position: #{res.position} ({ahead} {ahead_word} ahead of you, {total_in_queue} total). "
+            f"{broad_event} — member #1 in queue has been notified to borrow. "
+            f"Your position: #{res.position} ({ahead} {ahead_word} ahead, {total_in_queue} total). "
             f"Your reservation deadline: {res.expires_at.strftime('%d %b %Y')}.{est_info}"
         )
         notify_user(res.user, broad_msg, 'sms')
         notify_user(res.user, broad_msg, 'email', subject=f'Queue Update: {book.title}')
+
+
+# ============================================================
+# RESERVATION HELPER — entry point called after a book is returned
+# ============================================================
+def _notify_next_reservation(book, request=None):
+    """Called after a hardcopy is returned at the desk.
+    1. Process expiry/skips (may auto-notify if a skip occurs + copy available).
+    2. Then notify next member for this return event.
+    """
+    _process_reservation_expiry(book)
+    _notify_next_in_queue(book, reason='return')
 
 
 # ============================================================
