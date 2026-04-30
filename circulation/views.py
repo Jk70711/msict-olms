@@ -278,6 +278,8 @@ def approve_borrow_request_view(request, request_id):
     if copy.copy_type == 'hardcopy':
         copy.status = 'borrowed'
         copy.save(update_fields=['status'])
+        # Nearest due_date changed — recalculate queue expiry dates for this book
+        _recalculate_reservation_expiries(copy.book)
 
     req.status = 'approved'
     req.approved_by = request.user
@@ -514,6 +516,28 @@ def return_hardcopy_view(request):
 
 
 # ============================================================
+# RESERVATION HELPER — recalculate position-based expiry dates
+# expires_at = nearest_borrowed_due_date + (position × RESERVATION_WINDOW_DAYS)
+# If no active borrows, base = now(). Notified users keep min 24 h.
+# ============================================================
+def _recalculate_reservation_expiries(book):
+    window = int(_pref('RESERVATION_WINDOW_DAYS', 7))
+    nearest_tx = BorrowingTransaction.objects.filter(
+        copy__book=book, copy__copy_type='hardcopy',
+        status__in=['borrowed', 'overdue']
+    ).order_by('due_date').first()
+    base = nearest_tx.due_date if nearest_tx else timezone.now()
+    for res in Reservation.objects.filter(
+        book=book, status__in=['pending', 'notified']
+    ).order_by('position'):
+        new_exp = base + timedelta(days=res.position * window)
+        if res.status == 'notified' and res.notified_at:
+            new_exp = max(new_exp, res.notified_at + timedelta(hours=24))
+        res.expires_at = new_exp
+        res.save(update_fields=['expires_at'])
+
+
+# ============================================================
 # RESERVATION HELPER — auto-expire + skip stale notified users
 # Called on every reservation-related action and on softcopy return.
 # ============================================================
@@ -529,7 +553,7 @@ def _process_reservation_expiry(book):
             res.save(update_fields=['status'])
             exp_msg = (
                 f"MSICT OLMS: Your reservation for '{book.title}' has expired "
-                f"(14 days elapsed). Queue position released."
+                f"(deadline {res.expires_at.strftime('%d %b %Y')} passed). Queue position released."
             )
             notify_user(res.user, exp_msg, 'sms')
             notify_user(res.user, exp_msg, 'email', subject='Reservation Expired')
@@ -555,6 +579,8 @@ def _process_reservation_expiry(book):
         if res.position != idx:
             res.position = idx
             res.save(update_fields=['position'])
+    # Recalculate position-based expiry for every remaining member
+    _recalculate_reservation_expiries(book)
 
 
 # ============================================================
@@ -602,10 +628,11 @@ def _notify_next_reservation(book, request=None):
     next_res.save(update_fields=['status', 'notified_at', 'expires_at'])
 
     first_msg = (
-        f"MSICT OLMS: It's YOUR turn! A hardcopy of '{book.title}' is now available. "
-        f"Queue Position: #1 of {total_in_queue}. "
-        f"Login to your dashboard and click 'Borrow Now' within 24 hours, "
-        f"then wait for librarian approval."
+        f"MSICT OLMS: It's YOUR TURN! A hardcopy of '{book.title}' is now available. "
+        f"You are #1 of {total_in_queue} in queue. "
+        f"Log in and click 'Request Borrow' within 24 hours "
+        f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')}). "
+        f"Then wait for librarian approval."
     )
     notify_user(next_res.user, first_msg, 'sms')
     notify_user(next_res.user, first_msg, 'email', subject=f'Your Turn: {book.title}')
@@ -621,9 +648,9 @@ def _notify_next_reservation(book, request=None):
             est_info = f" Nearest expected return: {nearest_return.due_date.strftime('%d %b %Y')}."
         broad_msg = (
             f"MSICT OLMS: Queue update for '{book.title}'. "
-            f"A hardcopy has been returned and the next member (#1 in queue) has been notified to borrow. "
-            f"Your current position: #{res.position} ({ahead} {ahead_word} ahead of you). "
-            f"Total in queue: {total_in_queue}.{est_info}"
+            f"A hardcopy was returned — member #1 in queue has been notified to borrow. "
+            f"Your position: #{res.position} ({ahead} {ahead_word} ahead of you, {total_in_queue} total). "
+            f"Your reservation deadline: {res.expires_at.strftime('%d %b %Y')}.{est_info}"
         )
         notify_user(res.user, broad_msg, 'sms')
         notify_user(res.user, broad_msg, 'email', subject=f'Queue Update: {book.title}')
@@ -665,14 +692,16 @@ def reserve_book_view(request, book_id):
         return redirect('my_reservations')
 
     # Create reservation — position auto-assigned in model.save()
-    reservation_days = int(_pref('RESERVATION_EXPIRY_DAYS', 14))
+    # expires_at placeholder set by model; corrected immediately below
     reservation = Reservation.objects.create(
         user=request.user,
         book=book,
-        expires_at=timezone.now() + timedelta(days=reservation_days)
     )
+    # Set position-based expiry: nearest_due_date + (position × 7 days)
+    _recalculate_reservation_expiries(book)
+    reservation.refresh_from_db()
 
-    # Build notification: nearest due date + queue position info
+    # Build notification: nearest due date + queue position + actual expiry
     active_borrows = BorrowingTransaction.objects.filter(
         copy__book=book, copy__copy_type='hardcopy',
         status__in=['borrowed', 'overdue']
@@ -683,28 +712,29 @@ def reserve_book_view(request, book_id):
     ).count()
     ahead_count = reservation.position - 1
     ahead_word = 'member' if ahead_count == 1 else 'members'
+    exp_date = reservation.expires_at.strftime('%d %b %Y')
 
     est_info = ''
     if nearest:
-        est_info = f" Nearest expected availability: {nearest.due_date.strftime('%d %b %Y')}."
+        est_info = f" Nearest expected return: {nearest.due_date.strftime('%d %b %Y')}."
 
     if reservation.position == 1:
         msg = (
             f"MSICT OLMS: You are #1 in queue for '{book.title}'."
             f" You will be notified as soon as a hardcopy is returned."
-            f"{est_info} Reservation valid for {reservation_days} days."
+            f"{est_info} Your reservation deadline: {exp_date}."
         )
     else:
         msg = (
             f"MSICT OLMS: You reserved '{book.title}'. Queue position: #{reservation.position}."
             f" {ahead_count} {ahead_word} ahead of you. Total in queue: {total_queue}."
-            f"{est_info} You will be notified when it's your turn."
+            f"{est_info} Your reservation deadline: {exp_date}. You will be notified when it's your turn."
         )
 
     notify_user(request.user, msg, 'sms')
     notify_user(request.user, msg, 'email', subject='Book Reserved — Queue Confirmed')
     log_audit(request.user, f"Reserved hardcopy '{book.title}' (position #{reservation.position})", request)
-    messages.success(request, f'Reserved "{book.title}". You are #{reservation.position} in queue.')
+    messages.success(request, f'Reserved "{book.title}". Position #{reservation.position} in queue. Deadline: {exp_date}.')
     return redirect('my_reservations')
 
 
@@ -810,6 +840,15 @@ def softcopy_queue_borrow_view(request, reservation_id):
     BorrowRequest.objects.create(user=request.user, copy=copy)
     res.status = 'fulfilled'
     res.save(update_fields=['status'])
+
+    # Re-number remaining queue after this slot is fulfilled
+    remaining = Reservation.objects.filter(
+        book=book, status__in=['pending', 'notified']
+    ).order_by('created_at')
+    for idx, r in enumerate(remaining, start=1):
+        if r.position != idx:
+            r.position = idx
+            r.save(update_fields=['position'])
 
     msg = (
         f"MSICT OLMS: Your borrow request for '{book.title}' has been submitted. "
