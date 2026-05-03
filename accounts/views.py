@@ -617,6 +617,10 @@ def admin_dashboard_view(request):
 
     recent_logs = AuditLog.objects.select_related('user').order_by('-timestamp')[:20]
 
+    recent_suspended = OLMSUser.objects.filter(
+        is_active=False, role='member'
+    ).order_by('-created_at')[:5]
+
     # Security - System Alerts
     from circulation.models import Notification
     security_alerts = Notification.objects.filter(
@@ -634,6 +638,7 @@ def admin_dashboard_view(request):
         'users_by_role': users_by_role,
         'most_borrowed': most_borrowed,
         'recent_logs': recent_logs,
+        'recent_suspended': recent_suspended,
         'security_alerts': security_alerts,
     }
     return render(request, 'accounts/admin_dashboard.html', context)
@@ -649,6 +654,12 @@ def suspicious_activity_view(request):
     ).order_by('-timestamp')[:100]
 
     known_usernames = set(OLMSUser.objects.values_list('username', flat=True))
+
+    # Build username → {role, member_type} map for enriching failed login rows
+    user_info_map = {
+        u['username']: {'role': u['role'], 'member_type': u['member_type']}
+        for u in OLMSUser.objects.values('username', 'role', 'member_type')
+    }
 
     window_1h = timezone.now() - timedelta(hours=1)
     suspicious_ips_qs = (
@@ -675,10 +686,31 @@ def suspicious_activity_view(request):
             'is_known': is_known,
         })
 
+    enriched_logins = []
+    for fl in failed_logins:
+        info = user_info_map.get(fl.username, {})
+        enriched_logins.append({
+            'obj': fl,
+            'role': info.get('role', ''),
+            'member_type': info.get('member_type', '') or '',
+            'is_known': fl.username in known_usernames,
+        })
+
     return render(request, 'accounts/suspicious_activity.html', {
-        'failed_logins': failed_logins,
+        'failed_logins': enriched_logins,
         'suspicious_ips': suspicious_ips,
         'known_usernames': known_usernames,
+    })
+
+
+@login_required
+@admin_required
+def suspended_members_view(request):
+    suspended = OLMSUser.objects.filter(
+        is_active=False, role='member'
+    ).order_by('-created_at')
+    return render(request, 'accounts/suspended_members.html', {
+        'suspended': suspended,
     })
 
 
@@ -800,8 +832,7 @@ def system_appearance_view(request):
 def system_preferences_view(request):
     # Ensure all core preferences exist with defaults
     DEFAULTS = [
-        ('LOAN_PERIOD_DAYS',          '7',   'Loan period for hardcopy books (days)'),
-        ('SOFTCOPY_LOAN_PERIOD_DAYS', '3',   'Loan period for softcopy books (days)'),
+        ('LOAN_PERIOD_DAYS',          '7',   'Loan period for all books (days)'),
         ('MAX_RENEWALS',              '2',   'Maximum number of renewals per borrow'),
         ('MAX_COPIES_PER_BORROW',     '3',   'Maximum active borrows per member'),
         ('FINE_PER_DAY',              '500', 'Overdue fine per day (TZS)'),
@@ -817,5 +848,5 @@ def system_preferences_view(request):
                 SystemPreference.objects.filter(key=pref_key).update(value=value.strip())
         messages.success(request, 'Preferences updated successfully.')
         return redirect('system_preferences')
-    prefs = SystemPreference.objects.all().order_by('key')
+    prefs = SystemPreference.objects.exclude(key__startswith='APP_').order_by('key')
     return render(request, 'accounts/system_preferences.html', {'prefs': prefs})

@@ -32,6 +32,7 @@ urlpatterns = [
     # ── Dashboard na Mipangilio ya Msimamizi (admin) ────────────
     path('admin-dashboard/', views.admin_dashboard_view, name='admin_dashboard'),            # Dashboard ya msimamizi
     path('admin/suspicious-activity/', views.suspicious_activity_view, name='suspicious_activity'),  # Shughuli za tuhuma
+    path('admin/suspended-members/', views.suspended_members_view, name='suspended_members'),       # Wanachama waliofungiwa
     path('admin/unlock/<int:user_id>/', views.unlock_account_view, name='unlock_account'),   # Fungua akaunti iliyozuiwa
     path('admin/audit-logs/', views.audit_log_view, name='audit_logs'),                      # Historia ya vitendo
     path('admin/audit-logs/clear/', views.clear_audit_logs_view, name='clear_audit_logs'),   # Futa vitendo vyote

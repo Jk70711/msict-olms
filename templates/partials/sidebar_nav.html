@@ -17,6 +17,7 @@
     <div class="collapse sidebar-submenu" id="adm-security">
       <a href="{% url 'audit_logs' %}" class="nav-link"><i class="bi bi-journal-text"></i> Audit Logs</a>
       <a href="{% url 'user_list' %}?status=locked" class="nav-link"><i class="bi bi-person-x"></i> Locked Accounts</a>
+      <a href="{% url 'suspended_members' %}" class="nav-link"><i class="bi bi-person-slash"></i> Suspended Members</a>
       <a href="{% url 'suspicious_activity' %}" class="nav-link"><i class="bi bi-shield-exclamation"></i> Suspicious IPs</a>
     </div>
   </div>

@@ -271,12 +271,10 @@ def approve_borrow_request_view(request, request_id):
         messages.error(request, 'Hardcopy is no longer available.')
         return redirect('librarian_dashboard')
 
-    loan_days = getattr(settings, 'LOAN_PERIOD_DAYS', 7)
     tx = BorrowingTransaction.objects.create(
         user=user,
         copy=copy,
         borrow_type=copy.copy_type,
-        due_date=timezone.now() + timedelta(days=loan_days),
         approved_by=request.user,
     )
     if copy.copy_type == 'hardcopy':

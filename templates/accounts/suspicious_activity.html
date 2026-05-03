@@ -74,6 +74,8 @@
               <th>S/N</th>
               <th>Username</th>
               <th>IP Address</th>
+              <th>Role</th>
+              <th>Member Type</th>
               <th>Attempts</th>
               <th>Pwd Chars</th>
               <th>Date &amp; Time</th>
@@ -84,23 +86,45 @@
             {% for fl in failed_logins %}
             <tr>
               <td>{{ forloop.counter }}</td>
-              <td class="fw-bold"><code>{{ fl.username }}</code></td>
-              <td><small><code>{{ fl.ip_address }}</code></small></td>
-              <td><span class="badge bg-warning text-dark">{{ fl.attempt_count }}</span></td>
+              <td class="fw-bold"><code>{{ fl.obj.username }}</code></td>
+              <td><small><code>{{ fl.obj.ip_address }}</code></small></td>
               <td>
-                {% if fl.password_chars %}
-                  <span class="badge bg-dark" title="Length of last attempted password">{{ fl.password_chars }} chars</span>
+                {% if fl.role == 'admin' %}
+                  <span class="badge bg-danger">Admin</span>
+                {% elif fl.role == 'librarian' %}
+                  <span class="badge bg-info text-dark">Librarian</span>
+                {% elif fl.role == 'member' %}
+                  <span class="badge bg-primary">Member</span>
                 {% else %}
                   <span class="text-muted">—</span>
                 {% endif %}
               </td>
               <td>
-                <small class="text-muted d-block">{{ fl.timestamp|date:"M d, Y" }}</small>
-                <small class="fw-bold">{{ fl.timestamp|time:"H:i:s" }}</small>
-                <small class="text-muted">({{ fl.timestamp|timesince }} ago)</small>
+                {% if fl.member_type == 'student' %}
+                  <span class="badge bg-primary"><i class="bi bi-mortarboard"></i> Student</span>
+                {% elif fl.member_type == 'lecturer' %}
+                  <span class="badge bg-info text-dark"><i class="bi bi-person-workspace"></i> Instructor</span>
+                {% elif fl.member_type == 'staff' %}
+                  <span class="badge bg-secondary"><i class="bi bi-briefcase"></i> Staff</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td><span class="badge bg-warning text-dark">{{ fl.obj.attempt_count }}</span></td>
+              <td>
+                {% if fl.obj.password_chars %}
+                  <span class="badge bg-dark" title="Length of last attempted password">{{ fl.obj.password_chars }} chars</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
               </td>
               <td>
-                {% if fl.username in known_usernames %}
+                <small class="text-muted d-block">{{ fl.obj.timestamp|date:"M d, Y" }}</small>
+                <small class="fw-bold">{{ fl.obj.timestamp|time:"H:i:s" }}</small>
+                <small class="text-muted">({{ fl.obj.timestamp|timesince }} ago)</small>
+              </td>
+              <td>
+                {% if fl.is_known %}
                   <span class="badge bg-warning text-dark"><i class="bi bi-person-fill"></i> Known</span>
                 {% else %}
                   <span class="badge bg-secondary"><i class="bi bi-person-question"></i> Unknown</span>
@@ -109,7 +133,7 @@
             </tr>
             {% empty %}
             <tr>
-              <td colspan="7" class="text-center py-4 text-muted">
+              <td colspan="9" class="text-center py-4 text-muted">
                 No failed logins in the last 24 hours.
               </td>
             </tr>

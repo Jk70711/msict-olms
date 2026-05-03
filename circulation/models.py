@@ -84,10 +84,7 @@ class BorrowingTransaction(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.pk and not self.due_date:
-            if self.borrow_type == 'softcopy':
-                loan_days = int(_pref('SOFTCOPY_LOAN_PERIOD_DAYS', 3))
-            else:
-                loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+            loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
             self.due_date = timezone.now() + timedelta(days=loan_days)
         super().save(*args, **kwargs)
 
@@ -185,10 +182,7 @@ class BorrowingTransaction(models.Model):
 
     def renew(self):
         if self.can_renew():
-            if self.copy.copy_type == 'softcopy':
-                loan_days = int(_pref('SOFTCOPY_LOAN_PERIOD_DAYS', 3))
-            else:
-                loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+            loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
             self.due_date = timezone.now() + timedelta(days=loan_days)
             self.renewed_count += 1
             if self.status == 'overdue':
