@@ -35,7 +35,7 @@
                 <input type="number" name="pref_{{ pref.key }}" class="form-control" value="{{ pref.value }}" min="0" step="{% if pref.key == 'FINE_PER_DAY' %}50{% else %}1{% endif %}" required>
                 <span class="input-group-text">
                   {% if pref.key == 'FINE_PER_DAY' %}TZS/day
-                  {% elif pref.key == 'LOAN_PERIOD_DAYS' or pref.key == 'RESERVATION_EXPIRY_DAYS' %}days
+                {% elif pref.key == 'LOAN_PERIOD_DAYS' or pref.key == 'RESERVATION_EXPIRY_DAYS' %}days
                   {% elif pref.key == 'MAX_RENEWALS' or pref.key == 'MAX_COPIES_PER_BORROW' %}times{% endif %}
                 </span>
               </div>
