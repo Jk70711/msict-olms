@@ -40,7 +40,9 @@
           <td><small>{{ u.army_no }}</small></td>
           <td><span class="badge badge-role-{{ u.role }}">{{ u.role|title }}</span></td>
           <td>
-            {% if u.member_type == 'student' %}
+            {% if u.role != 'member' %}
+              <span class="text-muted">—</span>
+            {% elif u.member_type == 'student' %}
               <span class="badge bg-primary"><i class="bi bi-mortarboard"></i> Student</span>
             {% elif u.member_type == 'lecturer' %}
               <span class="badge bg-info text-dark"><i class="bi bi-person-workspace"></i> Instructor</span>

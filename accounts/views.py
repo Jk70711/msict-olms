@@ -462,6 +462,8 @@ def create_user_view(request):
     if request.method == 'POST':
         role = request.POST.get('role', 'member')
         member_type = request.POST.get('member_type') or None
+        if role != 'member':
+            member_type = None
         army_no = request.POST.get('army_no', '').strip()
         first_name = request.POST.get('first_name', '').strip()
         middle_name = request.POST.get('middle_name', '').strip()
