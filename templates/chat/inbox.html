@@ -6,10 +6,10 @@
   /* === Chat shell ============================================ */
   .chat-shell {
     display: grid;
-    grid-template-columns: 320px 1fr;
+    grid-template-columns: 280px 1fr;
     gap: 0;
-    height: calc(100vh - 56px - 38px - 1.75rem - 1.75rem);
-    min-height: 480px;
+    height: calc(80vh - 56px - 38px - 1.5rem - 1.5rem);
+    min-height: 400px;
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
@@ -62,12 +62,12 @@
     padding-left: calc(1rem - 3px);
   }
   .chat-avatar {
-    width: 42px; height: 42px;
+    width: 36px; height: 36px;
     border-radius: 50%;
     background: var(--accent);
     color: #fff;
     display: flex; align-items: center; justify-content: center;
-    font-weight: 600; font-size: .85rem;
+    font-weight: 600; font-size: .8rem;
     flex-shrink: 0;
     position: relative;
     object-fit: cover;
@@ -76,7 +76,7 @@
     content: '';
     position: absolute;
     bottom: 0; right: 0;
-    width: 11px; height: 11px;
+    width: 9px; height: 9px;
     background: #22c55e;
     border: 2px solid var(--card-bg);
     border-radius: 50%;
@@ -140,10 +140,10 @@
     min-height: 0;
   }
   .chat-msg {
-    max-width: 70%;
-    padding: .55rem .8rem;
-    border-radius: 12px;
-    font-size: .85rem;
+    max-width: 65%;
+    padding: .5rem .75rem;
+    border-radius: 10px;
+    font-size: .82rem;
     line-height: 1.4;
     word-wrap: break-word;
     position: relative;
