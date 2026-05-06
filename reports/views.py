@@ -173,7 +173,7 @@ def reports_home_view(request):
 @login_required
 @librarian_required
 def report_members_view(request):
-    members = OLMSUser.objects.filter(role='member').select_related()
+    members = OLMSUser.objects.filter(role='member').select_related('virtual_card')
     role_filter = request.GET.get('member_type', '')
     if role_filter:
         members = members.filter(member_type=role_filter)

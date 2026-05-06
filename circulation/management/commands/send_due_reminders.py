@@ -33,7 +33,7 @@ class Command(BaseCommand):
                 now + timedelta(hours=47),
                 now + timedelta(hours=49),
                 lambda book, copy_type, due: (
-                    f"MSICT OLMS: Reminder — '{book}' is due in 2 days "
+                    f"MSICT OLMS: Reminder - '{book}' is due in 2 days "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
                     + ("Sign in to your dashboard to read or return online."
                        if copy_type == 'softcopy'
@@ -45,7 +45,7 @@ class Command(BaseCommand):
                 now + timedelta(hours=23),
                 now + timedelta(hours=25),
                 lambda book, copy_type, due: (
-                    f"MSICT OLMS: URGENT — '{book}' is due TOMORROW "
+                    f"MSICT OLMS: URGENT - '{book}' is due TOMORROW "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
                     + ("Return it online from your dashboard before the link expires."
                        if copy_type == 'softcopy'
@@ -86,7 +86,7 @@ class Command(BaseCommand):
 
                 notify_user(tx.user, msg, 'sms')
                 notify_user(tx.user, msg, 'email',
-                            subject=f"MSICT OLMS – Due Date Reminder ({label.replace('-', ' ').title()})")
+                            subject=f"MSICT OLMS Due Date Reminder ({label.replace('-', ' ').title()})")
                 total += 1
 
             self.stdout.write(self.style.WARNING(

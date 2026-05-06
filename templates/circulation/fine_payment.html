@@ -1,32 +1,312 @@
 {% extends 'base.html' %}
-{% block title %}Record Fine Payment{% endblock %}
+{% block title %}Record Payment — {{ fine.user.get_full_name }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-md-5">
-    <div class="card p-4">
-      <h5 class="fw-bold mb-3"><i class="bi bi-cash-stack"></i> Record Fine Payment</h5>
-      <div class="alert alert-info mb-3">
-        <b>Member:</b> {{ fine.user.get_full_name }} ({{ fine.user.army_no }})<br>
-        <b>Reason:</b> {{ fine.reason }}<br>
-        <b>Amount:</b> <span class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:2 }}</span>
-      </div>
-      <form method="post">{% csrf_token %}
-        <div class="mb-3">
-          <label class="form-label">Payment Method</label>
-          <select name="payment_method" class="form-select">
-            <option value="cash">Cash</option>
-            <option value="mobile_money">Mobile Money</option>
-            <option value="bank">Bank Transfer</option>
-          </select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Receipt Number <small class="text-muted">(optional)</small></label>
-          <input type="text" name="receipt_no" class="form-control" placeholder="e.g. RCT-2024-001">
-        </div>
-        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Confirm Payment</button>
-        <a href="{% url 'fine_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
-      </form>
+  <div class="col-md-7">
+
+    <!-- Django Messages -->
+    {% if messages %}
+    {% for message in messages %}
+    {% if message.tags == 'error' %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #ffffff; font-weight: 800; background-color: #dc2626; border: 2px solid #991b1b;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     </div>
+    {% elif message.tags == 'success' %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #ffffff; font-weight: 800; background-color: #16a34a; border: 2px solid #15803d;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% elif message.tags == 'warning' %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #000000; font-weight: 800; background-color: #facc15; border: 2px solid #ca8a04;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% else %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #ffffff; font-weight: 800; background-color: #2563eb; border: 2px solid #1d4ed8;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0"><i class="bi bi-cash-stack"></i> Record Fine Payment</h5>
+      <a href="{% url 'user_fines' fine.user.pk %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back
+      </a>
+    </div>
+
+    <!-- Fine Summary -->
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-2 text-center">
+          <div class="col-4">
+            <div class="small text-muted">Member</div>
+            <div class="fw-semibold">{{ fine.user.get_full_name }}</div>
+            <div class="small text-muted">{{ fine.user.army_no }}</div>
+          </div>
+          <div class="col-4">
+            <div class="small text-muted">Total Fine</div>
+            <div class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:2 }}</div>
+            {% if fine.transaction and fine.transaction.status == 'overdue' %}
+            <div class="small text-warning"><i class="bi bi-arrow-up-circle"></i> Accruing ({{ fine.transaction.days_overdue }} days)</div>
+            {% endif %}
+          </div>
+          <div class="col-4">
+            <div class="small text-muted">Remaining</div>
+            <div class="fw-bold {% if fine.remaining_balance > 0 %}text-danger{% else %}text-success{% endif %} fs-5">
+              TZS {{ fine.remaining_balance|floatformat:2 }}
+            </div>
+            {% if fine.amount_paid > 0 %}
+            <div class="small text-success">Paid so far: TZS {{ fine.amount_paid|floatformat:2 }}</div>
+            {% endif %}
+          </div>
+        </div>
+        {% if fine.reason %}
+        <hr class="my-2">
+        <small class="text-muted"><i class="bi bi-info-circle"></i> {{ fine.reason }}</small>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if fine.paid %}
+    <div class="alert alert-success">
+      <i class="bi bi-check-circle-fill"></i> This fine has been fully paid. No further payment required.
+    </div>
+    {% else %}
+    <!-- Payment Form -->
+    <div class="card">
+      <div class="card-header bg-success text-white py-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-wallet2"></i> Payment Details</h6>
+      </div>
+      <div class="card-body">
+        <form method="post" id="paymentForm">{% csrf_token %}
+          <div class="row g-3">
+
+            <!-- Payment Method -->
+            <div class="col-12">
+              <label class="form-label fw-bold">Payment Method <span class="text-danger">*</span></label>
+              <select name="payment_method" id="paymentMethod" class="form-select form-select-lg" required onchange="toggleFields(this.value)">
+                <option value="">— Select Method —</option>
+                <optgroup label="� Manual">
+                  <option value="cash" selected>Cash</option>
+                </optgroup>
+                <optgroup label="� Mobile Money">
+                  <option value="mpesa">M-Pesa</option>
+                  <option value="tigopesa">Tigo Pesa</option>
+                  <option value="airtel_money">Airtel Money</option>
+                  <option value="halopesa">Halopesa</option>
+                </optgroup>
+                <optgroup label="🏦 Bank Transfer">
+                  <option value="bank_transfer">Bank Transfer</option>
+                </optgroup>
+                <optgroup label="💳 Card">
+                  <option value="visa">Visa Card</option>
+                  <option value="mastercard">Mastercard</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <!-- MOBILE: Phone number -->
+            <div class="col-12 d-none" id="section-mobile">
+              <label class="form-label fw-bold">Phone Number <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                <input type="tel" name="phone_number" id="phoneNumber" class="form-control"
+                       placeholder="e.g. 0712345678" pattern="^0[67]\d{8}$" maxlength="10">
+              </div>
+              <div class="form-text">Enter the registered mobile money number (10 digits starting with 07 or 06)</div>
+            </div>
+
+            <!-- BANK: Bank name + account number + optional receipt -->
+            <div class="col-md-6 d-none" id="section-bank-name">
+              <label class="form-label fw-bold">Bank Name <span class="text-danger">*</span></label>
+              <select name="bank_name" id="bankName" class="form-select">
+                <option value="">— Select Bank —</option>
+                <option value="CRDB">CRDB Bank</option>
+                <option value="NMB">NMB Bank</option>
+                <option value="NBC">NBC (National Bank of Commerce)</option>
+                <option value="Stanbic">Stanbic Bank Tanzania</option>
+                <option value="Standard Chartered">Standard Chartered Bank</option>
+                <option value="Absa">Absa Bank Tanzania</option>
+                <option value="DTB">Diamond Trust Bank (DTB)</option>
+                <option value="BOA">Bank of Africa (BOA)</option>
+                <option value="Exim">Exim Bank Tanzania</option>
+                <option value="Azania">Azania Bank</option>
+                <option value="TPB">TPB Bank (Tanzania Postal)</option>
+                <option value="Other">Other Bank</option>
+              </select>
+            </div>
+            <div class="col-md-6 d-none" id="section-bank-account">
+              <label class="form-label fw-bold">Account Number <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-bank"></i></span>
+                <input type="text" name="bank_account_no" id="bankAccountNo" class="form-control"
+                       placeholder="e.g. 0150123456789" maxlength="20">
+              </div>
+            </div>
+            <div class="col-12 d-none" id="section-bank-receipt">
+              <label class="form-label fw-bold">Reference / Receipt No <span class="text-muted">(optional)</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-receipt"></i></span>
+                <input type="text" name="receipt_no" id="receiptNo" class="form-control" placeholder="e.g. TRF-20240504-001" data-optional-field="true">
+              </div>
+            </div>
+
+            <!-- CARD: Cardholder, card number, expiry, CVV -->
+            <div class="col-md-6 d-none" id="section-card-holder">
+              <label class="form-label fw-bold">Cardholder Name <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                <input type="text" name="card_holder" id="cardHolder" class="form-control"
+                       placeholder="Name as on card" autocomplete="cc-name">
+              </div>
+            </div>
+            <div class="col-md-6 d-none" id="section-card-digits">
+              <label class="form-label fw-bold">Card Number (last 4 digits) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-credit-card-2-front"></i></span>
+                <input type="text" name="card_last4" id="cardLast4" class="form-control"
+                       placeholder="e.g. 4521" maxlength="4" pattern="\d{4}" autocomplete="off">
+              </div>
+              <div class="form-text">Last 4 digits only (do not enter full card number)</div>
+            </div>
+            <div class="col-md-6 d-none" id="section-card-expiry">
+              <label class="form-label fw-bold">Expiry Date <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                <select id="cardExpiryMonth" class="form-select" onchange="updateExpiry()">
+                  <option value="">MM</option>
+                  <option value="01">01 - January</option>
+                  <option value="02">02 - February</option>
+                  <option value="03">03 - March</option>
+                  <option value="04">04 - April</option>
+                  <option value="05">05 - May</option>
+                  <option value="06">06 - June</option>
+                  <option value="07">07 - July</option>
+                  <option value="08">08 - August</option>
+                  <option value="09">09 - September</option>
+                  <option value="10">10 - October</option>
+                  <option value="11">11 - November</option>
+                  <option value="12">12 - December</option>
+                </select>
+                <select id="cardExpiryYear" class="form-select" onchange="updateExpiry()">
+                  <option value="">YYYY</option>
+                  {# Populated by JS with future years only #}
+                </select>
+              </div>
+              <input type="hidden" name="card_expiry" id="cardExpiry" data-optional-field="true">
+              <div class="form-text">Select the month and year printed on the card (future dates only)</div>
+            </div>
+            <div class="col-md-6 d-none" id="section-card-cvv">
+              <label class="form-label fw-bold">CVV <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+                <input type="password" name="card_cvv" id="cardCvv" class="form-control"
+                       placeholder="3 or 4 digits" maxlength="4" pattern="\d{3,4}"
+                       autocomplete="cc-csc">
+              </div>
+            </div>
+
+            <!-- Amount (always visible after method selection) -->
+            <div class="col-12" id="section-amount">
+              <hr class="my-1">
+              <label class="form-label fw-bold">Amount to Pay (TZS) <span class="text-danger">*</span></label>
+              <input type="number" name="payment_amount" id="paymentAmount" class="form-control form-control-lg"
+                     value="{{ fine.remaining_balance }}" min="100" step="100" required>
+              <div class="d-flex justify-content-between mt-1">
+                <small class="text-muted">Remaining: <strong class="text-danger">TZS {{ fine.remaining_balance|floatformat:2 }}</strong></small>
+                <small>
+                  <a href="#" class="text-primary text-decoration-none"
+                     onclick="document.getElementById('paymentAmount').value='{{ fine.remaining_balance }}'; return false;">
+                    Pay full remaining ↑
+                  </a>
+                </small>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Submit -->
+          <div class="d-grid gap-2 mt-4" id="section-submit">
+            <button type="submit" class="btn btn-success btn-lg">
+              <i class="bi bi-check-circle"></i> Confirm Payment
+            </button>
+            <a href="{% url 'user_fines' fine.user.pk %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
   </div>
 </div>
+
+<script>
+function toggleFields(method) {
+  const isMobile  = ['mpesa','tigopesa','airtel_money','halopesa'].includes(method);
+  const isBank    = method === 'bank_transfer';
+  const isCard    = ['visa','mastercard'].includes(method);
+  const hasMethod = method !== '';
+
+  function show(id, visible, isRequired) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('d-none', !visible);
+    el.querySelectorAll('input, select').forEach(i => {
+      if (visible && isRequired && i.dataset.optionalField !== 'true') {
+        i.setAttribute('required', '');
+      } else {
+        i.removeAttribute('required');
+      }
+      if (!visible) i.value = '';   // clear hidden fields
+    });
+  }
+
+  // Mobile
+  show('section-mobile',       isMobile, true);
+
+  // Bank
+  show('section-bank-name',    isBank,   true);
+  show('section-bank-account', isBank,   true);
+  show('section-bank-receipt', isBank,   false);  // optional
+
+  // Card
+  show('section-card-holder',  isCard,   true);
+  show('section-card-digits',  isCard,   true);
+  show('section-card-expiry',  isCard,   true);
+  show('section-card-cvv',     isCard,   true);
+
+  // Amount and submit are always visible (cash is default)
+}
+
+// Combine month + year dropdowns into hidden card_expiry (MM/YY format)
+function updateExpiry() {
+  const m = document.getElementById('cardExpiryMonth');
+  const y = document.getElementById('cardExpiryYear');
+  const hidden = document.getElementById('cardExpiry');
+  if (!m || !y || !hidden) return;
+  if (m.value && y.value) {
+    hidden.value = `${m.value}/${y.value.slice(-2)}`;
+  } else {
+    hidden.value = '';
+  }
+}
+
+// On load: populate year dropdown with current + next 15 years
+document.addEventListener('DOMContentLoaded', function() {
+  const yearSel = document.getElementById('cardExpiryYear');
+  if (yearSel) {
+    const thisYear = new Date().getFullYear();
+    for (let y = thisYear; y <= thisYear + 15; y++) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+  }
+});
+</script>
 {% endblock %}

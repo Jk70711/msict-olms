@@ -107,12 +107,12 @@ def send_email_notification(to_email, subject, body):
         return False
 
 
-def create_notification(user, message, channel, priority='normal'):
+def create_notification(user, message, channel, priority='normal', is_security_alert=False):
     from circulation.models import Notification
-    return Notification.objects.create(user=user, message=message, channel=channel, priority=priority)
+    return Notification.objects.create(user=user, message=message, channel=channel, priority=priority, is_security_alert=is_security_alert)
 
 
-def notify_user(user, message, channel, subject=None, priority='normal'):
+def notify_user(user, message, channel, subject=None, priority='normal', is_security_alert=False):
     """Send notification via SMS or email AND record with proper sent/failed status."""
     import logging
     from django.utils import timezone as tz
@@ -130,6 +130,7 @@ def notify_user(user, message, channel, subject=None, priority='normal'):
         message=message,
         channel=channel,
         priority=priority,
+        is_security_alert=is_security_alert,
         status='sent' if ok else 'failed',
         sent_at=tz.now() if ok else None,
     )

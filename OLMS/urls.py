@@ -42,6 +42,8 @@ urlpatterns = [
     path('circulation/', include('circulation.urls')),
     path('acquisitions/', include('acquisitions.urls')),
     path('reports/', include('reports.urls')),
+    path('chat/', include('chat.urls')),
+    path('assistant/', include('chatbot.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) \
   + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
 

@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+{% block title %}Fines — {{ user_obj.get_full_name }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-cash-coin"></i> Fines — {{ user_obj.get_full_name }}</h4>
+  <a href="{% url 'fine_list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to All Fines</a>
+</div>
+
+<div class="row mb-3 g-3">
+  <div class="col-md-4">
+    <div class="card p-3 border-warning">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-warning bg-opacity-10 p-3">
+          <i class="bi bi-cash-stack text-warning fs-3"></i>
+        </div>
+        <div>
+          <small class="text-muted">Remaining Balance</small>
+          <div class="fw-bold text-danger fs-4">TZS {{ total_unpaid|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-success bg-opacity-10 p-3">
+          <i class="bi bi-check-circle text-success fs-3"></i>
+        </div>
+        <div>
+          <small class="text-muted">Paid Fines</small>
+          <div class="fw-bold text-success fs-4">{{ total_paid_count }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+          <i class="bi bi-receipt text-primary fs-3"></i>
+        </div>
+        <div>
+          <small class="text-muted">Total Fines</small>
+          <div class="fw-bold text-primary fs-4">{{ fines|length }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if not unpaid_fines %}
+<div class="alert alert-success mb-3">
+  <i class="bi bi-check-circle"></i> <strong>All fines settled.</strong> This member has no outstanding balance.
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0 align-middle">
+        <thead class="table-light">
+          <tr>
+            <th>#</th>
+            <th>Book / Reason</th>
+            <th>Days</th>
+            <th class="text-end">Total Due</th>
+            <th class="text-end">Amount Paid</th>
+            <th class="text-end">Remaining</th>
+            <th>Status</th>
+            <th>Payment Info</th>
+            <th>Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fine in fines %}
+          <tr class="{% if not fine.paid %}table-warning{% endif %}">
+            <td>{{ forloop.counter }}</td>
+            <td>
+              <small>
+                {% if fine.transaction %}
+                  <strong>{{ fine.transaction.copy.book.title }}</strong><br>
+                  <span class="text-muted">{{ fine.reason }}</span>
+                {% else %}
+                  {{ fine.reason|truncatechars:50 }}
+                {% endif %}
+              </small>
+            </td>
+            <td>
+              {% if fine.transaction and fine.transaction.status == 'overdue' %}
+                <span class="badge bg-danger">{{ fine.transaction.days_overdue }} days</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">
+              TZS {{ fine.amount|floatformat:2 }}
+            </td>
+            <td class="text-end">
+              {% if fine.amount_paid > 0 %}
+                <span class="text-success fw-semibold">TZS {{ fine.amount_paid|floatformat:2 }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-end">
+              {% if fine.paid %}
+                <span class="text-success fw-semibold">TZS 0.00</span>
+              {% elif fine.amount_paid > 0 %}
+                <span class="text-danger fw-bold">TZS {{ fine.remaining_balance|floatformat:2 }}</span>
+              {% else %}
+                <span class="text-danger fw-bold">TZS {{ fine.amount|floatformat:2 }}</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if fine.paid %}
+                <span class="badge bg-success">Paid</span>
+              {% elif fine.amount_paid > 0 %}
+                <span class="badge bg-warning text-dark">Partial</span>
+                {% if fine.transaction and fine.transaction.status == 'overdue' %}
+                <br><small class="text-warning"><i class="bi bi-arrow-up-circle"></i> Accruing</small>
+                {% endif %}
+              {% else %}
+                <span class="badge bg-danger">Unpaid</span>
+                {% if fine.transaction and fine.transaction.status == 'overdue' %}
+                <br><small class="text-warning"><i class="bi bi-arrow-up-circle"></i> Accruing</small>
+                {% endif %}
+              {% endif %}
+            </td>
+            <td>
+              {% if fine.receipt_no %}
+                <small>
+                  {% for line in fine.receipt_no.splitlines %}
+                    {% if line.strip %}
+                      <span class="d-block text-muted">{{ line.strip }}</span>
+                    {% endif %}
+                  {% endfor %}
+                </small>
+              {% elif fine.amount_paid > 0 %}
+                <small class="text-muted">{{ fine.payment_method }} — {{ fine.paid_at|date:"d M Y H:i" }}</small>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ fine.created_at|date:"d M Y" }}</small></td>
+            <td>
+              {% if not fine.paid %}
+              <a href="{% url 'record_fine_payment' fine.pk %}" class="btn btn-sm btn-success">
+                <i class="bi bi-cash-stack"></i> Pay
+              </a>
+              {% else %}
+              <span class="text-success"><i class="bi bi-check-circle-fill"></i> Done</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="10" class="text-center py-4 text-muted">No fines found for this member.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

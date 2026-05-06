@@ -59,11 +59,31 @@ class OLMSUserAdmin(UserAdmin):
 
     def lock_accounts(self, request, queryset):
         updated = queryset.update(is_active=False)
+        from accounts.utils import notify_user
+        for user in queryset:
+            notify_user(
+                user,
+                f"Your MSICT OLMS account has been locked by the administrator. Contact the library for assistance.",
+                'sms',
+                subject='Account Locked - MSICT OLMS',
+                priority='high',
+                is_security_alert=True
+            )
         self.message_user(request, f"Locked {updated} account(s).")
     lock_accounts.short_description = "🔒 Lock selected accounts"
 
     def unlock_accounts(self, request, queryset):
         updated = queryset.update(is_active=True, failed_attempts=0)
+        from accounts.utils import notify_user
+        for user in queryset:
+            notify_user(
+                user,
+                f"Your MSICT OLMS account has been unlocked. You can now log in.",
+                'sms',
+                subject='Account Unlocked - MSICT OLMS',
+                priority='high',
+                is_security_alert=True
+            )
         self.message_user(request, f"Unlocked {updated} account(s).")
     unlock_accounts.short_description = "🔓 Unlock selected accounts"
 

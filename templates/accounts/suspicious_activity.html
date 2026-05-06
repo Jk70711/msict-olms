@@ -60,6 +60,58 @@
     </div>
   </div>
 
+  <!-- Security Alerts Panel -->
+  <div class="col-12">
+    <div class="card p-3 h-100 shadow-sm border-warning border-2">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-shield-exclamation"></i> Security Alerts (Suspicious Activity)</h6>
+        <a href="{% url 'security_alerts' %}" class="btn btn-sm btn-outline-warning">View All</a>
+      </div>
+
+      {% if security_alerts %}
+      <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+        <table class="table table-hover align-middle mb-0 border">
+          <thead class="table-light">
+            <tr>
+              <th>S/N</th>
+              <th>User</th>
+              <th>Message</th>
+              <th>Channel</th>
+              <th>Date & Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alert in security_alerts %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td><code class="small">{{ alert.user.username }}</code></td>
+              <td><small>{{ alert.message }}</small></td>
+              <td>
+                {% if alert.channel == 'sms' %}
+                  <span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> SMS</span>
+                {% else %}
+                  <span class="badge bg-info text-dark"><i class="bi bi-envelope"></i> Email</span>
+                {% endif %}
+              </td>
+              <td>
+                <small class="text-muted d-block">{{ alert.created_at|date:"M d, Y" }}</small>
+                <small class="fw-bold">{{ alert.created_at|time:"H:i:s" }}</small>
+                <small class="text-muted">({{ alert.created_at|timesince }} ago)</small>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-check-shield text-success fs-1"></i>
+        <p class="mb-0 mt-2">No security alerts for suspicious activity.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
   <!-- Recent Failed Logins Panel -->
   <div class="col-12">
     <div class="card p-3 h-100 shadow-sm border-0">

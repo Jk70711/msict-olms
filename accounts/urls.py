@@ -38,6 +38,7 @@ urlpatterns = [
     path('admin/audit-logs/clear/', views.clear_audit_logs_view, name='clear_audit_logs'),   # Futa vitendo vyote
     path('admin/audit-log/<int:pk>/delete/', views.delete_audit_log_view, name='delete_audit_log'),  # Futa rekodi moja
     path('admin/security-alert/<int:pk>/delete/', views.delete_security_alert_view, name='delete_security_alert'),  # Futa tahadhari
+    path('admin/security-alerts/', views.security_alerts_view, name='security_alerts'),                               # Tahadhari zote
     path('admin/preferences/', views.system_preferences_view, name='system_preferences'),    # Mipangilio ya mfumo
     path('superuser/dashboard/', views.superuser_dashboard_view, name='superuser_dashboard'),# Dashboard ya superuser
     path('toggle-theme/', views.toggle_theme_view, name='toggle_theme'),                     # Badilisha dark/light mode

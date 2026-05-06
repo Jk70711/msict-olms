@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% block title %}My Fines{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-cash-coin"></i> My Fines</h4>
+
+<div class="row mb-3">
+  <div class="col-md-4">
+    <div class="card p-3 border-warning">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-warning bg-opacity-10 p-3">
+          <i class="bi bi-cash-stack text-warning fs-3"></i>
+        </div>
+        <div>
+          <small class="text-muted">Total Unpaid</small>
+          <div class="fw-bold text-danger fs-4">TZS {{ total_unpaid|floatformat:2 }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-success bg-opacity-10 p-3">
+          <i class="bi bi-check-circle text-success fs-3"></i>
+        </div>
+        <div>
+          <small class="text-muted">Paid Fines</small>
+          <div class="fw-bold text-success fs-4">{{ fines|length|add:"-"|add:unpaid_fines|length }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3">
+      <div class="d-flex align-items-center gap-3">
+        <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+          <i class="bi bi-receipt text-primary fs-3"></i>
+        </div>
+        <div>
+          <small class="text-muted">Total Fines</small>
+          <div class="fw-bold text-primary fs-4">{{ fines|length }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if unpaid_fines %}
+<div class="alert alert-warning border-warning mb-3">
+  <h6 class="fw-bold mb-2"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Fines Detected</h6>
+  <p class="mb-2">You have unpaid fines totaling <strong>TZS {{ total_unpaid|floatformat:2 }}</strong>.</p>
+  <p class="mb-0">Please visit the <strong>library circulation desk</strong> to make payment. The librarian will record your payment and update your status.</p>
+</div>
+
+<div class="card mb-3 border-success">
+  <div class="card-body">
+    <h6 class="fw-bold mb-3"><i class="bi bi-info-circle"></i> Payment Instructions</h6>
+    <ol class="mb-0">
+      <li>Visit the library circulation desk during working hours</li>
+      <li>Inform the librarian that you have fines to pay</li>
+      <li>Pay using any of the accepted methods: Cash, M-Pesa, Tigo Pesa, Airtel Money, Visa, Bank Transfer</li>
+      <li>Request a receipt number from the librarian</li>
+      <li>Your payment will be recorded in the system and your borrowing eligibility will be restored</li>
+    </ol>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>S/N</th>
+            <th>Reason</th>
+            <th>Book</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Date</th>
+            <th>Payment Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for fine in fines %}
+          <tr class="{% if not fine.paid %}table-warning{% endif %}">
+            <td>{{ forloop.counter }}</td>
+            <td><small>{{ fine.reason }}</small></td>
+            <td><small>{% if fine.transaction %}{{ fine.transaction.copy.book.title }}{% else %}—{% endif %}</small></td>
+            <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:2 }}</td>
+            <td>
+              {% if fine.paid %}
+                <span class="badge bg-success">Paid</span>
+              {% else %}
+                <span class="badge bg-danger">Unpaid</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ fine.created_at|date:"d M Y" }}</small></td>
+            <td>
+              {% if fine.paid %}
+                <small>
+                  <span class="fw-semibold">{{ fine.get_payment_method_display|default:fine.payment_method }}</span>
+                  {% if fine.receipt_no %}<br><code>{{ fine.receipt_no }}</code>{% endif %}
+                  {% if fine.paid_at %}<br><span class="text-muted">{{ fine.paid_at|date:"d M Y H:i" }}</span>{% endif %}
+                </small>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No fines recorded. Great job!</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

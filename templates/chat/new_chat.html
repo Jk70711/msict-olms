@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% block title %}New Chat{% endblock %}
+
+{% block content %}
+<style>
+  .picker-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .picker-list { display: grid; gap: .35rem; max-height: 60vh; overflow-y: auto; }
+  .picker-item {
+    display: flex; gap: .75rem; align-items: center;
+    padding: .65rem .8rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    color: inherit;
+    transition: all .12s;
+  }
+  .picker-item:hover {
+    border-color: var(--accent);
+    background: var(--accent-light);
+    color: inherit;
+  }
+  .picker-avatar {
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600;
+    flex-shrink: 0;
+    object-fit: cover;
+  }
+  .picker-name { font-weight: 600; font-size: .9rem; }
+  .picker-meta { font-size: .75rem; color: var(--text-muted); }
+  .role-pill {
+    font-size: .68rem;
+    font-weight: 600;
+    padding: .15rem .55rem;
+    border-radius: 12px;
+    text-transform: capitalize;
+  }
+  .role-pill.role-librarian { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; }
+  .role-pill.role-admin     { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+  .role-pill.role-member    { background:#f0fdf4; color:#059669; border:1px solid #bbf7d0; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-person-plus"></i> Start New Chat</h4>
+  <a href="{% url 'chat_inbox' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Back to Inbox
+  </a>
+</div>
+
+<div class="picker-card">
+  <form method="get" class="mb-3">
+    <div class="input-group">
+      <span class="input-group-text"><i class="bi bi-search"></i></span>
+      <input type="text" name="q" value="{{ q }}" class="form-control"
+             placeholder="Search by name, username or email…" autofocus>
+      <button class="btn btn-msict" type="submit">Search</button>
+    </div>
+    <div class="form-text">
+      {% if request.user.role == 'member' %}
+        You can chat with librarians and administrators only.
+      {% else %}
+        You can chat with any active user (members, librarians, administrators).
+      {% endif %}
+    </div>
+  </form>
+
+  <div class="picker-list">
+    {% for u in partners %}
+      <a href="{% url 'chat_start' u.pk %}" class="picker-item">
+        {% if u.photo %}
+          <img src="{{ u.photo.url }}" class="picker-avatar" alt="">
+        {% else %}
+          <div class="picker-avatar">{{ u.first_name.0|default:u.username.0|upper }}{{ u.surname.0|default:''|upper }}</div>
+        {% endif %}
+        <div class="flex-grow-1 min-width-0">
+          <div class="picker-name">{{ u.get_full_name|default:u.username }}</div>
+          <div class="picker-meta">@{{ u.username }} · {{ u.email }}</div>
+        </div>
+        <span class="role-pill role-{{ u.role }}">{{ u.role }}</span>
+      </a>
+    {% empty %}
+      <div class="text-center py-4 text-body-secondary">
+        <i class="bi bi-person-x fs-1 opacity-50"></i>
+        <p class="mb-0 mt-2">{% if q %}No users match "<strong>{{ q }}</strong>".{% else %}No users available.{% endif %}</p>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

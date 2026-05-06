@@ -29,7 +29,7 @@
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>S/N</th><th>Username</th><th>Full Name</th><th>Army No</th><th>Role</th><th>Type</th><th>Email</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>S/N</th><th>Username</th><th>Full Name</th><th>Card No</th><th>Army No</th><th>Role</th><th>Type</th><th>Email</th><th>Status</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for u in users %}
@@ -37,6 +37,7 @@
           <td>{{ forloop.counter }}</td>
           <td><a href="{% url 'user_detail' u.pk %}" class="fw-bold text-decoration-none"><code>{{ u.username }}</code></a></td>
           <td>{{ u.get_full_name }}</td>
+          <td><code class="text-primary">{{ u.virtual_card.short_card_no|default:"—" }}</code></td>
           <td><small>{{ u.army_no }}</small></td>
           <td><span class="badge badge-role-{{ u.role }}">{{ u.role|title }}</span></td>
           <td>
@@ -77,7 +78,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="text-center text-muted py-4">No users found.</td></tr>
+        <tr><td colspan="11" class="text-center text-muted py-4">No users found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -8,19 +8,28 @@
 </div>
 
 {% if not user_can_borrow %}
+{% if borrow_block_reason == 'fines' %}
+<div class="alert alert-danger border-danger d-flex align-items-center gap-2 mb-3">
+  <i class="bi bi-cash-coin fs-4 text-danger"></i>
+  <div class="text-dark fw-semibold" style="font-size: 1.05rem; line-height: 1.5;">
+    <strong class="text-danger">BORROWING BLOCKED:</strong> You have unpaid fines. 
+    <span class="text-dark">Pay at the circulation desk before browsing new borrows.</span>
+    <div class="mt-1 small text-muted">You can still <strong>download free PDFs</strong> and <strong>read already borrowed</strong> soft copies.</div>
+  </div>
+</div>
+{% else %}
 <div class="alert alert-warning d-flex align-items-center gap-2 mb-3">
   <i class="bi bi-exclamation-triangle-fill fs-5"></i>
   <div>
     {% if borrow_block_reason == 'overdue' %}
       <strong>Borrowing blocked:</strong> You have overdue items. Return them before borrowing new ones.
-    {% elif borrow_block_reason == 'fines' %}
-      <strong>Borrowing blocked:</strong> You have unpaid fines. Pay at the circulation desk.
     {% else %}
       <strong>Borrowing blocked:</strong> You have reached the maximum of 3 active borrows.
     {% endif %}
     You can still <strong>download free PDFs</strong> and <strong>read already borrowed</strong> soft copies.
   </div>
 </div>
+{% endif %}
 {% endif %}
 
 <!-- Stats -->

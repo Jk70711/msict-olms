@@ -89,7 +89,7 @@ class BorrowingTransaction(models.Model):
         super().save(*args, **kwargs)
 
     def is_overdue(self):
-        return self.status == 'borrowed' and timezone.now() > self.due_date
+        return self.status in ('borrowed', 'overdue') and timezone.now() > self.due_date
 
     def days_overdue(self):
         if timezone.now() > self.due_date and self.status in ('borrowed', 'overdue'):
@@ -159,37 +159,89 @@ class BorrowingTransaction(models.Model):
     @property
     def is_link_active(self):
         """For softcopy: True only when borrow period has not yet expired."""
+        # For free softcopies, link is always active while borrowed
+        if self.copy.copy_type == 'softcopy' and self.copy.access_type == 'free':
+            return self.status in ('borrowed', 'overdue')
+        # For special (borrow) softcopies, link is only active within due_date
         return self.status in ('borrowed', 'overdue') and timezone.now() <= self.due_date
+    
+    @property
+    def is_link_expired(self):
+        """Check if special softcopy link has expired (past due date)."""
+        if self.copy.copy_type == 'softcopy' and self.copy.access_type == 'borrow':
+            return self.status in ('borrowed', 'overdue') and timezone.now() > self.due_date
+        return False
+    
+    @property
+    def calculated_fine(self):
+        """Calculate current fine amount based on overdue days and FINE_PER_DAY."""
+        from django.conf import settings
+        if not self.is_overdue():
+            return 0
+        days_overdue = self.days_overdue()
+        fine_per_day = getattr(settings, 'FINE_PER_DAY', 1000)
+        return days_overdue * fine_per_day
+    
+    @property
+    def has_unpaid_fine(self):
+        """Check if this transaction has any unpaid fine."""
+        return self.fines.filter(paid=False).exists()
+
+    @property
+    def total_fine_paid(self):
+        """Get total amount paid for fines on this transaction."""
+        return sum(fine.amount_paid for fine in self.fines.all())
+
+    @property
+    def total_fine_remaining(self):
+        """Get total remaining fine amount for this transaction."""
+        return sum(fine.remaining_balance for fine in self.fines.filter(paid=False))
 
     @property
     def renewals_left(self):
         max_renewals = int(_pref('MAX_RENEWALS', 2))
         return max(0, max_renewals - self.renewed_count)
 
+    @property
+    def is_renewable(self):
+        """Boolean property for templates - check all renewal conditions without message."""
+        can_renew, _ = self.can_renew()
+        return can_renew
+
     def can_renew(self):
         max_renewals = int(_pref('MAX_RENEWALS', 2))
+        # 1. Max renewals: 2 times max per copy
         if self.renewed_count >= max_renewals:
-            return False
+            return False, "Maximum renewals reached (2 times). Return the book then borrow again."
+        # 2. Check for unpaid fines - block renewal if user has fines
+        if Fine.objects.filter(user=self.user, paid=False).exists():
+            return False, "You have unpaid fines. Please pay all fines before renewing."
+        # 3. Eligible only between days 1-6 (day 7+ is overdue, not eligible)
+        days_borrowed = (timezone.now() - self.borrow_date).days
+        if days_borrowed < 1:
+            return False, "Renewal available after 24 hours from borrow date."
+        if self.is_overdue():
+            return False, "Overdue books cannot be renewed. Please return the book."
+        # 4. Hardcopy check for reservations
         is_soft = self.copy.copy_type == 'softcopy'
-        if not is_soft and self.is_overdue():
-            return False
         if not is_soft:
             if Reservation.objects.filter(
                 book=self.copy.book, status='pending'
             ).exists():
-                return False
-        return True
+                return False, "This book has pending reservations. Cannot renew."
+        return True, "Eligible for renewal"
 
     def renew(self):
-        if self.can_renew():
+        can_renew, message = self.can_renew()
+        if can_renew:
             loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
             self.due_date = timezone.now() + timedelta(days=loan_days)
             self.renewed_count += 1
             if self.status == 'overdue':
                 self.status = 'borrowed'
             self.save()
-            return True
-        return False
+            return True, message
+        return False, message
 
 
 # Uhifadhi wa nafasi — kwa vitabu vya hardcopy (nakala za kimwili) zilizokopwa zote
@@ -250,11 +302,12 @@ class Fine(models.Model):
         BorrowingTransaction, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='fines'
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Total fine amount
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Amount paid so far
     reason = models.CharField(max_length=200, blank=True)
-    paid = models.BooleanField(default=False)
+    paid = models.BooleanField(default=False)  # Fully paid flag
     payment_method = models.CharField(max_length=50, blank=True)
-    receipt_no = models.CharField(max_length=100, blank=True)
+    receipt_no = models.TextField(blank=True, default='')  # Payment history log — each payment appended
     created_at = models.DateTimeField(auto_now_add=True)
     paid_at = models.DateTimeField(null=True, blank=True)
 
@@ -263,7 +316,17 @@ class Fine(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"Fine {self.amount} for {self.user.username}"
+        return f"Fine {self.amount} for {self.user.username} (Paid: {self.amount_paid})"
+    
+    @property
+    def remaining_balance(self):
+        """Calculate remaining balance to be paid"""
+        return max(0, self.amount - self.amount_paid)
+    
+    @property
+    def is_fully_paid(self):
+        """Check if fine is fully paid"""
+        return self.amount_paid >= self.amount
 
 
 # Arifa zilizotumwa kwa mwanachama — SMS au barua pepe
@@ -278,6 +341,7 @@ class Notification(models.Model):
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='normal')
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    is_security_alert = models.BooleanField(default=False, help_text='Mark as security alert (suspension, lock attempts, suspicious activity)')
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
 

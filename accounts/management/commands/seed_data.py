@@ -63,7 +63,7 @@ class Command(BaseCommand):
             ('SOFTCOPY_LOAN_PERIOD_DAYS', '3', 'Loan period in days for special softcopies'),
             ('MAX_RENEWALS', '2', 'Maximum number of renewals per transaction'),
             ('MAX_COPIES_PER_BORROW', '3', 'Maximum simultaneous borrows per member'),
-            ('FINE_PER_DAY', '500', 'Fine amount per overdue day in TZS'),
+            ('FINE_PER_DAY', '1000', 'Fine amount per overdue day in TZS'),
             ('OTP_VALIDITY_MINUTES', '10', 'OTP validity period in minutes'),
             ('MAX_LOGIN_ATTEMPTS', '5', 'Max failed login attempts before account lockout'),
         ]

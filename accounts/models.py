@@ -113,8 +113,10 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
 
     def has_overdue(self):
         from circulation.models import BorrowingTransaction
+        from django.db.models import Q
         return BorrowingTransaction.objects.filter(
-            user=self, status='overdue'
+            Q(user=self, status='overdue') |
+            Q(user=self, status='borrowed', due_date__lt=timezone.now())
         ).exists()
 
     def active_borrows_count(self):
@@ -195,6 +197,15 @@ class VirtualCard(models.Model):
 
     def __str__(self):
         return f"Card for {self.user.get_full_name()} [{self.card_no or 'No Card No'}]"
+
+    @property
+    def short_card_no(self):
+        """Return only the unique number part (e.g., 000001) instead of full card number."""
+        if not self.card_no:
+            return 'N/A'
+        import re
+        m = re.search(r'(\d+)$', self.card_no)
+        return m.group(1) if m else self.card_no
 
     @classmethod
     def generate_card_no(cls):

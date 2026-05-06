@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}My Dashboard{% endblock %}
 {% block content %}
-<h4 style= "color: #0c4d4de8" class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> My Library Dashboard</h4>
+<h4 class="fw-bold mb-4 text-body-emphasis"><i class="bi bi-speedometer2"></i> My Library Dashboard</h4>
 
 {% if has_overdue %}
 <div class="overdue-banner mb-3">
@@ -10,34 +10,47 @@
 </div>
 {% endif %}
 
+{% if unpaid_fines %}
+<div class="alert alert-danger border-danger d-flex align-items-center gap-2 mb-3">
+  <i class="bi bi-cash-coin fs-4 text-danger"></i>
+  <div class="text-dark fw-semibold" style="font-size: 1.05rem; line-height: 1.5;">
+    <strong class="text-danger">BORROWING BLOCKED:</strong> You have unpaid fines. 
+    <span class="text-dark">Pay at the circulation desk before browsing new borrows.</span>
+    <div class="mt-1 small text-muted">Total fines: <strong class="text-danger">TZS {{ total_fines|floatformat:2 }}</strong></div>
+  </div>
+</div>
+{% endif %}
+
 <div class="row g-3 mb-4">
   <div class="col-6 col-md-3">
     <div class="card stat-card p-3 text-center">
       <i class="bi bi-book-fill fs-2 text-primary mb-1"></i>
-      <div class="fs-3 fw-bold" style="color:#0f172a">{{ active_transactions.count }}</div>
-      <div class="small fw-medium" style="color:#475569">Active Borrows</div>
+      <div class="fs-3 fw-bold text-body-emphasis">{{ active_transactions.count }}</div>
+      <div class="small fw-medium text-body-secondary">Active Borrows</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <div class="card stat-card danger p-3 text-center">
       <i class="bi bi-exclamation-triangle-fill fs-2 text-danger mb-1"></i>
       <div class="fs-3 fw-bold text-danger">{{ overdue_transactions.count }}</div>
-      <div class="small fw-medium" style="color:#475569">Overdue</div>
+      <div class="small fw-medium text-body-secondary">Overdue</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <div class="card stat-card warning p-3 text-center">
       <i class="bi bi-bookmark-fill fs-2 text-warning mb-1"></i>
-      <div class="fs-3 fw-bold" style="color:#d97706">{{ reservations.count }}</div>
-      <div class="small fw-medium" style="color:#475569">Reservations</div>
+      <div class="fs-3 fw-bold text-body-emphasis">{{ reservations.count }}</div>
+      <div class="small fw-medium text-body-secondary">Reservations</div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card p-3 text-center">
-      <i class="bi bi-cash-coin fs-2 text-danger mb-1"></i>
-      <div class="fs-3 fw-bold text-danger">{{ total_fines|floatformat:0 }}</div>
-      <div class="small fw-medium" style="color:#475569">Unpaid Fines (TZS)</div>
-    </div>
+    <a href="{% url 'my_fines' %}" class="text-decoration-none">
+      <div class="card stat-card p-3 text-center">
+        <i class="bi bi-cash-coin fs-2 text-danger mb-1"></i>
+        <div class="fs-3 fw-bold text-body-emphasis">{{ total_fines|floatformat:0 }}</div>
+        <div class="small fw-medium text-body-secondary">Unpaid Fines (TZS)</div>
+      </div>
+    </a>
   </div>
 </div>
 
@@ -46,7 +59,7 @@
     <!-- Active Borrows -->
     <div class="card p-3 mb-3">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0"><i class="bi bi-book"></i> Current Borrows</h6>
+        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-book"></i> Current Borrows</h6>
         <a href="{% url 'borrow_catalog' %}" class="btn btn-sm btn-msict"><i class="bi bi-plus"></i> Borrow</a>
       </div>
       {% if active_transactions %}
@@ -68,20 +81,35 @@
                 </small>
               </td>
               <td>
-                {% if tx.status == 'overdue' %}<span class="badge bg-danger">Overdue</span>
-                {% else %}<span class="badge bg-warning text-dark">Borrowed</span>{% endif %}
+                {% if tx.is_link_expired %}
+                  <span class="badge bg-dark">Link Expired</span>
+                  {% if tx.has_unpaid_fine %}<br><small class="text-danger">Fine: TZS {{ tx.total_fine_remaining }}</small>{% endif %}
+                {% elif tx.status == 'overdue' %}
+                  <span class="badge bg-danger">Overdue</span>
+                {% else %}
+                  <span class="badge bg-warning text-dark">Borrowed</span>
+                {% endif %}
               </td>
               <td>
                 {% if tx.copy.copy_type == 'softcopy' and tx.copy.file_path and tx.is_link_active %}
                 <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-xs btn-sm btn-primary py-0" target="_blank">
                   <i class="bi bi-book-fill"></i> Read
                 </a>
+                {% elif tx.is_link_expired %}
+                <span class="btn btn-xs btn-sm btn-outline-secondary disabled py-0" title="Link expired. Pay fine to return.">
+                  <i class="bi bi-clock-history"></i> Expired
+                </span>
                 {% endif %}
-                {% if tx.can_renew %}
+                {% if tx.is_renewable %}
                 <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-xs btn-sm btn-outline-success py-0">Renew</a>
+                <span class="small text-muted">({{ tx.renewals_left }})</span>
                 {% endif %}
                 {% if tx.copy.copy_type == 'softcopy' %}
-                <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
+                  {% if not unpaid_fines %}
+                  <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
+                  {% else %}
+                  <span class="btn btn-xs btn-sm btn-outline-danger disabled py-0" title="Pay fines first">Return Blocked</span>
+                  {% endif %}
                 {% endif %}
               </td>
             </tr>
@@ -97,7 +125,7 @@
     <!-- Pending Requests -->
     {% if pending_requests %}
     <div class="card p-3 mb-3">
-      <h6 class="fw-bold mb-2"><i class="bi bi-clock text-warning"></i> Pending Requests</h6>
+      <h6 class="fw-bold mb-2 text-body-emphasis"><i class="bi bi-clock text-warning"></i> Pending Requests</h6>
       <table class="table table-sm table-hover align-middle mb-0">
         <thead class="table-light">
           <tr><th>S/N</th><th>Book</th><th>Requested</th><th>Actions</th></tr>
@@ -140,7 +168,7 @@
     {% if reservations %}
     <div class="card p-3 mb-3">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0"><i class="bi bi-bookmark text-warning"></i> My Reservations</h6>
+        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-bookmark text-warning"></i> My Reservations</h6>
         <a href="{% url 'my_reservations' %}" class="btn btn-outline-secondary btn-sm py-0">View All</a>
       </div>
       {% for res in reservations %}
@@ -166,7 +194,7 @@
     <!-- Fines -->
     {% if unpaid_fines %}
     <div class="card p-3 mb-3 border-danger">
-      <h6 class="fw-bold mb-2 text-danger"><i class="bi bi-cash-coin"></i> Outstanding Fines</h6>
+      <h6 class="fw-bold mb-2 text-body-emphasis"><i class="bi bi-cash-coin"></i> Outstanding Fines</h6>
       {% for fine in unpaid_fines %}
       <div class="d-flex justify-content-between border-bottom py-1">
         <small>{{ fine.reason|truncatechars:40 }}</small>
@@ -182,7 +210,7 @@
     {% if borrow_history %}
     <div class="card p-3 mb-3">
       <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history text-success"></i> Recent Returns</h6>
+        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-clock-history text-success"></i> Recent Returns</h6>
         <a href="{% url 'member_msict_borrowings' %}" class="btn btn-outline-secondary btn-sm py-0">View All</a>
       </div>
       {% for tx in borrow_history %}
@@ -202,11 +230,11 @@
 
     <!-- Notifications -->
     <div class="card p-3">
-      <h6 class="fw-bold mb-2"><i class="bi bi-bell"></i> Recent Notifications</h6>
+      <h6 class="fw-bold mb-2 text-body-emphasis"><i class="bi bi-bell"></i> Recent Notifications</h6>
       {% for notif in notifications %}
       <div class="border-bottom py-2">
         <div class="small">{{ notif.message|truncatechars:80 }}</div>
-        <div class="small" style="color:#64748b">{{ notif.created_at|timesince }} ago
+        <div class="small text-body-secondary">{{ notif.created_at|timesince }} ago
           {% if notif.channel == 'sms' %}<span class="badge bg-success ms-1">SMS</span>
           {% elif notif.channel == 'email' %}<span class="badge bg-primary ms-1">Email</span>
           {% else %}<span class="badge bg-secondary ms-1">{{ notif.channel }}</span>{% endif %}

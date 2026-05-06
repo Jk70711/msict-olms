@@ -996,7 +996,8 @@
         });
 
         // Rotate the ring to show current item
-        const ringRotation = -angleStep * currentIndex;
+        const ringRotation = angleStep * currentIndex;
+        
         ring.style.transform = `translateZ(-${radius}px) rotateY(${ringRotation}deg)`;
 
         // Update dots

@@ -1,35 +1,140 @@
 {% extends 'base.html' %}
 {% block title %}Fines (POS){% endblock %}
 {% block content %}
-<h4 class="fw-bold mb-3"><i class="bi bi-cash-coin"></i> Fines — Point of Sale</h4>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-cash-coin"></i> Fines — Point of Sale</h4>
+  <div class="alert alert-info py-1 px-3 mb-0">
+    <small><i class="bi bi-info-circle"></i> Fine Rate: <strong>TZS {{ fine_per_day|floatformat:0 }}</strong> per day | Fines accumulate daily until paid</small>
+  </div>
+</div>
+
+{% if user_summary %}
+<div class="card mb-3 border-warning">
+  <div class="card-header d-flex justify-content-between align-items-center py-2" role="button"
+       data-bs-toggle="collapse" data-bs-target="#userSummaryPanel" aria-expanded="false">
+    <span class="fw-bold"><i class="bi bi-people-fill text-warning"></i> Members with Outstanding Fines ({{ user_summary|length }})</span>
+    <i class="bi bi-chevron-down"></i>
+  </div>
+  <div class="collapse" id="userSummaryPanel">
+    <div class="table-responsive">
+      <table class="table table-sm mb-0">
+        <thead class="table-light">
+          <tr><th>#</th><th>Member</th><th>Army No</th><th>Fines</th><th>Remaining (TZS)</th><th>Action</th></tr>
+        </thead>
+        <tbody>
+          {% for u in user_summary %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td class="fw-semibold">{{ u.name }}</td>
+            <td><small class="text-muted">{{ u.army_no }}</small></td>
+            <td><span class="badge bg-warning text-dark">{{ u.fine_count }}</span></td>
+            <td class="fw-bold text-danger">{{ u.remaining|floatformat:2 }}</td>
+            <td><a href="{% url 'user_fines' u.user_id %}" class="btn btn-sm btn-success py-0"><i class="bi bi-cash-stack"></i> Pay</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">
-      <thead><tr><th>S/N</th><th>Member</th><th>Reason</th><th>Amount</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+      <thead class="table-light">
+        <tr>
+          <th>S/N</th>
+          <th>Member</th>
+          <th>Book / Reason</th>
+          <th>Days</th>
+          <th>Amount</th>
+          <th>Status</th>
+          <th>Payment Details</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
       <tbody>
         {% for fine in fines %}
         <tr class="{% if not fine.paid %}table-warning{% endif %}">
           <td>{{ forloop.counter }}</td>
-          <td><small class="fw-semibold">{{ fine.user.get_full_name }}<br><span class="text-muted">{{ fine.user.army_no }}</span></small></td>
-          <td><small>{{ fine.reason|truncatechars:55 }}</small></td>
-          <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:2 }}</td>
-          <td>{% if fine.paid %}<span class="badge bg-success">Paid</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
-          <td><small class="text-muted">{{ fine.created_at|date:"d M Y" }}</small></td>
+          <td>
+            <a href="{% url 'user_fines' fine.user.pk %}" class="text-decoration-none">
+              <small class="fw-semibold">{{ fine.user.get_full_name }}</small><br>
+              <span class="text-muted">{{ fine.user.army_no }}</span>
+            </a>
+          </td>
+          <td>
+            <small>
+              {% if fine.transaction %}
+                <strong>{{ fine.transaction.copy.book.title|truncatechars:30 }}</strong><br>
+                <span class="text-muted">{{ fine.reason }}</span>
+              {% else %}
+                {{ fine.reason|truncatechars:55 }}
+              {% endif %}
+            </small>
+          </td>
+          <td>
+            {% if fine.transaction and fine.transaction.status == 'overdue' %}
+              <span class="badge bg-danger">{{ fine.transaction.days_overdue }} days</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">
+            TZS {{ fine.amount|floatformat:2 }}
+          </td>
+          <td>
+            {% if fine.paid %}
+              <span class="badge bg-success">Paid</span>
+            {% elif fine.amount_paid > 0 %}
+              <span class="badge bg-warning text-dark">Partial</span>
+            {% else %}
+              <span class="badge bg-danger">Unpaid</span>
+            {% endif %}
+            {% if fine.transaction and fine.transaction.status == 'overdue' %}
+              <br><small class="text-warning"><i class="bi bi-arrow-up-circle"></i> Accruing</small>
+            {% endif %}
+          </td>
+          <td>
+            <small>
+              <strong>Due:</strong> TZS {{ fine.amount|floatformat:2 }}<br>
+              {% if fine.amount_paid > 0 %}
+                <strong>Paid:</strong> TZS {{ fine.amount_paid|floatformat:2 }}<br>
+                <strong class="{% if fine.remaining_balance > 0 %}text-danger{% else %}text-success{% endif %}">Remaining:</strong> TZS {{ fine.remaining_balance|floatformat:2 }}
+              {% endif %}
+            </small>
+          </td>
           <td>
             {% if not fine.paid %}
             <a href="{% url 'record_fine_payment' fine.pk %}" class="btn btn-sm btn-success py-0">
-              <i class="bi bi-cash-stack"></i> Record Payment
+              <i class="bi bi-cash-stack"></i> Pay
             </a>
             {% else %}
-            <small class="text-muted">{{ fine.payment_method }} {{ fine.paid_at|date:"d M" }}</small>
+            <small class="text-muted">{{ fine.payment_method }}<br>{{ fine.paid_at|date:"d M Y" }}</small>
             {% endif %}
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-center py-4 text-muted">No fines recorded.</td></tr>
+        <tr>
+          <td colspan="7" class="text-center py-4 text-muted">
+            <i class="bi bi-check-circle text-success"></i> No fines recorded.<br>
+            <small>Fines are generated automatically when books become overdue.</small>
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+</div>
+
+<div class="alert alert-warning mt-3">
+  <h6 class="fw-bold"><i class="bi bi-exclamation-triangle"></i> How Fines Work</h6>
+  <ul class="mb-0 small">
+    <li><strong>Day 1–{{ loan_period_days }}:</strong> Borrow period — no fine charged</li>
+    <li><strong>Day {{ fine_start_day }} onwards:</strong> Fine starts at <strong>TZS {{ fine_per_day|floatformat:0 }} per day</strong> and <strong>accumulates daily</strong></li>
+    <li>Fines automatically increase every day until the book is returned and fine is paid</li>
+    <li>Click <strong>"Pay"</strong> to record payment and stop fine accumulation</li>
+  </ul>
 </div>
 {% endblock %}

@@ -13,6 +13,7 @@ from django.utils import timezone
 from django.db.models import Q
 from django.conf import settings
 from datetime import timedelta
+from decimal import Decimal
 
 from accounts.views import librarian_required
 from accounts.utils import log_audit, send_sms, send_email_notification, create_notification, notify_user
@@ -115,6 +116,9 @@ def download_free_book_view(request, book_id):
 def borrow_catalog_view(request):
     if request.user.has_overdue():
         messages.error(request, 'You have overdue books. Return them before borrowing new ones.')
+        return redirect('member_dashboard')
+    if request.user.has_unpaid_fines():
+        messages.error(request, 'You have unpaid fines. Pay at the circulation desk before browsing new borrows.')
         return redirect('member_dashboard')
 
     query = request.GET.get('q', '')
@@ -267,6 +271,24 @@ def approve_borrow_request_view(request, request_id):
         messages.error(request, f'Rejected: {user.username} has overdue books.')
         return redirect('librarian_dashboard')
 
+    if user.has_unpaid_fines():
+        req.status = 'rejected'
+        req.rejection_reason = 'User has unpaid fines.'
+        req.approved_by = request.user
+        req.save()
+        messages.error(request, f'Rejected: {user.username} has unpaid fines.')
+        return redirect('librarian_dashboard')
+
+    # Check max borrows limit (softcopy + hardcopy combined)
+    max_copies = int(_pref('MAX_COPIES_PER_BORROW', 3))
+    if user.active_borrows_count() >= max_copies:
+        req.status = 'rejected'
+        req.rejection_reason = f'User already has {max_copies} active borrows (max limit reached).'
+        req.approved_by = request.user
+        req.save()
+        messages.error(request, f'Rejected: {user.username} already has {max_copies} active borrows.')
+        return redirect('librarian_dashboard')
+
     if copy.copy_type == 'hardcopy' and copy.status != 'available':
         messages.error(request, 'Hardcopy is no longer available.')
         return redirect('librarian_dashboard')
@@ -340,14 +362,15 @@ def reject_borrow_request_view(request, request_id):
 @login_required
 def renew_transaction_view(request, transaction_id):
     tx = get_object_or_404(BorrowingTransaction, pk=transaction_id, user=request.user)
-    if tx.renew():
+    success, message = tx.renew()
+    if success:
         msg = f"MSICT OLMS: '{tx.copy.book.title}' renewed. New due date: {tx.due_date.date()}"
         notify_user(request.user, msg, 'sms')
         notify_user(request.user, msg, 'email', subject='Renewal Confirmation')
         log_audit(request.user, f"Renewed '{tx.copy.book.title}'. New due: {tx.due_date.date()}", request)
         messages.success(request, f'Renewed successfully. New due date: {tx.due_date.date()}')
     else:
-        messages.error(request, 'Cannot renew. Check overdue status, max renewals, or reservations.')
+        messages.error(request, message)
     return redirect('member_dashboard')
 
 
@@ -361,6 +384,22 @@ def return_early_view(request, transaction_id):
     if tx.copy.copy_type != 'softcopy':
         messages.error(request, 'Only soft copies can be returned online. Bring hardcopies to the desk.')
         return redirect('member_dashboard')
+    
+    # Special softcopy expiry logic: check if link is expired
+    if tx.copy.access_type == 'borrow' and tx.is_link_expired:
+        # Link expired - check if fine is paid
+        if tx.has_unpaid_fine:
+            # Fine not paid - block return
+            messages.error(
+                request,
+                f'Your access to "{tx.copy.book.title}" expired on {tx.due_date.strftime("%d %b %Y")}. '
+                f'Outstanding fine: TZS {tx.total_fine_remaining}. '
+                f'Please pay the fine at the circulation desk before returning this book.'
+            )
+            return redirect('member_msict_borrowings')
+        # Fine paid - allow return to complete
+    
+    # Regular return process (non-expired or fine paid)
     tx.return_date = timezone.now()
     tx.status = 'returned'
     tx.save(update_fields=['return_date', 'status'])
@@ -392,6 +431,12 @@ def _process_desk_return(request, copy_pk_str):
     ).select_related('user').first()
     if not tx:
         messages.error(request, f'No active borrowing found for "{copy.accession_no}".')
+        return None
+
+    # Check for unpaid fines - block return if user has fines
+    from circulation.models import Fine
+    if Fine.objects.filter(user=tx.user, paid=False).exists():
+        messages.error(request, f'Member has unpaid fines. Cannot return until fines are paid.')
         return None
 
     tx.return_date = timezone.now()
@@ -972,12 +1017,245 @@ def overdue_list_view(request):
     return render(request, 'circulation/overdue_list.html', {'overdue': overdue})
 
 
-# Orodha ya faini zote — kwa mtunzaji
+def _extract_total_paid_from_log(receipt_no):
+    """Parse the payment history log to sum actual amounts paid.
+    Returns Decimal total if parseable, else None."""
+    import re
+    if not receipt_no:
+        return None
+    amounts = re.findall(r'TZS\s*([\d]+(?:\.\d+)?)', receipt_no)
+    if amounts:
+        try:
+            return sum(Decimal(a) for a in amounts)
+        except Exception:
+            return None
+    return None
+
+
+def _sync_overdue_fines(fine_per_day):
+    """Shared helper: update existing unpaid fines and create missing ones for overdue transactions.
+    Also merges any duplicates (paid + unpaid for same transaction) into a single fine record.
+    """
+    overdue_transactions = BorrowingTransaction.objects.filter(
+        status='overdue'
+    ).select_related('user', 'copy__book')
+    for tx in overdue_transactions:
+        days = tx.days_overdue()
+        if days <= 0:
+            continue
+        new_amount = days * fine_per_day
+        title = tx.copy.book.title
+        reason = f"Overdue fine for '{title}' ({days} days)"
+
+        paid_fines = Fine.objects.filter(transaction=tx, paid=True).order_by('created_at')
+        unpaid_fines = Fine.objects.filter(transaction=tx, paid=False).order_by('created_at')
+
+        if paid_fines.exists() and unpaid_fines.exists():
+            # Duplicate: paid + unpaid fine for the same transaction.
+            # Merge: delete unpaid duplicates, reactivate the paid fine with updated amount.
+            base_fine = paid_fines.last()
+            unpaid_fines.delete()
+            # Recalculate actual amount_paid from payment log entries
+            actual_paid = _extract_total_paid_from_log(base_fine.receipt_no)
+            if actual_paid is not None and actual_paid != base_fine.amount_paid:
+                base_fine.amount_paid = actual_paid
+            base_fine.paid = base_fine.amount_paid >= new_amount
+            base_fine.amount = new_amount
+            base_fine.reason = reason
+            base_fine.save(update_fields=['paid', 'amount', 'amount_paid', 'reason'])
+
+        elif unpaid_fines.exists():
+            # Normal: update accumulated amount on existing unpaid fine
+            fine = unpaid_fines.last()
+            updates = []
+            if fine.amount != new_amount:
+                fine.amount = new_amount
+                updates.append('amount')
+            if fine.reason != reason:
+                fine.reason = reason
+                updates.append('reason')
+            # Fix inconsistency: paid=True but amount_paid < amount
+            if fine.paid and fine.amount_paid < fine.amount:
+                fine.paid = False
+                updates.append('paid')
+            # Fix inflated amount_paid: if receipt log shows a LOWER total than DB,
+            # the DB value was incorrectly set (e.g. by old capping bug). Correct it.
+            if fine.receipt_no and fine.amount_paid > 0:
+                actual_paid = _extract_total_paid_from_log(fine.receipt_no)
+                if actual_paid is not None and actual_paid < fine.amount_paid:
+                    fine.amount_paid = actual_paid
+                    fine.paid = fine.amount_paid >= fine.amount
+                    if 'paid' not in updates:
+                        updates.append('paid')
+                    updates.append('amount_paid')
+            if updates:
+                fine.save(update_fields=updates)
+
+        elif paid_fines.exists():
+            # Already paid: check for inconsistency (paid=True but amount_paid < amount)
+            base_fine = paid_fines.last()
+            if base_fine.amount_paid < base_fine.amount:
+                # Inconsistent: was marked paid but amount increased after sync
+                # Correct: set paid=False so remaining balance is shown
+                base_fine.paid = False
+                base_fine.amount = new_amount
+                base_fine.reason = reason
+                base_fine.save(update_fields=['paid', 'amount', 'reason'])
+
+        else:
+            # No fine yet: create one
+            Fine.objects.create(
+                user=tx.user,
+                transaction=tx,
+                amount=new_amount,
+                reason=reason,
+                paid=False,
+            )
+
+
+# Orodha ya faini zote — kwa mtunzaji (pamoja na faini zinazojumlisha kwa siku)
 @login_required
 @librarian_required
 def fine_list_view(request):
+    from django.db.models import Sum, Count
+    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    _sync_overdue_fines(fine_per_day)
+    
     fines = Fine.objects.select_related('user', 'transaction__copy__book').order_by('-created_at')
-    return render(request, 'circulation/fine_list.html', {'fines': fines})
+    
+    # Build per-user summary for the top panel (replaces separate 'Users with Fines' page)
+    user_summary_qs = (
+        Fine.objects.filter(paid=False)
+        .values('user__pk', 'user__first_name', 'user__surname', 'user__army_no')
+        .annotate(total_amount=Sum('amount'), total_paid=Sum('amount_paid'), fine_count=Count('pk'))
+        .order_by('-total_amount')
+    )
+    user_summary = [
+        {
+            'user_id': r['user__pk'],
+            'name': f"{r['user__first_name']} {r['user__surname']}".strip(),
+            'army_no': r['user__army_no'],
+            'fine_count': r['fine_count'],
+            'remaining': (r['total_amount'] or 0) - (r['total_paid'] or 0),
+        }
+        for r in user_summary_qs
+    ]
+    
+    loan_period_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+    return render(request, 'circulation/fine_list.html', {
+        'fines': fines,
+        'fine_per_day': fine_per_day,
+        'user_summary': user_summary,
+        'loan_period_days': loan_period_days,
+        'fine_start_day': loan_period_days + 1,
+    })
+
+
+@login_required
+@librarian_required
+def user_fines_view(request, user_id):
+    user_obj = get_object_or_404(OLMSUser, pk=user_id)
+    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    
+    # Reuse shared helper to sync this user's overdue fines
+    _sync_overdue_fines(fine_per_day)
+    
+    fines = Fine.objects.filter(
+        user=user_obj
+    ).select_related('transaction__copy__book').order_by('-created_at')
+    unpaid_fines = fines.filter(paid=False)
+    # Use remaining_balance (accounts for partial payments)
+    total_unpaid = sum(f.remaining_balance for f in unpaid_fines)
+    total_paid_count = fines.filter(paid=True).count()
+    loan_period_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+    return render(request, 'circulation/user_fines.html', {
+        'user_obj': user_obj,
+        'fines': fines,
+        'unpaid_fines': unpaid_fines,
+        'total_unpaid': total_unpaid,
+        'total_paid_count': total_paid_count,
+        'fine_per_day': fine_per_day,
+        'loan_period_days': loan_period_days,
+        'fine_start_day': loan_period_days + 1,
+    })
+
+
+@login_required
+def my_fines_view(request):
+    fines = Fine.objects.filter(
+        user=request.user
+    ).select_related('transaction__copy__book').order_by('-created_at')
+    unpaid_fines = fines.filter(paid=False)
+    total_unpaid = sum(f.amount for f in unpaid_fines)
+    return render(request, 'circulation/my_fines.html', {
+        'fines': fines,
+        'unpaid_fines': unpaid_fines,
+        'total_unpaid': total_unpaid,
+    })
+
+
+@login_required
+@librarian_required
+def users_with_unpaid_fines_view(request):
+    from django.db.models import Sum, Count, Q
+    from collections import defaultdict
+    
+    # Get users with unpaid fines
+    users_with_fines = (
+        Fine.objects
+        .filter(paid=False)
+        .values('user__pk', 'user__username', 'user__first_name', 'user__surname', 'user__army_no')
+        .annotate(total_amount=Sum('amount'), total_paid=Sum('amount_paid'), fine_count=Count('pk'))
+        .order_by('-total_amount')
+    )
+    
+    # Get users with overdue books (even if no fines yet)
+    overdue_users = (
+        BorrowingTransaction.objects
+        .filter(status='overdue')
+        .values('user__pk', 'user__username', 'user__first_name', 'user__surname', 'user__army_no')
+        .annotate(overdue_count=Count('pk'))
+        .order_by('-overdue_count')
+    )
+    
+    # Combine both sets
+    users_dict = {}
+    
+    # Add users with fines
+    for item in users_with_fines:
+        remaining = (item['total_amount'] or 0) - (item['total_paid'] or 0)
+        users_dict[item['user__pk']] = {
+            'user_id': item['user__pk'],
+            'username': item['user__username'],
+            'full_name': f"{item['user__first_name']} {item['user__surname']}".strip() or item['user__username'],
+            'army_no': item['user__army_no'],
+            'total_amount': remaining,
+            'fine_count': item['fine_count'],
+            'overdue_count': 0,
+        }
+    
+    # Add or update users with overdue books
+    for item in overdue_users:
+        if item['user__pk'] in users_dict:
+            users_dict[item['user__pk']]['overdue_count'] = item['overdue_count']
+        else:
+            users_dict[item['user__pk']] = {
+                'user_id': item['user__pk'],
+                'username': item['user__username'],
+                'full_name': f"{item['user__first_name']} {item['user__surname']}".strip() or item['user__username'],
+                'army_no': item['user__army_no'],
+                'total_amount': 0,
+                'fine_count': 0,
+                'overdue_count': item['overdue_count'],
+            }
+    
+    # Convert to list and sort by total amount + overdue priority
+    users_list = list(users_dict.values())
+    users_list.sort(key=lambda x: (x['total_amount'], x['overdue_count']), reverse=True)
+    
+    return render(request, 'circulation/users_with_fines.html', {
+        'users_list': users_list,
+    })
 
 
 # Rekodi malipo ya faini — mtunzaji anaweka nambari ya risiti na njia ya malipo
@@ -986,15 +1264,225 @@ def fine_list_view(request):
 def record_fine_payment_view(request, fine_id):
     fine = get_object_or_404(Fine, pk=fine_id)
     if request.method == 'POST':
-        fine.paid = True
-        fine.payment_method = request.POST.get('payment_method', 'cash')
-        fine.receipt_no = request.POST.get('receipt_no', '')
+        payment_method = request.POST.get('payment_method', 'cash')
+        receipt_no = request.POST.get('receipt_no', '').strip()
+        payment_amount_str = request.POST.get('payment_amount', '')
+        # Extra fields per payment method
+        phone_number    = request.POST.get('phone_number', '').strip()
+        bank_name       = request.POST.get('bank_name', '').strip()
+        bank_account_no = request.POST.get('bank_account_no', '').strip()
+        card_holder     = request.POST.get('card_holder', '').strip()
+        card_last4      = request.POST.get('card_last4', '').strip()
+        card_expiry     = request.POST.get('card_expiry', '').strip()
+        card_cvv        = request.POST.get('card_cvv', '').strip()
+
+        # Validate payment amount
+        try:
+            payment_amount = Decimal(payment_amount_str) if payment_amount_str else Decimal('0')
+        except (ValueError, TypeError):
+            payment_amount = Decimal('0')
+
+        if payment_amount <= 0:
+            messages.error(request, 'Payment amount must be greater than 0')
+            return render(request, 'circulation/fine_payment.html', {'fine': fine})
+
+        # Validate payment amount does not exceed remaining balance
+        remaining_balance = fine.amount - fine.amount_paid
+        if payment_amount > remaining_balance:
+            messages.error(
+                request,
+                f'Payment amount TZS {payment_amount} exceeds remaining balance TZS {remaining_balance}. '
+                f'Please enter correct amount not exceeding TZS {remaining_balance}.'
+            )
+            return render(request, 'circulation/fine_payment.html', {'fine': fine})
+
+        # Build payment log entry (appended — never overwritten)
+        MOBILE_METHODS = {'mpesa', 'tigopesa', 'airtel_money', 'halopesa'}
+        CARD_METHODS   = {'visa', 'mastercard'}
+        now_str = timezone.now().strftime('%d %b %Y %H:%M')
+        log_entry = f"[{now_str}] {payment_method.upper()} TZS {payment_amount}"
+
+        if payment_method in MOBILE_METHODS and phone_number:
+            log_entry += f" | Phone: {phone_number}"
+        elif payment_method == 'bank_transfer':
+            if bank_name:
+                log_entry += f" | Bank: {bank_name}"
+            if bank_account_no:
+                log_entry += f" | Acct: {bank_account_no}"
+            if receipt_no:
+                log_entry += f" | Ref: {receipt_no}"
+        elif payment_method in CARD_METHODS:
+            if card_holder:
+                log_entry += f" | Name: {card_holder}"
+            if card_last4:
+                log_entry += f" | Card: ****{card_last4}"
+            if card_expiry:
+                log_entry += f" | Exp: {card_expiry}"
+            # CVV not stored for security
+        
+        # Accumulate payment
+        fine.amount_paid += payment_amount
+        fine.payment_method = payment_method
         fine.paid_at = timezone.now()
+        # Append to log (never overwrite — preserves full payment history)
+        fine.receipt_no = (fine.receipt_no + "\n" + log_entry).strip()
+        
+        # Determine paid status based on actual accumulated amount
+        if fine.amount_paid >= fine.amount:
+            fine.paid = True
+        else:
+            fine.paid = False
+        
         fine.save()
-        log_audit(request.user, f"Fine {fine.pk} paid by {fine.user.username}", request)
-        messages.success(request, 'Fine payment recorded.')
-        return redirect('fine_list')
+        
+        # Determine SMS message based on payment status
+        remaining_balance = fine.remaining_balance
+        if fine.paid:
+            sms_message = f"Umelipa deni lote la faini ya TZS {fine.amount} kwa {payment_method.upper()}. Asante."
+        else:
+            sms_message = f"Umelipa TZS {payment_amount} kwa faini ya TZS {fine.amount}. Bado unadaiwa TZS {remaining_balance}."
+        
+        # Send SMS notification
+        try:
+            notify_user(fine.user, sms_message, 'sms')
+        except Exception as e:
+            # Log error but don't fail the payment process
+            log_audit(request.user, f"SMS failed for fine {fine.pk}: {str(e)}", request)
+        
+        log_audit(request.user, f"Fine {fine.pk} payment of TZS {payment_amount} by {fine.user.username} via {payment_method}", request)
+        
+        if fine.paid:
+            messages.success(request, f'Full payment recorded: {payment_method.upper()} — TZS {payment_amount}. Fine fully paid!')
+        else:
+            messages.success(request, f'Partial payment: {payment_method.upper()} — TZS {payment_amount} paid. Remaining: TZS {remaining_balance}')
+        
+        return redirect('user_fines', user_id=fine.user.pk)
     return render(request, 'circulation/fine_payment.html', {'fine': fine})
+
+
+@login_required
+@librarian_required
+def bulk_fine_payment_view(request, user_id):
+    user_obj = get_object_or_404(OLMSUser, pk=user_id)
+    unpaid_fines = Fine.objects.filter(user=user_obj, paid=False)
+    
+    if request.method == 'POST':
+        payment_method = request.POST.get('payment_method', 'cash')
+        receipt_no = request.POST.get('receipt_no', '')
+        payment_amount_str = request.POST.get('payment_amount', '')
+        
+        try:
+            payment_amount = Decimal(payment_amount_str) if payment_amount_str else Decimal('0')
+        except (ValueError, TypeError):
+            payment_amount = Decimal('0')
+
+        if payment_amount <= 0:
+            messages.error(request, 'Payment amount must be greater than 0')
+            return redirect('user_fines', user_id=user_id)
+
+        # Validate payment amount does not exceed total remaining balance
+        total_remaining_balance = sum(fine.remaining_balance for fine in unpaid_fines)
+        if payment_amount > total_remaining_balance:
+            messages.error(
+                request,
+                f'Payment amount TZS {payment_amount} exceeds total remaining balance TZS {total_remaining_balance}. '
+                f'Please enter correct amount not exceeding TZS {total_remaining_balance}.'
+            )
+            return redirect('user_fines', user_id=user_id)
+        
+        # Build detailed payment info based on method
+        payment_details = []
+        
+        if payment_method in ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']:
+            phone = request.POST.get('phone_number', '')
+            if phone:
+                payment_details.append(f"Phone: {phone}")
+        elif payment_method == 'bank_transfer':
+            bank = request.POST.get('bank_name', '')
+            account = request.POST.get('account_number', '')
+            ref = request.POST.get('bank_reference', '')
+            if bank:
+                payment_details.append(f"Bank: {bank}")
+            if account:
+                payment_details.append(f"Acc: {account}")
+            if ref:
+                payment_details.append(f"Ref: {ref}")
+        elif payment_method in ['visa', 'mastercard']:
+            card_num = request.POST.get('card_number', '')
+            expiry = request.POST.get('card_expiry', '')
+            card_name = request.POST.get('card_name', '')
+            if card_num:
+                masked = 'XXXX-' + card_num[-4:] if len(card_num) >= 4 else card_num
+                payment_details.append(f"Card: {masked}")
+            if expiry:
+                payment_details.append(f"Exp: {expiry}")
+            if card_name:
+                payment_details.append(f"Name: {card_name}")
+        elif payment_method == 'cash':
+            payment_details.append(f"Received: TZS {payment_amount}")
+        
+        # Build receipt info (receipt number now optional)
+        full_receipt = receipt_no if receipt_no else "N/A"
+        if payment_details:
+            full_receipt += f" | {'; '.join(payment_details)}"
+        
+        # Distribute payment across fines (pay oldest fines first)
+        remaining_payment = payment_amount
+        fully_paid_count = 0
+        
+        for fine in unpaid_fines:
+            if remaining_payment <= 0:
+                break
+            
+            fine_remaining = fine.remaining_balance
+            if fine_remaining <= 0:
+                continue
+            
+            # Calculate payment for this fine
+            if remaining_payment >= fine_remaining:
+                # Can fully pay this fine
+                payment_for_fine = fine_remaining
+                fine.amount_paid += payment_for_fine
+                fine.paid = True
+                fine.amount_paid = fine.amount  # Cap at total
+                fully_paid_count += 1
+            else:
+                # Partial payment for this fine
+                payment_for_fine = remaining_payment
+                fine.amount_paid += payment_for_fine
+                fine.paid = False
+            
+            fine.payment_method = payment_method
+            fine.receipt_no = full_receipt
+            fine.paid_at = timezone.now()
+            fine.save()
+            
+            remaining_payment -= payment_for_fine
+        
+        # Determine SMS message based on payment status
+        total_remaining = sum(f.remaining_balance for f in Fine.objects.filter(user=user_obj, paid=False))
+        if total_remaining == 0:
+            sms_message = f"Umelipa deni lote la faini ya TZS {payment_amount} kwa {payment_method.upper()}. Asante."
+        else:
+            sms_message = f"Umelipa TZS {payment_amount} kwa faini. Bado unadaiwa TZS {total_remaining}."
+        
+        # Send SMS notification
+        try:
+            notify_user(user_obj, sms_message, 'sms')
+        except Exception as e:
+            # Log error but don't fail the payment process
+            log_audit(request.user, f"SMS failed for bulk payment {user_obj.pk}: {str(e)}", request)
+        
+        log_audit(request.user, f"Bulk payment of TZS {payment_amount} for {user_obj.username} via {payment_method}", request)
+        
+        if total_remaining == 0:
+            messages.success(request, f'Full payment recorded: {payment_method.upper()} - TZS {payment_amount}. All fines fully paid!')
+        else:
+            messages.success(request, f'Partial payment recorded: {payment_method.upper()} - TZS {payment_amount}. {fully_paid_count} fine(s) fully paid. Remaining: TZS {total_remaining}')
+        
+        return redirect('user_fines', user_id=user_id)
+    
+    return redirect('user_fines', user_id=user_id)
 
 
 @login_required

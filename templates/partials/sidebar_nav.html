@@ -5,6 +5,11 @@
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'admin_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
     <a href="{% url 'user_list' %}" class="nav-link"><i class="bi bi-people"></i> Members</a>
+    <a href="{% url 'chat_inbox' %}" class="nav-link" id="navMessages">
+      <i class="bi bi-chat-dots"></i> Messages
+      <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
+    </a>
+    <a href="{% url 'assistant_page' %}" class="nav-link"><i class="bi bi-robot"></i> AI Assistant</a>
   </div>
 
   <div class="sidebar-section">
@@ -18,7 +23,8 @@
       <a href="{% url 'audit_logs' %}" class="nav-link"><i class="bi bi-journal-text"></i> Audit Logs</a>
       <a href="{% url 'user_list' %}?status=locked" class="nav-link"><i class="bi bi-person-x"></i> Locked Accounts</a>
       <a href="{% url 'suspended_members' %}" class="nav-link"><i class="bi bi-person-slash"></i> Suspended Members</a>
-      <a href="{% url 'suspicious_activity' %}" class="nav-link"><i class="bi bi-shield-exclamation"></i> Suspicious IPs</a>
+      <a href="{% url 'security_alerts' %}" class="nav-link"><i class="bi bi-shield-exclamation"></i> Security Alerts</a>
+      <a href="{% url 'suspicious_activity' %}" class="nav-link"><i class="bi bi-shield-lock"></i> Suspicious IPs</a>
     </div>
   </div>
 
@@ -43,6 +49,11 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'librarian_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> Dashboard</a>
+    <a href="{% url 'chat_inbox' %}" class="nav-link" id="navMessages">
+      <i class="bi bi-chat-dots"></i> Messages
+      <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
+    </a>
+    <a href="{% url 'assistant_page' %}" class="nav-link"><i class="bi bi-robot"></i> AI Assistant</a>
   </div>
 
   <div class="sidebar-section">
@@ -122,6 +133,11 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'member_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> My Dashboard</a>
+    <a href="{% url 'chat_inbox' %}" class="nav-link" id="navMessages">
+      <i class="bi bi-chat-dots"></i> Support Chat
+      <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
+    </a>
+    <a href="{% url 'assistant_page' %}" class="nav-link"><i class="bi bi-robot"></i> AI Assistant</a>
   </div>
 
   <div class="sidebar-section">
@@ -152,6 +168,7 @@
       <a href="{% url 'ill_request_create' %}" class="nav-link"><i class="bi bi-plus-circle"></i> ILL Request</a>
     </div>
     <a href="{% url 'my_reservations' %}" class="nav-link"><i class="bi bi-bookmark-star"></i> My Reservations</a>
+    <a href="{% url 'my_fines' %}" class="nav-link"><i class="bi bi-cash-coin"></i> My Fines</a>
   </div>
 
 {% endif %}

@@ -61,6 +61,16 @@
         <div class="row g-2">
           <div class="col-6"><small class="text-muted">Army Number</small><div class="fw-semibold">{{ user_obj.army_no }}</div></div>
           <div class="col-6"><small class="text-muted">Registration No</small><div class="fw-semibold">{{ user_obj.registration_no|default:"—" }}</div></div>
+          <div class="col-6">
+            <small class="text-muted">Library Card No</small>
+            <div class="fw-semibold">
+              {% if virtual_card and virtual_card.card_no %}
+                <code class="text-primary">{{ virtual_card.card_no }}</code>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </div>
+          </div>
           <div class="col-6"><small class="text-muted">First Name</small><div>{{ user_obj.first_name }}</div></div>
           <div class="col-6"><small class="text-muted">Middle Name</small><div>{{ user_obj.middle_name|default:"—" }}</div></div>
           <div class="col-6"><small class="text-muted">Surname</small><div>{{ user_obj.surname }}</div></div>

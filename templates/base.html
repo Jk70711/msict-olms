@@ -96,7 +96,16 @@
     {% elif sys_ap.APP_FONT_SIZE == 'xxxl' %}body { font-size: 1.125rem !important; }{% endif %}
     {% if sys_ap.APP_TOPBAR_BG %}.topbar { background: {{ sys_ap.APP_TOPBAR_BG }} !important; }{% endif %}
     {% if sys_ap.APP_FOOTER_BG %}footer  { background: {{ sys_ap.APP_FOOTER_BG }} !important; border-color: {{ sys_ap.APP_FOOTER_BG }}; }{% endif %}
-    {% if sys_ap.APP_FONT_COLOR %}body, .main-content, p, span, div { color: {{ sys_ap.APP_FONT_COLOR }}; }{% endif %}
+    {% if sys_ap.APP_FONT_COLOR %}
+    /* Apply custom font colour only to elements that don't inherit naturally.
+       Elements like <li>, <p>, <strong>, <td> inherit from their parent —
+       so alert/card/table text keeps its designed colour automatically. */
+    body, .main-content,
+    h1, h2, h3, h4, h5, h6,
+    .card-title, .form-label {
+      color: {{ sys_ap.APP_FONT_COLOR }};
+    }
+    {% endif %}
   </style>
   {% endif %}
 
@@ -117,6 +126,12 @@
       --topbar-bg:    #1e293b;
     }
     body { background: #0f172a; color: #f1f5f9; }
+    /* Headings & form labels in dark mode (other text inherits from parent) */
+    h1, h2, h3, h4, h5, h6,
+    .card-title, .form-label { color: #f1f5f9; }
+    /* Bootstrap text utilities that should remain muted */
+    .text-body-secondary { color: #94a3b8 !important; }
+    .text-body-emphasis  { color: #f8fafc !important; }
     .card:not(.card-alert), .modal-content { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9; }
     .card.card-alert { background: #fff0f0 !important; color: #7f1d1d !important; border-color: #fca5a5 !important; }
     .topbar { background: #1e293b !important; border-bottom-color: #334155 !important; }
@@ -242,6 +257,15 @@
       font-size: 0.875rem;
       line-height: 1.6;
     }
+
+    /* ============================================================
+       UNIVERSAL TEXT VISIBILITY — ensures all text uses theme colour
+       so it automatically contrasts light/dark mode or custom bg.
+       ============================================================ */
+    h1, h2, h3, h4, h5, h6 { color: var(--text-primary); }
+    .card-title, .form-label { color: var(--text-primary); }
+    .text-muted, .text-body-secondary { color: var(--text-muted) !important; }
+    .text-body-emphasis { color: var(--text-primary) !important; }
 
     /* ============================================================
        5. SIDEBAR (Upau wa Kando)
@@ -1095,6 +1119,12 @@
         <i class="bi bi-search"></i>
       </a>
       {% if user.is_authenticated %}
+      <a href="{% url 'chat_inbox' %}" class="topbar-icon-btn position-relative" id="topbarChatBtn" title="Messages">
+        <i class="bi bi-chat-dots"></i>
+        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none"
+              id="topbarUnreadBadge"
+              style="font-size:.55rem;padding:.25em .45em;">0</span>
+      </a>
       <button id="themeToggleBtn" class="topbar-icon-btn" title="Toggle dark / light mode" style="background:none;border:none;cursor:pointer">
         <i class="bi {% if user.theme == 'dark' %}bi-sun-fill{% else %}bi-moon-stars{% endif %}"></i>
       </button>
@@ -1266,8 +1296,153 @@
   </footer>
 </div>
 
+{# Floating AI library assistant — hidden on the dedicated /assistant/ page #}
+{% if request.resolver_match.url_name != 'assistant_page' %}
+  {% include 'chatbot/_widget.html' %}
+{% endif %}
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/swiper@10/swiper-bundle.min.js"></script>
+<script>
+/* ============================================================
+   AUTO-CONTRAST SAFETY NET
+   If admin picked a dark body background without a light font color
+   (or vice versa), detect it and force a readable contrast.
+   Runs once on DOMContentLoaded for every page.
+   ============================================================ */
+(function() {
+  function luminance(r, g, b) {
+    // WCAG relative luminance
+    const a = [r, g, b].map(v => {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2];
+  }
+  function parseRgb(str) {
+    const m = str.match(/\d+(\.\d+)?/g);
+    return m ? m.slice(0, 3).map(Number) : null;
+  }
+  function contrast(l1, l2) {
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  }
+  document.addEventListener('DOMContentLoaded', function() {
+    const body = document.body;
+    const bgStr = getComputedStyle(body).backgroundColor;
+    const fgStr = getComputedStyle(body).color;
+    const bg = parseRgb(bgStr), fg = parseRgb(fgStr);
+    if (!bg || !fg) return;
+    const bgL = luminance(...bg), fgL = luminance(...fg);
+    // WCAG AA requires 4.5:1 for normal text
+    if (contrast(bgL, fgL) < 4.5) {
+      // Pick black or white based on background luminance
+      const safeColor = bgL > 0.5 ? '#0f172a' : '#f8fafc';
+      const style = document.createElement('style');
+      style.textContent = `
+        body, .main-content,
+        h1, h2, h3, h4, h5, h6,
+        .card-title, .form-label {
+          color: ${safeColor} !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  });
+})();
+</script>
+
+{% if user.is_authenticated %}
+<script>
+/* ============================================================
+   GLOBAL CHAT NOTIFICATIONS
+   - Fetches the initial unread count from the server
+   - Opens a WebSocket to /ws/notifications/ for live updates
+   - Updates both the sidebar badge (#navUnreadBadge) and topbar badge
+     (#topbarUnreadBadge) on every page
+   ============================================================ */
+(function() {
+  const sideBadge = document.getElementById('navUnreadBadge');
+  const topBadge  = document.getElementById('topbarUnreadBadge');
+  let count = 0;
+
+  function setCount(n) {
+    count = Math.max(0, n);
+    [sideBadge, topBadge].forEach(b => {
+      if (!b) return;
+      if (count > 0) {
+        b.textContent = count > 99 ? '99+' : count;
+        b.classList.remove('d-none');
+      } else {
+        b.classList.add('d-none');
+      }
+    });
+  }
+
+  function loadInitial() {
+    fetch('{% url "chat_unread_count" %}', { credentials: 'same-origin' })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCount(d.unread); })
+      .catch(() => {});
+  }
+
+  function showToast(senderName, preview) {
+    // Don't show toast if already on a chat page (the chat WS handles it)
+    if (location.pathname.startsWith('/chat/')) return;
+    const t = document.createElement('div');
+    t.style.cssText = `
+      position:fixed; bottom:20px; right:20px; z-index:9999;
+      background:var(--card-bg); border:1px solid var(--border);
+      border-left:4px solid var(--accent);
+      border-radius:8px; padding:.75rem 1rem;
+      box-shadow:0 6px 20px rgba(0,0,0,.18);
+      max-width:320px; cursor:pointer;
+      animation: slideIn .3s ease;
+    `;
+    t.innerHTML = `
+      <div style="font-weight:600;font-size:.85rem;color:var(--text-primary)">
+        <i class="bi bi-chat-dots-fill" style="color:var(--accent)"></i> ${senderName}
+      </div>
+      <div style="font-size:.78rem;color:var(--text-muted);margin-top:.15rem">
+        ${preview.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
+      </div>`;
+    t.onclick = () => window.location = '{% url "chat_inbox" %}';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 5000);
+  }
+
+  function connectNotifications() {
+    const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const ws = new WebSocket(`${proto}${location.host}/ws/notifications/`);
+    ws.onmessage = (ev) => {
+      try {
+        const data = JSON.parse(ev.data);
+        if (data.type === 'new_message') {
+          setCount(count + 1);
+          showToast(data.sender_name, data.preview);
+        }
+      } catch (e) {}
+    };
+    ws.onclose = () => setTimeout(connectNotifications, 3000);
+  }
+
+  // Decrement when chat page is visited (server marks them read)
+  if (location.pathname.match(/^\/chat\/c\/\d+\//)) {
+    // Reset after a short delay (server has marked everything read)
+    setTimeout(loadInitial, 800);
+  } else {
+    loadInitial();
+  }
+  connectNotifications();
+})();
+</script>
+<style>
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+</style>
+{% endif %}
+
 <script>
 /* ============================================================
    JAVASCRIPT — Mfumo wa Harakati za Ukurasa

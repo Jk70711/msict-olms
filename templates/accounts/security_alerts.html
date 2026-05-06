@@ -1,0 +1,66 @@
+{% extends 'base.html' %}
+{% block title %}Security Alerts{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0 text-danger"><i class="bi bi-shield-exclamation"></i> Security Alerts</h4>
+  <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Back to Dashboard
+  </a>
+</div>
+
+<div class="card border-danger border-2">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-danger">
+          <tr>
+            <th>S/N</th>
+            <th>User</th>
+            <th>Message</th>
+            <th>Channel</th>
+            <th>Date &amp; Time</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for alert in alerts %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><code class="small">{{ alert.user.username }}</code></td>
+            <td><small>{{ alert.message }}</small></td>
+            <td>
+              {% if alert.channel == 'sms' %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> SMS</span>
+              {% else %}
+                <span class="badge bg-info text-dark"><i class="bi bi-envelope"></i> Email</span>
+              {% endif %}
+            </td>
+            <td>
+              <small class="text-muted d-block">{{ alert.created_at|date:"d M Y" }}</small>
+              <small class="fw-bold">{{ alert.created_at|time:"H:i:s" }}</small>
+              <small class="text-muted">({{ alert.created_at|timesince }} ago)</small>
+            </td>
+            <td>
+              <form method="post" action="{% url 'delete_security_alert' alert.pk %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0"
+                  onclick="return confirm('Dismiss this alert?')" title="Dismiss">
+                  <i class="bi bi-x-lg"></i> Dismiss
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center py-5 text-muted">
+              <i class="bi bi-check-shield text-success fs-1 d-block mb-2"></i>
+              No security alerts found.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -8,7 +8,10 @@
   <div class="card-body py-2 px-3">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <h6 class="fw-bold mb-0" style="color:#991b1b"><i class="bi bi-shield-exclamation"></i> Recent Security Alerts</h6>
-      <small class="fw-semibold" style="color:#7f1d1d">{{ security_alerts|length }} alert(s)</small>
+      <div class="d-flex align-items-center gap-2">
+        <small class="fw-semibold" style="color:#7f1d1d">{{ security_alerts|length }} alert(s)</small>
+        <a href="{% url 'security_alerts' %}" class="btn btn-sm btn-outline-danger py-0">View All</a>
+      </div>
     </div>
     <ul class="mb-0 list-unstyled">
       {% for alert in security_alerts %}
@@ -31,28 +34,28 @@
 <div class="row g-3 mb-4">
   <div class="col-md-3">
     <div class="card stat-card p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold" style="color:#475569">Total Users</span><i class="bi bi-people fs-4 text-primary"></i></div>
-      <div class="fs-2 fw-bold" style="color:#0f172a">{{ total_users }}</div>
+      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Total Users</span><i class="bi bi-people fs-4 text-primary"></i></div>
+      <div class="fs-2 fw-bold text-body-emphasis">{{ total_users }}</div>
       <div class="small fw-medium text-success">{{ active_users }} active</div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card stat-card danger p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold" style="color:#475569">Locked Accounts</span><i class="bi bi-lock-fill fs-4 text-danger"></i></div>
+      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Locked Accounts</span><i class="bi bi-lock-fill fs-4 text-danger"></i></div>
       <div class="fs-2 fw-bold text-danger">{{ locked_users }}</div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card stat-card warning p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold" style="color:#475569">Active Borrows</span><i class="bi bi-book-fill fs-4 text-warning"></i></div>
-      <div class="fs-2 fw-bold" style="color:#0f172a">{{ total_borrows }}</div>
+      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Active Borrows</span><i class="bi bi-book-fill fs-4 text-warning"></i></div>
+      <div class="fs-2 fw-bold text-body-emphasis">{{ total_borrows }}</div>
       <div class="small fw-medium text-danger">{{ overdue_count }} overdue</div>
     </div>
   </div>
   <div class="col-md-3">
     <div class="card stat-card p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold" style="color:#475569">Unpaid Fines</span><i class="bi bi-cash-coin fs-4 text-success"></i></div>
-      <div class="fs-2 fw-bold" style="color:#0f172a">TZS {{ unpaid_fines|floatformat:2 }}</div>
+      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Unpaid Fines</span><i class="bi bi-cash-coin fs-4 text-success"></i></div>
+      <div class="fs-2 fw-bold text-body-emphasis">TZS {{ unpaid_fines|floatformat:2 }}</div>
     </div>
   </div>
 </div>
@@ -60,7 +63,7 @@
 <div class="row g-3 mb-4">
   <div class="col-md-6">
     <div class="card p-3 h-100">
-      <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill text-primary"></i> Users by Role</h6>
+      <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-pie-chart-fill text-primary"></i> Users by Role</h6>
       <ul class="list-group list-group-flush">
         {% for ur in users_by_role %}
         <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -73,7 +76,7 @@
   </div>
   <div class="col-md-6">
     <div class="card p-3 h-100">
-      <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill text-primary"></i> Most Borrowed Books</h6>
+      <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-bar-chart-fill text-primary"></i> Most Borrowed Books</h6>
       <ol class="list-group list-group-numbered list-group-flush">
         {% for b in most_borrowed %}
         <li class="list-group-item d-flex justify-content-between align-items-start">
@@ -99,13 +102,14 @@
   <div class="table-responsive">
     <table class="table table-sm table-hover mb-0 border">
       <thead class="table-light">
-        <tr><th>Username</th><th>Full Name</th><th>Type</th><th>Email</th><th>Action</th></tr>
+        <tr><th>Username</th><th>Full Name</th><th>Card No</th><th>Type</th><th>Email</th><th>Action</th></tr>
       </thead>
       <tbody>
         {% for u in recent_suspended %}
         <tr>
           <td><a href="{% url 'user_detail' u.pk %}" class="fw-bold text-decoration-none"><code>{{ u.username }}</code></a></td>
           <td><small>{{ u.get_full_name }}</small></td>
+          <td><code class="text-primary">{{ u.virtual_card.short_card_no|default:"—" }}</code></td>
           <td>
             {% if u.member_type == 'student' %}<span class="badge bg-primary"><i class="bi bi-mortarboard"></i> Student</span>
             {% elif u.member_type == 'lecturer' %}<span class="badge bg-info text-dark"><i class="bi bi-person-workspace"></i> Instructor</span>
@@ -129,7 +133,7 @@
 
 <div class="card mt-3 p-3">
   <div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="fw-bold mb-0"><i class="bi bi-journal-text"></i> Recent Audit Log</h6>
+    <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-journal-text"></i> Recent Audit Log</h6>
     <div class="d-flex gap-2">
       <a href="{% url 'audit_logs' %}" class="btn btn-sm btn-outline-primary py-0">View All</a>
     </div>

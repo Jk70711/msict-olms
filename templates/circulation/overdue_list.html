@@ -5,20 +5,32 @@
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">
-      <thead><tr><th>S/N</th><th>Member</th><th>Army No</th><th>Book (Accession)</th><th>Borrowed</th><th>Due Date</th><th>Days Overdue</th></tr></thead>
+      <thead><tr><th>S/N</th><th>Member</th><th>Army No</th><th>Book (Accession)</th><th>Borrowed</th><th>Due Date</th><th>Days Overdue</th><th>Fine Amount</th><th>Paid</th><th>Remaining</th><th>Status</th></tr></thead>
       <tbody>
         {% for tx in overdue %}
         <tr class="table-danger">
           <td>{{ forloop.counter }}</td>
-          <td><small class="fw-semibold">{{ tx.user.get_full_name }}</small></td>
-          <td><small>{{ tx.user.army_no }}</small></td>
+          <td><a href="{% url 'user_fines' tx.user.pk %}" class="text-decoration-none"><small class="fw-semibold">{{ tx.user.get_full_name }}</small></a></td>
+          <td><a href="{% url 'user_fines' tx.user.pk %}" class="text-decoration-none"><small>{{ tx.user.army_no }}</small></a></td>
           <td><small>{{ tx.copy.book.title|truncatechars:40 }}<br><code>{{ tx.copy.accession_no }}</code></small></td>
           <td><small>{{ tx.borrow_date|date:"d M Y" }}</small></td>
           <td><small class="text-danger fw-bold">{{ tx.due_date|date:"d M Y" }}</small></td>
           <td><span class="badge bg-danger">{{ tx.days_overdue }} days</span></td>
+          <td><small class="fw-bold">TZS {{ tx.calculated_fine|floatformat:0 }}</small></td>
+          <td><small class="text-success">TZS {{ tx.total_fine_paid|floatformat:0 }}</small></td>
+          <td><small class="text-danger fw-bold">TZS {{ tx.total_fine_remaining|floatformat:0 }}</small></td>
+          <td>
+            {% if tx.total_fine_remaining == 0 %}
+              <span class="badge bg-success">Paid</span>
+            {% elif tx.total_fine_paid > 0 %}
+              <span class="badge bg-warning text-dark">Partial</span>
+            {% else %}
+              <span class="badge bg-danger">Unpaid</span>
+            {% endif %}
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No overdue items.</td></tr>
+        <tr><td colspan="10" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No overdue items.</td></tr>
         {% endfor %}
       </tbody>
     </table>

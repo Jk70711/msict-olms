@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Users with Fines & Overdues{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-cash-coin"></i> Users with Fines & Overdue Books</h4>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>S/N</th>
+          <th>Member</th>
+          <th>Army No</th>
+          <th>Fines</th>
+          <th>Amount</th>
+          <th>Overdue</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users_list %}
+        <tr>
+          <td>{{ forloop.counter }}</td>
+          <td><small class="fw-semibold">{{ user.full_name }}</small></td>
+          <td><small>{{ user.army_no }}</small></td>
+          <td>
+            {% if user.fine_count > 0 %}
+              <span class="badge bg-warning">{{ user.fine_count }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td class="fw-bold {% if user.total_amount > 0 %}text-danger{% else %}text-muted{% endif %}">
+            {% if user.total_amount > 0 %}TZS {{ user.total_amount|floatformat:2 }}{% else %}—{% endif %}
+          </td>
+          <td>
+            {% if user.overdue_count > 0 %}
+              <span class="badge bg-danger">{{ user.overdue_count }}</span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{% url 'user_fines' user.user_id %}" class="btn btn-sm btn-success py-0">
+              <i class="bi bi-cash-stack"></i> Pay
+            </a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No users with fines or overdue books.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="alert alert-info mt-3">
+  <h6 class="fw-bold mb-2"><i class="bi bi-info-circle"></i> Payment Instructions</h6>
+  <ul class="mb-0 small">
+    <li>Click <strong>Pay</strong> to view all fines and overdue books for a member</li>
+    <li>Record payments using: M-Pesa, Tigo Pesa, Airtel Money, Halopesa, Visa, Mastercard, Bank Transfer, Cash, or Cheque</li>
+    <li>Users with overdue books will have fines accumulating daily</li>
+  </ul>
+</div>
+{% endblock %}

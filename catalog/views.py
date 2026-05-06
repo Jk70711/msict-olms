@@ -14,25 +14,32 @@ from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, Inv
 @login_required
 @librarian_required
 def librarian_dashboard_view(request):
-    from circulation.models import BorrowRequest, BorrowingTransaction, Reservation
+    from circulation.models import BorrowRequest, BorrowingTransaction, Reservation, Fine
     from accounts.models import OLMSUser
 
-    pending_requests = BorrowRequest.objects.filter(status='pending').select_related('user', 'copy__book').order_by('-request_date')
-    overdue_transactions = BorrowingTransaction.objects.filter(status='overdue').select_related('user', 'copy__book')
+    pending_requests = BorrowRequest.objects.filter(status='pending').select_related('user__virtual_card', 'copy__book').order_by('-request_date')
+    overdue_transactions = BorrowingTransaction.objects.filter(status='overdue').select_related('user__virtual_card', 'copy__book')
+    unpaid_fines = Fine.objects.filter(paid=False).select_related('user__virtual_card', 'transaction__copy__book').order_by('-created_at')
     total_books = Book.objects.count()
     total_copies = BookCopy.objects.count()
     available_copies = BookCopy.objects.filter(status='available').count()
     total_members = OLMSUser.objects.filter(role='member').count()
 
+    # Calculate total unpaid fines amount
+    total_unpaid_fines_amount = sum(fine.remaining_balance for fine in unpaid_fines)
+
     context = {
         'pending_requests': pending_requests[:10],
         'overdue_transactions': overdue_transactions[:10],
+        'unpaid_fines': unpaid_fines[:10],
         'total_books': total_books,
         'total_copies': total_copies,
         'available_copies': available_copies,
         'total_members': total_members,
         'pending_count': pending_requests.count(),
         'overdue_count': overdue_transactions.count(),
+        'unpaid_fines_count': unpaid_fines.count(),
+        'total_unpaid_fines_amount': total_unpaid_fines_amount,
     }
     return render(request, 'catalog/librarian_dashboard.html', context)
 

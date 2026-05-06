@@ -9,6 +9,7 @@ from . import views
 urlpatterns = [
     # ── Dashboard na Orodha ya Mwanachama ────────────────────
     path('member-dashboard/', views.member_dashboard_view, name='member_dashboard'),             # Dashboard ya mwanachama
+    path('my-fines/', views.my_fines_view, name='my_fines'),                                    # Faini zangu
     path('my-borrowings/msict/', views.member_msict_borrowings_view, name='member_msict_borrowings'),  # Mikopo yangu
     path('my-borrowings/ill/', views.member_ill_borrowings_view, name='member_ill_borrowings'),  # Mikopo ya ILL
     path('softcopy-library/', views.softcopy_library_view, name='softcopy_library'),             # Vitabu vya kidijitali nilivyokopa
@@ -43,6 +44,9 @@ urlpatterns = [
     path('overdue/', views.overdue_list_view, name='overdue_list'),                              # Vitabu vilivyopita tarehe
     path('fines/', views.fine_list_view, name='fine_list'),                                      # Orodha ya faini
     path('fines/<int:fine_id>/pay/', views.record_fine_payment_view, name='record_fine_payment'), # Rekodi malipo ya faini
+    path('fines/users/', views.users_with_unpaid_fines_view, name='users_with_fines'),           # Watumiaji wanaodaiwa
+    path('fines/user/<int:user_id>/', views.user_fines_view, name='user_fines'),                 # Faini za mtumiaji mahususi
+    path('fines/user/<int:user_id>/bulk-pay/', views.bulk_fine_payment_view, name='bulk_fine_payment'),  # Malipo ya pamoja
 
     # ── Historia ya Kurudisha na Mikopo Yote ───────────────
     path('return-history/', views.return_history_view, name='return_history'),   # Historia ya vitabu vilivyorudishwa

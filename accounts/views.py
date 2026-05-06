@@ -374,7 +374,7 @@ def user_list_view(request):
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
     role_filter = request.GET.get('role', '')
-    users = OLMSUser.objects.exclude(role='admin').order_by('surname', 'first_name')
+    users = OLMSUser.objects.exclude(role='admin').select_related('virtual_card').order_by('surname', 'first_name')
 
     if query:
         users = users.filter(
@@ -446,6 +446,10 @@ def user_detail_view(request, user_id):
     unpaid_fines = Fine.objects.filter(transaction__user=user_obj, paid=False).select_related('transaction__copy__book')
     borrow_history = BorrowingTransaction.objects.filter(user=user_obj).select_related('copy__book').order_by('-borrow_date')[:20]
     audit_logs = AuditLog.objects.filter(user=user_obj).order_by('-timestamp')[:20]
+    try:
+        virtual_card = user_obj.virtual_card
+    except Exception:
+        virtual_card = None
     return render(request, 'accounts/user_detail.html', {
         'user_obj': user_obj,
         'active_borrows': active_borrows,
@@ -453,6 +457,7 @@ def user_detail_view(request, user_id):
         'unpaid_fines': unpaid_fines,
         'borrow_history': borrow_history,
         'audit_logs': audit_logs,
+        'virtual_card': virtual_card,
     })
 
 
@@ -605,7 +610,7 @@ def admin_dashboard_view(request):
 
     overdue_count = BorrowingTransaction.objects.filter(status='overdue').count()
     total_borrows = BorrowingTransaction.objects.filter(status='borrowed').count()
-    unpaid_fines = Fine.objects.filter(paid=False).aggregate(total=Sum('amount'))['total'] or 0
+    unpaid_fines = sum(fine.remaining_balance for fine in Fine.objects.filter(paid=False))
 
     # Analytics - Users by role
     users_by_role = OLMSUser.objects.values('role').annotate(count=Count('id'))
@@ -619,14 +624,13 @@ def admin_dashboard_view(request):
 
     recent_suspended = OLMSUser.objects.filter(
         is_active=False, role='member'
-    ).order_by('-created_at')[:5]
+    ).select_related('virtual_card').order_by('-created_at')[:5]
 
     # Security - System Alerts
     from circulation.models import Notification
     security_alerts = Notification.objects.filter(
-        user=request.user, 
-        priority='high'
-    ).order_by('-created_at')[:10]
+        is_security_alert=True
+    ).order_by('-created_at')[:5]
 
     context = {
         'total_users': total_users,
@@ -696,10 +700,18 @@ def suspicious_activity_view(request):
             'is_known': fl.username in known_usernames,
         })
 
+    # Get security alerts related to suspicious activity
+    from circulation.models import Notification
+    security_alerts = Notification.objects.filter(
+        is_security_alert=True,
+        message__icontains='suspicious'
+    ).order_by('-created_at')[:10]
+
     return render(request, 'accounts/suspicious_activity.html', {
         'failed_logins': enriched_logins,
         'suspicious_ips': suspicious_ips,
         'known_usernames': known_usernames,
+        'security_alerts': security_alerts,
     })
 
 
@@ -708,9 +720,18 @@ def suspicious_activity_view(request):
 def suspended_members_view(request):
     suspended = OLMSUser.objects.filter(
         is_active=False, role='member'
-    ).order_by('-created_at')
+    ).select_related('virtual_card').order_by('-created_at')
+
+    # Get security alerts related to suspensions
+    from circulation.models import Notification
+    security_alerts = Notification.objects.filter(
+        is_security_alert=True,
+        message__icontains='suspended'
+    ).order_by('-created_at')[:10]
+
     return render(request, 'accounts/suspended_members.html', {
         'suspended': suspended,
+        'security_alerts': security_alerts,
     })
 
 
@@ -725,8 +746,8 @@ def unlock_account_view(request, user_id):
         f"MSICT OLMS: Your account '{user_obj.username}' has been UNLOCKED by the administrator. "
         f"You may visit now login to login again. If you did not request this, contact the admin immediately."
     )
-    notify_user(user_obj, unlock_msg, 'sms')
-    notify_user(user_obj, unlock_msg, 'email', subject='MSICT OLMS – Account Unlocked')
+    notify_user(user_obj, unlock_msg, 'sms', is_security_alert=True)
+    notify_user(user_obj, unlock_msg, 'email', subject='MSICT OLMS – Account Unlocked', is_security_alert=True)
     log_audit(request.user, f"Admin '{request.user.username}' unlocked account '{user_obj.username}'", request)
     messages.success(request, f"Account '{user_obj.username}' unlocked. User notified via SMS and email.")
     return redirect('admin_dashboard')
@@ -741,6 +762,16 @@ def delete_security_alert_view(request, pk):
     alert.delete()
     messages.success(request, 'Security alert dismissed.')
     return redirect('admin_dashboard')
+
+
+@login_required
+@admin_required
+def security_alerts_view(request):
+    from circulation.models import Notification
+    alerts = Notification.objects.filter(
+        is_security_alert=True
+    ).select_related('user').order_by('-created_at')
+    return render(request, 'accounts/security_alerts.html', {'alerts': alerts})
 
 
 @login_required
@@ -835,7 +866,7 @@ def system_preferences_view(request):
         ('LOAN_PERIOD_DAYS',          '7',   'Loan period for all books (days)'),
         ('MAX_RENEWALS',              '2',   'Maximum number of renewals per borrow'),
         ('MAX_COPIES_PER_BORROW',     '3',   'Maximum active borrows per member'),
-        ('FINE_PER_DAY',              '500', 'Overdue fine per day (TZS)'),
+        ('FINE_PER_DAY',              '1000', 'Overdue fine per day (TZS)'),
         ('RESERVATION_EXPIRY_DAYS',   '7',   'Days before a reservation expires'),
     ]
     for key, value, description in DEFAULTS:

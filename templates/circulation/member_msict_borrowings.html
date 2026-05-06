@@ -70,6 +70,11 @@
                     {% else %}
                     <span class="badge bg-info text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} days left</span>
                     {% endif %}
+                  {% elif tx.is_link_expired %}
+                    <span class="badge bg-dark"><i class="bi bi-wifi-off"></i> Link Expired</span>
+                    {% if tx.has_unpaid_fine %}
+                    <span class="badge bg-danger"><i class="bi bi-cash-coin"></i> Fine: TZS {{ tx.total_fine_remaining }}</span>
+                    {% endif %}
                   {% else %}
                     <span class="badge bg-danger"><i class="bi bi-wifi-off"></i> Link Expired</span>
                     <span class="badge bg-warning text-dark">Renew to restore access</span>
@@ -100,24 +105,36 @@
                   <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-sm btn-primary" target="_blank">
                     <i class="bi bi-file-pdf"></i> Read Online
                   </a>
+                  {% elif tx.is_link_expired %}
+                  <span class="btn btn-sm btn-outline-danger disabled"><i class="bi bi-wifi-off"></i> Link Expired</span>
                   {% elif not tx.is_link_active %}
                   <span class="btn btn-sm btn-outline-danger disabled"><i class="bi bi-wifi-off"></i> Link Expired</span>
                   {% endif %}
-                  {% if tx.renewals_left > 0 %}
+                  {% if tx.is_renewable %}
                   <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-sm btn-outline-success">
                     <i class="bi bi-arrow-clockwise"></i> {% if tx.is_link_active %}Renew{% else %}Renew to Restore{% endif %}
                   </a>
+                  <div class="small text-muted">{{ tx.renewals_left }} left</div>
                   {% else %}
-                  <span class="text-muted small">No renewals left</span>
+                  <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
                   {% endif %}
+                  {% if not unpaid_fines %}
                   <a href="{% url 'return_early' tx.pk %}" class="btn btn-sm btn-outline-secondary">
                     <i class="bi bi-arrow-return-left"></i> Return
                   </a>
+                  {% else %}
+                  <span class="btn btn-sm btn-outline-danger disabled" title="Pay fines first">
+                    <i class="bi bi-exclamation-triangle"></i> Return Blocked
+                  </span>
+                  {% endif %}
                 {% else %}
-                  {% if tx.renewals_left > 0 and tx.status != 'overdue' %}
+                  {% if tx.is_renewable %}
                   <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-arrow-clockwise"></i> Renew
                   </a>
+                  <div class="small text-muted">{{ tx.renewals_left }} left</div>
+                  {% else %}
+                  <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
                   {% endif %}
                 {% endif %}
               </div>

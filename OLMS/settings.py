@@ -49,6 +49,9 @@ USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 INSTALLED_APPS = [
+    # 'daphne' MUST be first so its `runserver` overrides Django's default
+    'daphne',
+    'channels',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -62,6 +65,8 @@ INSTALLED_APPS = [
     'acquisitions.apps.AcquisitionsConfig',
     'reports.apps.ReportsConfig',
     'public.apps.PublicConfig',
+    'chat.apps.ChatConfig',
+    'chatbot.apps.ChatbotConfig',
 ]
 
 SITE_ID = 1
@@ -100,6 +105,32 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'OLMS.wsgi.application'
+ASGI_APPLICATION = 'OLMS.asgi.application'
+
+# ----------------------------------------------------------------------
+# Channels: Redis backend for real-time chat WebSockets.
+# Configurable via .env: REDIS_HOST, REDIS_PORT, REDIS_DB
+# ----------------------------------------------------------------------
+REDIS_HOST = config('REDIS_HOST', default='127.0.0.1')
+REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
+REDIS_DB   = config('REDIS_DB',   default=0,    cast=int)
+
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [(REDIS_HOST, REDIS_PORT)],
+        },
+    },
+}
+
+# ----------------------------------------------------------------------
+# AI Chatbot (Gemini) + Google Books external knowledge fallback.
+# Empty values = chatbot will fall back to a rule-based response.
+# ----------------------------------------------------------------------
+GEMINI_API_KEY       = config('GEMINI_API_KEY',       default='')
+GEMINI_MODEL         = config('GEMINI_MODEL',         default='gemini-1.5-flash')
+GOOGLE_BOOKS_API_KEY = config('GOOGLE_BOOKS_API_KEY', default='')
 
 # Muunganisho wa Oracle database — host, jina la DB, mtumiaji, nywila
 DATABASES = {
@@ -158,7 +189,7 @@ BEEM_SMS_URL = 'https://apisms.beem.africa/v1/send'
 LOAN_PERIOD_DAYS = 7
 MAX_RENEWALS = 2
 MAX_COPIES_PER_BORROW = 3
-FINE_PER_DAY = 500
+FINE_PER_DAY = 1000
 LOGIN_FAILURE_LIMIT = 5
 OTP_EXPIRY_MINUTES = 10
 PASSWORD_CHANGE_REMINDER_DAYS = 30
