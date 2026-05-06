@@ -1728,7 +1728,9 @@
   /* Find every GET form that has a search text input named "q" */
   var forms = Array.prototype.filter.call(
     document.querySelectorAll('form[method="get"]'),
-    function (f) { return f.querySelector('input[name="q"]'); }
+    function (f) {
+      return f.querySelector('input[name="q"]') && !f.hasAttribute('data-no-auto-submit');
+    }
   );
 
   forms.forEach(function (form) {

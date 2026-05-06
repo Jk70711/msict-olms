@@ -5,10 +5,38 @@ from django.http import HttpResponse, FileResponse, JsonResponse
 from django.db.models import Q
 from django.conf import settings
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
+from django.template.loader import render_to_string
 
 from accounts.views import librarian_required
 from accounts.utils import log_audit
 from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, InventoryLog, MediaSlide, Shelf
+
+
+@csrf_exempt
+@login_required
+def book_search_ajax(request):
+    """AJAX endpoint for real-time book search."""
+    query = request.GET.get('q', '').strip()
+    if not query:
+        return JsonResponse({'results': []})
+
+    books = Book.objects.filter(
+        Q(title__icontains=query) | Q(author__icontains=query) | Q(isbn__icontains=query)
+    ).select_related('category')[:10]
+
+    results = []
+    for book in books:
+        results.append({
+            'id': book.id,
+            'title': book.title,
+            'author': book.author,
+            'isbn': book.isbn or '',
+            'category': book.category.name if book.category else '',
+        })
+
+    return JsonResponse({'results': results})
+
 
 
 @login_required
@@ -57,13 +85,23 @@ def book_list_view(request):
         books = books.filter(category_id=category_id)
     categories = Category.objects.all()
     can_manage = request.user.role in ('librarian', 'admin')
-    return render(request, 'catalog/book_list.html', {
+    context = {
         'books': books,
         'query': query,
         'categories': categories,
         'selected_category': category_id,
         'can_manage': can_manage,
-    })
+    }
+
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('ajax') == '1'
+    if is_ajax:
+        table_rows_html = render_to_string('catalog/partials/book_table_rows.html', context, request=request)
+        return JsonResponse({
+            'table_rows_html': table_rows_html,
+            'total_results': books.count(),
+        })
+
+    return render(request, 'catalog/book_list.html', context)
 
 
 @login_required

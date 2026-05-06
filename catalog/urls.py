@@ -17,6 +17,7 @@ urlpatterns = [
     path('books/<int:book_id>/edit/', views.book_edit_view, name='book_edit'),                 # Hariri kitabu
     path('books/<int:book_id>/delete/', views.book_delete_view, name='book_delete'),           # Futa kitabu
     path('books/<int:book_id>/add-copy/', views.copy_create_view, name='copy_create'),         # Ongeza nakala kwa kitabu
+    path('search/', views.book_search_ajax, name='book_search_ajax'),                          # AJAX search endpoint
 
     # ── Nakala za Vitabu ─────────────────────────────────────
     path('copies/', views.copy_list_view, name='copy_list'),                                   # Orodha ya nakala zote

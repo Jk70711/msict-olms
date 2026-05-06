@@ -15,6 +15,7 @@ Maeneo Muhimu:
 import os
 from pathlib import Path
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,6 +24,12 @@ SECRET_KEY = config('SECRET_KEY')
 
 # True = maendeleo (inaonyesha makosa kwa undani). Weka False kwenye VPS!
 DEBUG = config('DEBUG', default=True, cast=bool)
+
+# Enforce a strong SECRET_KEY in production to protect signed cookies/tokens.
+if not DEBUG and (SECRET_KEY.startswith('django-insecure-') or len(set(SECRET_KEY)) < 5 or len(SECRET_KEY) < 50):
+    raise ImproperlyConfigured(
+        "Set a strong SECRET_KEY in .env before running with DEBUG=False."
+    )
 
 # Seva zinazoruhusiwa. Ongeza IP ya VPS hapa kwenye faili ya .env
 # Mfano wa .env: ALLOWED_HOSTS=81.17.97.229,localhost,127.0.0.1
@@ -47,6 +54,19 @@ CSRF_TRUSTED_ORIGINS = [
 # Kwa VPS inayotumia Nginx kama proxy: tumia Host header iliyopelekwa na Nginx
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# -----------------------------
+# Security hardening (production)
+# -----------------------------
+SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=not DEBUG, cast=bool)
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=not DEBUG, cast=bool)
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000 if not DEBUG else 0, cast=int)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=not DEBUG, cast=bool)
+SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=not DEBUG, cast=bool)
+SECURE_CONTENT_TYPE_NOSNIFF = config('SECURE_CONTENT_TYPE_NOSNIFF', default=True, cast=bool)
+X_FRAME_OPTIONS = config('X_FRAME_OPTIONS', default='DENY')
+SECURE_REFERRER_POLICY = config('SECURE_REFERRER_POLICY', default='same-origin')
 
 INSTALLED_APPS = [
     # 'daphne' MUST be first so its `runserver` overrides Django's default
@@ -149,7 +169,7 @@ LOGOUT_REDIRECT_URL = '/'
 
 # Domain settings for generating absolute URLs in emails/SMS
 DEFAULT_DOMAIN = 'localhost:8000'
-DEFAULT_PROTOCOL = 'http'
+DEFAULT_PROTOCOL = 'https' if not DEBUG else 'http'
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},

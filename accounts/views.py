@@ -199,10 +199,33 @@ def forgot_password_view(request):
             user = OLMSUser.objects.get(Q(army_no=identifier) | Q(email=identifier))
             otp = create_otp_for_user(user)
             msg = f"MSICT OLMS: Your password reset OTP is {otp.otp_code}. Valid for 10 minutes."
-            send_sms(user.phone, msg)
-            send_email_notification(user.email, "MSICT OLMS - Password Reset OTP", msg)
+
+            # Always attempt OTP delivery on BOTH channels for every user.
+            sms_notif = notify_user(
+                user,
+                msg,
+                'sms',
+                priority='high',
+                is_security_alert=True,
+            )
+            email_notif = notify_user(
+                user,
+                msg,
+                'email',
+                subject="MSICT OLMS - Password Reset OTP",
+                priority='high',
+                is_security_alert=True,
+            )
+
             request.session['otp_user_id'] = user.pk
-            messages.success(request, 'OTP sent to your registered phone and email.')
+            if sms_notif.status == 'sent' and email_notif.status == 'sent':
+                messages.success(request, 'OTP sent to your registered phone and email.')
+            elif sms_notif.status == 'sent':
+                messages.warning(request, 'OTP sent by SMS, but email delivery failed.')
+            elif email_notif.status == 'sent':
+                messages.warning(request, 'OTP sent by email, but SMS delivery failed.')
+            else:
+                messages.error(request, 'Failed to send OTP via both SMS and email. Please try again.')
             return redirect('verify_otp')
         except OLMSUser.DoesNotExist:
             messages.error(request, 'No account found with that Army Number or Email.')
