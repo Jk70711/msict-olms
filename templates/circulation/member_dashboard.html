@@ -105,10 +105,21 @@
                 <span class="small text-muted">({{ tx.renewals_left }})</span>
                 {% endif %}
                 {% if tx.copy.copy_type == 'softcopy' %}
-                  {% if not unpaid_fines %}
+                  {% if not tx.is_overdue %}
                   <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
                   {% else %}
+                  {# Overdue - check if fines are paid #}
+                  {% for tid, fine_info in tx_fines.items %}
+                    {% if tid == tx.id %}
+                      {% if fine_info.remaining > 0 %}
+                      <span class="btn btn-xs btn-sm btn-outline-danger disabled py-0" title="Pay fines first (TZS {{ fine_info.remaining|floatformat:0 }})">Return Blocked</span>
+                      {% else %}
+                      <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
+                      {% endif %}
+                    {% endif %}
+                  {% empty %}
                   <span class="btn btn-xs btn-sm btn-outline-danger disabled py-0" title="Pay fines first">Return Blocked</span>
+                  {% endfor %}
                   {% endif %}
                 {% endif %}
               </td>
@@ -192,17 +203,62 @@
     {% endif %}
 
     <!-- Fines -->
-    {% if unpaid_fines %}
+    {% if overdue_fines %}
     <div class="card p-3 mb-3 border-danger">
-      <h6 class="fw-bold mb-2 text-body-emphasis"><i class="bi bi-cash-coin"></i> Outstanding Fines</h6>
-      {% for fine in unpaid_fines %}
-      <div class="d-flex justify-content-between border-bottom py-1">
-        <small>{{ fine.reason|truncatechars:40 }}</small>
-        <small class="fw-bold text-danger">TZS {{ fine.amount }}</small>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-cash-coin"></i> Overdue Book Fines</h6>
+        <a href="{% url 'my_fines' %}" class="btn btn-sm btn-outline-danger py-0">View All</a>
+      </div>
+
+      <!-- Fine Summary -->
+      <div class="row g-2 mb-3">
+        <div class="col-4">
+          <div class="text-center p-2 bg-light rounded">
+            <div class="small text-muted">Total Fine</div>
+            <div class="fw-bold text-danger fs-5">TZS {{ total_fine_amount|floatformat:0 }}</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="text-center p-2 bg-light rounded">
+            <div class="small text-muted">Paid</div>
+            <div class="fw-bold text-success fs-5">TZS {{ total_paid|floatformat:0 }}</div>
+          </div>
+        </div>
+        <div class="col-4">
+          <div class="text-center p-2 bg-light rounded">
+            <div class="small text-muted">Remaining</div>
+            <div class="fw-bold text-danger fs-5">TZS {{ total_unpaid|floatformat:0 }}</div>
+          </div>
+        </div>
+      </div>
+
+      {% for fine in overdue_fines %}
+      <div class="border-bottom py-2">
+        <div class="d-flex justify-content-between align-items-start mb-1">
+          <div class="flex-grow-1">
+            <small class="fw-semibold">{{ fine.reason }}</small>
+            {% if fine.transaction %}
+            <br><small class="text-muted">Book: {{ fine.transaction.copy.book.title|truncatechars:30 }}</small>
+            {% endif %}
+          </div>
+          <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0 }}</small>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mt-1">
+          <div class="small">
+            <span class="text-muted">Paid: TZS {{ fine.amount_paid|floatformat:0 }}</span>
+            <span class="text-danger fw-bold mx-1">|</span>
+            <span class="text-danger fw-bold">Unpaid: TZS {{ fine.remaining_balance|floatformat:0 }}</span>
+          </div>
+          {% if not fine.paid %}
+          <a href="{% url 'pay_fine' fine.id %}" class="btn btn-sm btn-success py-0">
+            <i class="bi bi-credit-card"></i> Pay
+          </a>
+          {% else %}
+          <span class="badge bg-success">Paid</span>
+          {% endif %}
+        </div>
       </div>
       {% endfor %}
-      <div class="text-end mt-2"><small class="fw-bold">Total: TZS {{ total_fines }}</small></div>
-      <div class="small text-muted mt-1">Report to the circulation desk to clear fines.</div>
     </div>
     {% endif %}
 

@@ -61,6 +61,26 @@ def member_dashboard_view(request):
         user=user, status='returned'
     ).select_related('copy__book').order_by('-return_date')[:5]
 
+    # Get fines for overdue transactions
+    overdue_tx_ids = overdue_transactions.values_list('id', flat=True)
+    overdue_fines = Fine.objects.filter(transaction_id__in=overdue_tx_ids)
+
+    # Calculate fine totals for overdue books
+    total_fine_amount = sum(f.amount for f in overdue_fines)
+    total_unpaid = sum(f.remaining_balance for f in overdue_fines)
+    total_paid = sum(f.amount_paid for f in overdue_fines)
+
+    # Build fine info dictionary for each transaction (for softcopy return check)
+    tx_fines = {}
+    for fine in overdue_fines:
+        if fine.transaction_id not in tx_fines:
+            tx_fines[fine.transaction_id] = {
+                'amount': fine.amount,
+                'remaining': fine.remaining_balance,
+                'paid': fine.paid,
+                'amount_paid': fine.amount_paid,
+            }
+
     context = {
         'active_transactions': active_transactions,
         'overdue_transactions': overdue_transactions,
@@ -68,7 +88,12 @@ def member_dashboard_view(request):
         'reservations': reservations,
         'notified_reservations': notified_reservations,
         'unpaid_fines': unpaid_fines,
+        'overdue_fines': overdue_fines,
+        'tx_fines': tx_fines,
         'total_fines': sum(f.amount for f in unpaid_fines),
+        'total_fine_amount': total_fine_amount,
+        'total_unpaid': total_unpaid,
+        'total_paid': total_paid,
         'notifications': notifications,
         'has_overdue': overdue_transactions.exists(),
         'borrow_history': borrow_history,
@@ -450,10 +475,19 @@ def _process_desk_return(request, copy_pk_str):
     fine_per_day = float(_pref('FINE_PER_DAY', 500))
     if tx.days_overdue() > 0:
         fine_amount = tx.days_overdue() * fine_per_day
-        Fine.objects.create(
-            user=tx.user, transaction=tx, amount=fine_amount,
-            reason=f"Overdue fine for '{copy.book.title}' ({tx.days_overdue()} days)",
-        )
+        # Check if Fine record already exists
+        existing_fine = Fine.objects.filter(transaction=tx, paid=False).first()
+        if existing_fine:
+            # Update existing fine record
+            existing_fine.amount = fine_amount
+            existing_fine.reason = f"Overdue fine for '{copy.book.title}' ({tx.days_overdue()} days)"
+            existing_fine.save(update_fields=['amount', 'reason'])
+        else:
+            # Create new fine record
+            Fine.objects.create(
+                user=tx.user, transaction=tx, amount=fine_amount,
+                reason=f"Overdue fine for '{copy.book.title}' ({tx.days_overdue()} days)",
+            )
         messages.warning(request, f'"{copy.book.title}" returned with overdue fine of TZS {fine_amount:,.0f}.')
         fine_msg = (
             f"MSICT OLMS: Overdue fine of TZS {fine_amount:,.0f} for '{copy.book.title}'. "
@@ -520,11 +554,28 @@ def return_hardcopy_view(request):
                     user=member,
                     status__in=['borrowed', 'overdue'],
                 ).select_related('copy__book').order_by('due_date')
+                
+                # Get all unpaid fines for this member
+                unpaid_fines = Fine.objects.filter(user=member, paid=False)
+                has_unpaid_fines = unpaid_fines.exists()
+                
+                # Create a dictionary of transaction_id -> fine information
+                tx_fines = {}
+                for tx in member_borrows:
+                    tx_fine = unpaid_fines.filter(transaction=tx).first()
+                    tx_fines[tx.id] = {
+                        'fine': tx_fine,
+                        'amount': tx_fine.amount if tx_fine else 0,
+                        'remaining': tx_fine.remaining_balance if tx_fine else 0,
+                    }
+                
                 return render(request, 'circulation/return_desk.html', {
                     'member':        member,
                     'member_borrows': member_borrows,
                     'card_input':    card_input,
                     'recent_returns': _get_recent_returns(),
+                    'has_unpaid_fines': has_unpaid_fines,
+                    'tx_fines': tx_fines,
                 })
             except VirtualCard.DoesNotExist:
                 messages.error(request, f'No library card found with Card No "{card_input}".')
@@ -1195,6 +1246,13 @@ def my_fines_view(request):
 
 
 @login_required
+def pay_fine_view(request, fine_id):
+    """View for users to pay fines - renders payment page."""
+    fine = get_object_or_404(Fine, id=fine_id, user=request.user, paid=False)
+    return render(request, 'circulation/pay_fine.html', {'fine': fine})
+
+
+@login_required
 @librarian_required
 def users_with_unpaid_fines_view(request):
     from django.db.models import Sum, Count, Q
@@ -1337,10 +1395,11 @@ def record_fine_payment_view(request, fine_id):
         
         # Determine SMS message based on payment status
         remaining_balance = fine.remaining_balance
+        book_name = fine.transaction.copy.book.title if fine.transaction else "kitabu"
         if fine.paid:
-            sms_message = f"Umelipa deni lote la faini ya TZS {fine.amount} kwa {payment_method.upper()}. Asante."
+            sms_message = f"Umelipa deni lote la faini ya TZS {fine.amount} kwa kitabu '{book_name}' kwa {payment_method.upper()}. Asante."
         else:
-            sms_message = f"Umelipa TZS {payment_amount} kwa faini ya TZS {fine.amount}. Bado unadaiwa TZS {remaining_balance}."
+            sms_message = f"Umelipa TZS {payment_amount} kwa faini ya TZS {fine.amount} ya kitabu '{book_name}'. Bado unadaiwa TZS {remaining_balance}. karibu tena."
         
         # Send SMS notification
         try:
@@ -1532,6 +1591,21 @@ def member_msict_borrowings_view(request):
         transaction__user=user, paid=False
     ).select_related('transaction__copy__book')
 
+    # Get fines for overdue transactions
+    overdue_tx_ids = active_borrows.filter(status='overdue').values_list('id', flat=True)
+    overdue_fines = Fine.objects.filter(transaction_id__in=overdue_tx_ids)
+
+    # Build fine info dictionary for each transaction (for softcopy return check)
+    tx_fines = {}
+    for fine in overdue_fines:
+        if fine.transaction_id not in tx_fines:
+            tx_fines[fine.transaction_id] = {
+                'amount': fine.amount,
+                'remaining': fine.remaining_balance,
+                'paid': fine.paid,
+                'amount_paid': fine.amount_paid,
+            }
+
     context = {
         'active_borrows': active_borrows,
         'borrow_history': borrow_history,
@@ -1540,6 +1614,7 @@ def member_msict_borrowings_view(request):
         'reservations': reservations,
         'reservation_history': reservation_history,
         'unpaid_fines': unpaid_fines,
+        'tx_fines': tx_fines,
     }
     return render(request, 'circulation/member_msict_borrowings.html', context)
 
@@ -1820,11 +1895,25 @@ def all_borrowings_view(request):
         'returned': BorrowingTransaction.objects.filter(status='returned').count(),
     }
 
+    # Build fine info dictionary for each transaction
+    tx_ids = qs.values_list('id', flat=True)
+    fines = Fine.objects.filter(transaction_id__in=tx_ids)
+    tx_fines = {}
+    for fine in fines:
+        if fine.transaction_id not in tx_fines:
+            tx_fines[fine.transaction_id] = {
+                'amount': fine.amount,
+                'remaining': fine.remaining_balance,
+                'paid': fine.paid,
+                'amount_paid': fine.amount_paid,
+            }
+
     return render(request, 'circulation/all_borrowings.html', {
         'transactions':      qs,
         'status_filter':     status_filter,
         'copy_type_filter':  copy_type_filter,
         'query':             query,
         'counts':            counts,
+        'tx_fines':          tx_fines,
         'now':               tz.now(),
     })

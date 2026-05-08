@@ -48,21 +48,8 @@
 {% if unpaid_fines %}
 <div class="alert alert-warning border-warning mb-3">
   <h6 class="fw-bold mb-2"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Fines Detected</h6>
-  <p class="mb-2">You have unpaid fines totaling <strong>TZS {{ total_unpaid|floatformat:2 }}</strong>.</p>
-  <p class="mb-0">Please visit the <strong>library circulation desk</strong> to make payment. The librarian will record your payment and update your status.</p>
-</div>
-
-<div class="card mb-3 border-success">
-  <div class="card-body">
-    <h6 class="fw-bold mb-3"><i class="bi bi-info-circle"></i> Payment Instructions</h6>
-    <ol class="mb-0">
-      <li>Visit the library circulation desk during working hours</li>
-      <li>Inform the librarian that you have fines to pay</li>
-      <li>Pay using any of the accepted methods: Cash, M-Pesa, Tigo Pesa, Airtel Money, Visa, Bank Transfer</li>
-      <li>Request a receipt number from the librarian</li>
-      <li>Your payment will be recorded in the system and your borrowing eligibility will be restored</li>
-    </ol>
-  </div>
+  <p class="mb-2">You have unpaid fines totaling <strong>TZS {{ total_unpaid|floatformat:0 }}</strong>.</p>
+  <p class="mb-0">Click the <strong>Pay</strong> button next to each fine to proceed with payment.</p>
 </div>
 {% endif %}
 
@@ -76,9 +63,11 @@
             <th>Reason</th>
             <th>Book</th>
             <th>Amount</th>
+            <th>Paid</th>
+            <th>Unpaid</th>
             <th>Status</th>
             <th>Date</th>
-            <th>Payment Details</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -87,7 +76,9 @@
             <td>{{ forloop.counter }}</td>
             <td><small>{{ fine.reason }}</small></td>
             <td><small>{% if fine.transaction %}{{ fine.transaction.copy.book.title }}{% else %}—{% endif %}</small></td>
-            <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:2 }}</td>
+            <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:0 }}</td>
+            <td><small class="text-success fw-semibold">TZS {{ fine.amount_paid|floatformat:0 }}</small></td>
+            <td><small class="text-danger fw-semibold">TZS {{ fine.remaining_balance|floatformat:0 }}</small></td>
             <td>
               {% if fine.paid %}
                 <span class="badge bg-success">Paid</span>
@@ -97,19 +88,20 @@
             </td>
             <td><small class="text-muted">{{ fine.created_at|date:"d M Y" }}</small></td>
             <td>
-              {% if fine.paid %}
-                <small>
-                  <span class="fw-semibold">{{ fine.get_payment_method_display|default:fine.payment_method }}</span>
-                  {% if fine.receipt_no %}<br><code>{{ fine.receipt_no }}</code>{% endif %}
-                  {% if fine.paid_at %}<br><span class="text-muted">{{ fine.paid_at|date:"d M Y H:i" }}</span>{% endif %}
-                </small>
-              {% else %}
-                <span class="text-muted">—</span>
+              {% if not fine.paid %}
+              <a href="{% url 'pay_fine' fine.id %}" class="btn btn-sm btn-success py-0">
+                <i class="bi bi-credit-card"></i> Pay
+              </a>
+              {% elif fine.paid %}
+              <small class="text-muted">
+                <span class="fw-semibold">{{ fine.get_payment_method_display|default:fine.payment_method }}</span>
+                {% if fine.receipt_no %}<br><code>{{ fine.receipt_no }}</code>{% endif %}
+              </small>
               {% endif %}
             </td>
           </tr>
           {% empty %}
-          <tr><td colspan="7" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No fines recorded. Great job!</td></tr>
+          <tr><td colspan="9" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No fines recorded. Great job!</td></tr>
           {% endfor %}
         </tbody>
       </table>

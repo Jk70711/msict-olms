@@ -46,7 +46,7 @@
 <div class="card p-3 mb-3">
   <form method="get" class="row g-2 align-items-end">
     <div class="col-md-4">
-      <input type="text" name="q" class="form-control" placeholder="Search book, member, acc. no, army no..." value="{{ query }}">
+      <input type="text" name="q" class="form-control" placeholder="Search book, member, acc. no..." value="{{ query }}">
     </div>
     <div class="col-md-2">
       <select name="status" class="form-select">
@@ -77,12 +77,12 @@
           <th>S/N</th>
           <th>Book Title</th>
           <th>Member</th>
-          <th>Army No</th>
           <th>Acc. No</th>
           <th>Type</th>
           <th>Borrow Date</th>
           <th>Due Date</th>
           <th>Status</th>
+          <th>Fine</th>
           <th>Days Info</th>
           <th>Approved By</th>
           <th>Return Date</th>
@@ -100,7 +100,6 @@
             <small class="fw-semibold">{{ tx.user.get_full_name }}</small>
             <div class="text-muted" style="font-size:.72rem;">{{ tx.user.username }}</div>
           </td>
-          <td><small class="text-muted">{{ tx.user.army_no|default:"—" }}</small></td>
           <td><code class="small">{{ tx.copy.accession_no }}</code></td>
           <td>
             {% if tx.borrow_type == 'hardcopy' %}
@@ -119,6 +118,21 @@
             {% elif tx.status == 'returned' %}
               <span class="badge bg-secondary">Returned</span>
             {% endif %}
+          </td>
+          <td>
+            {% for tid, fine_info in tx_fines.items %}
+              {% if tid == tx.id %}
+                {% if fine_info.paid %}
+                <span class="badge bg-success">Paid</span>
+                {% elif fine_info.amount_paid > 0 %}
+                <span class="badge bg-warning text-dark">Partial</span>
+                {% else %}
+                <span class="badge bg-danger">Unpaid</span>
+                {% endif %}
+              {% endif %}
+            {% empty %}
+            <span class="text-muted small">—</span>
+            {% endfor %}
           </td>
           <td>
             {% if tx.status == 'returned' and tx.return_date %}
@@ -145,7 +159,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="12" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
+        <tr><td colspan="11" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

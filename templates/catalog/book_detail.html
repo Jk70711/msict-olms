@@ -36,7 +36,14 @@
       {% for c in book.courses.all %}<span class="badge bg-primary me-1">{{ c.course_name }}</span>{% endfor %}
     </div>
     {% endif %}
-    {% if book.summary %}<p class="text-secondary">{{ book.summary }}</p>{% endif %}
+    {% if book.summary %}
+    <h6 class="fw-bold mt-3 mb-2">Summary</h6>
+    <p class="rounded p-3"
+       style="background:#fff; color:#000; text-align: justify; font-size:16px; font-weight:400; line-height:1.6;">
+      {{ book.summary }}
+    </p>
+    {% endif %}
+    
     <h6 class="fw-bold mt-3">Copies ({{ copies.count }})</h6>
     <div class="table-responsive">
       <table class="table table-sm table-hover">

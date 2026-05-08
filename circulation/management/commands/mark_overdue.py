@@ -32,6 +32,21 @@ class Command(BaseCommand):
             tx.status = 'overdue'
             tx.save(update_fields=['status'])
             days = max(1, (now - tx.due_date).days)
+            
+            # Create Fine record for new overdue transaction
+            from accounts.models import SystemPreference
+            fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 500))
+            fine_amount = days * fine_per_day
+            Fine.objects.get_or_create(
+                user=tx.user,
+                transaction=tx,
+                paid=False,
+                defaults={
+                    'amount': fine_amount,
+                    'reason': f"Overdue fine for '{tx.copy.book.title}' ({days} days)",
+                }
+            )
+            
             return_hint = (
                 "Return the soft copy online from your dashboard or "
                 if tx.copy.copy_type == 'softcopy'
@@ -56,6 +71,22 @@ class Command(BaseCommand):
             from accounts.models import SystemPreference
             fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 1000))
             total_fine = days * fine_per_day
+            
+            # Update Fine record for already overdue transaction
+            existing_fine = Fine.objects.filter(transaction=tx, paid=False).first()
+            if existing_fine:
+                existing_fine.amount = total_fine
+                existing_fine.reason = f"Overdue fine for '{tx.copy.book.title}' ({days} days)"
+                existing_fine.save(update_fields=['amount', 'reason'])
+            else:
+                Fine.objects.create(
+                    user=tx.user,
+                    transaction=tx,
+                    amount=total_fine,
+                    reason=f"Overdue fine for '{tx.copy.book.title}' ({days} days)",
+                    paid=False,
+                )
+            
             return_hint = (
                 "Return online from your dashboard or "
                 if tx.copy.copy_type == 'softcopy'

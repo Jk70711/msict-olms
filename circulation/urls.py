@@ -10,6 +10,7 @@ urlpatterns = [
     # ── Dashboard na Orodha ya Mwanachama ────────────────────
     path('member-dashboard/', views.member_dashboard_view, name='member_dashboard'),             # Dashboard ya mwanachama
     path('my-fines/', views.my_fines_view, name='my_fines'),                                    # Faini zangu
+    path('my-fines/pay/<int:fine_id>/', views.pay_fine_view, name='pay_fine'),                 # Lipa faini
     path('my-borrowings/msict/', views.member_msict_borrowings_view, name='member_msict_borrowings'),  # Mikopo yangu
     path('my-borrowings/ill/', views.member_ill_borrowings_view, name='member_ill_borrowings'),  # Mikopo ya ILL
     path('softcopy-library/', views.softcopy_library_view, name='softcopy_library'),             # Vitabu vya kidijitali nilivyokopa

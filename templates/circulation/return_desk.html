@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 {% block title %}Return Desk{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -68,7 +69,7 @@
 
     {# ── Barcode lookup preview (shown after accession-no search) ────────── #}
     {% if lookup_tx %}
-    <div class="card mt-3 border-primary border-2">
+    <div class="card mt-3 border-primary border-2" style="width: 100%;">
       {# Book + borrower info banner #}
       <div class="card-header d-flex align-items-center gap-3" style="background:rgba(13,110,253,.08);">
         <i class="bi bi-upc-scan fs-3 text-primary"></i>
@@ -88,7 +89,7 @@
       </div>
 
       {# Borrower info + confirm return #}
-      <div class="card-body">
+      <div class="card-body" style="width: 100%;">
         <div class="row align-items-center">
           <div class="col-md-8">
             <table class="table table-sm table-borderless mb-0">
@@ -177,6 +178,7 @@
                 <th>Borrow Date</th>
                 <th>Due Date</th>
                 <th>Time Left</th>
+                <th>Fine</th>
                 <th class="text-center">Return</th>
               </tr>
             </thead>
@@ -202,16 +204,61 @@
                     <i class="bi bi-clock"></i> {{ tx.time_remaining_display }}
                   </span>
                 </td>
+                <td>
+                  {% for tid, fine_info in tx_fines.items %}
+                    {% if tid == tx.id %}
+                      {% if fine_info.amount > 0 %}
+                        <div class="text-danger fs-6 fw-bold mb-1">
+                          TZS {{ fine_info.amount|floatformat:0 }}
+                        </div>
+                        {% if fine_info.remaining > 0 %}
+                          <div class="text-warning fw-semibold">Unpaid: TZS {{ fine_info.remaining|floatformat:0 }}</div>
+                        {% endif %}
+                      {% else %}
+                        <span class="text-muted fs-6">—</span>
+                      {% endif %}
+                    {% endif %}
+                  {% empty %}
+                    <span class="text-muted fs-6">—</span>
+                  {% endfor %}
+                </td>
                 <td class="text-center">
-                  <form method="post" class="d-inline"
-                        onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
-                    {% csrf_token %}
-                    <input type="hidden" name="copy_pk"        value="{{ tx.copy.pk }}">
-                    <input type="hidden" name="return_card_no" value="{{ card_input }}">
-                    <button type="submit" class="btn btn-sm btn-success fw-semibold">
-                      <i class="bi bi-check-circle"></i> Return
-                    </button>
-                  </form>
+                  {% if tx.status == 'overdue' %}
+                    {% for tid, fine_info in tx_fines.items %}
+                      {% if tid == tx.id and fine_info.remaining > 0 %}
+                      <button class="btn btn-sm btn-danger fw-semibold" disabled title="Pay fine first: TZS {{ fine_info.remaining|floatformat:0 }}">
+                        <i class="bi bi-exclamation-triangle"></i> Blocked
+                      </button>
+                      {% elif tid == tx.id and fine_info.remaining == 0 %}
+                      <form method="post" class="d-inline"
+                            onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="return_tx_id" value="{{ tx.pk }}">
+                        <button type="submit" class="btn btn-sm btn-success fw-semibold">
+                          <i class="bi bi-check-circle"></i> Return
+                        </button>
+                      </form>
+                      {% endif %}
+                    {% empty %}
+                    <form method="post" class="d-inline"
+                          onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="return_tx_id" value="{{ tx.pk }}">
+                      <button type="submit" class="btn btn-sm btn-success fw-semibold">
+                        <i class="bi bi-check-circle"></i> Return
+                      </button>
+                    </form>
+                    {% endfor %}
+                  {% else %}
+                    <form method="post" class="d-inline"
+                          onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
+                      {% csrf_token %}
+                      <input type="hidden" name="return_tx_id" value="{{ tx.pk }}">
+                      <button type="submit" class="btn btn-sm btn-success fw-semibold">
+                        <i class="bi bi-check-circle"></i> Return
+                      </button>
+                    </form>
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}

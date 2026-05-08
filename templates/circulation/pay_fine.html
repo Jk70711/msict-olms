@@ -1,0 +1,230 @@
+{% extends 'base.html' %}
+{% block title %}Pay Fine{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-credit-card"></i> Pay Fine</h4>
+
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3">Fine Details</h6>
+        <div class="row mb-3">
+          <div class="col-6">
+            <small class="text-muted">Reason</small>
+            <div class="fw-semibold">{{ fine.reason }}</div>
+          </div>
+          <div class="col-6">
+            <small class="text-muted">Amount</small>
+            <div class="fw-bold text-danger fs-4">TZS {{ fine.amount|floatformat:0 }}</div>
+          </div>
+        </div>
+        {% if fine.transaction %}
+        <div class="mb-3">
+          <small class="text-muted">Book</small>
+          <div class="fw-semibold">{{ fine.transaction.copy.book.title }}</div>
+        </div>
+        {% endif %}
+        <div class="row mb-3">
+          <div class="col-6">
+            <small class="text-muted">Paid</small>
+            <div class="fw-bold text-success">TZS {{ fine.amount_paid|floatformat:0 }}</div>
+          </div>
+          <div class="col-6">
+            <small class="text-muted">Remaining</small>
+            <div class="fw-bold text-danger">TZS {{ fine.remaining_balance|floatformat:0 }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3">Payment Method</h6>
+        <p class="text-muted small">Select your preferred payment method to proceed with payment.</p>
+        
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <button class="btn btn-success w-100 payment-method-btn" data-method="mpesa">
+              <i class="bi bi-telephone"></i> M-Pesa
+            </button>
+          </div>
+          <div class="col-4">
+            <button class="btn btn-success w-100 payment-method-btn" data-method="tigopesa">
+              <i class="bi bi-telephone"></i> Tigo Pesa
+            </button>
+          </div>
+          <div class="col-4">
+            <button class="btn btn-success w-100 payment-method-btn" data-method="airtel">
+              <i class="bi bi-telephone"></i> Airtel Money
+            </button>
+          </div>
+          <div class="col-4">
+            <button class="btn btn-success w-100 payment-method-btn" data-method="halotel">
+              <i class="bi bi-telephone"></i> Halotel
+            </button>
+          </div>
+          <div class="col-4">
+            <button class="btn btn-primary w-100 payment-method-btn" data-method="card">
+              <i class="bi bi-credit-card"></i> Card
+            </button>
+          </div>
+          <div class="col-4">
+            <button class="btn btn-secondary w-100 payment-method-btn" data-method="bank">
+              <i class="bi bi-bank"></i> Bank
+            </button>
+          </div>
+        </div>
+
+        <!-- Payment Form Area -->
+        <div id="payment-form-area" class="mt-3" style="display: none;">
+          <div class="border-top pt-3">
+            <h6 class="fw-bold mb-3" id="payment-form-title">Payment Details</h6>
+            
+            <!-- Amount Field (Always shown) -->
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Amount to Pay (TZS)</label>
+              <input type="number" class="form-control" id="payment-amount" value="{{ fine.remaining_balance|floatformat:0 }}" min="1" required>
+              <small class="text-muted">Remaining balance: TZS {{ fine.remaining_balance|floatformat:0 }}</small>
+            </div>
+
+            <!-- Mobile Money Fields -->
+            <div id="mobile-money-fields" style="display: none;">
+              <div class="mb-3">
+                <label class="form-label">Phone Number</label>
+                <input type="tel" class="form-control" placeholder="e.g., 255712345678" required>
+              </div>
+            </div>
+
+            <!-- Card Fields -->
+            <div id="card-fields" style="display: none;">
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label">Card Type</label>
+                  <select class="form-select" required>
+                    <option value="">Select</option>
+                    <option value="visa">Visa</option>
+                    <option value="mastercard">Mastercard</option>
+                  </select>
+                </div>
+                <div class="col-6">
+                  <label class="form-label">Card Number</label>
+                  <input type="text" class="form-control" placeholder="1234 5678 9012 3456" required>
+                </div>
+              </div>
+              <div class="row g-2 mb-3">
+                <div class="col-6">
+                  <label class="form-label">Expiry Date</label>
+                  <input type="text" class="form-control" placeholder="MM/YY" required>
+                </div>
+                <div class="col-6">
+                  <label class="form-label">CVV</label>
+                  <input type="text" class="form-control" placeholder="123" required>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bank Fields -->
+            <div id="bank-fields" style="display: none;">
+              <div class="mb-3">
+                <label class="form-label">Select Bank</label>
+                <select class="form-select" required>
+                  <option value="">Select Bank</option>
+                  <option value="crdb">CRDB Bank</option>
+                  <option value="nmb">NMB Bank</option>
+                  <option value="stanbic">Stanbic Bank</option>
+                  <option value="kcb">KCB Bank Tanzania</option>
+                  <option value="equity">Equity Bank Tanzania</option>
+                  <option value="azania">Azania Bank</option>
+                  <option value="dcb">DCB Commercial Bank</option>
+                  <option value="tcb">TCB Bank</option>
+                  <option value="bankoftanzania">Bank of Tanzania</option>
+                  <option value="exim">Exim Bank</option>
+                  <option value="mucoba">Mucoba Bank</option>
+                  <option value="yetu">Yetu Microfinance</option>
+                  <option value="finca">FINCA Tanzania</option>
+                  <option value="pride">Pride Microfinance</option>
+                  <option value="tujijenge">Tujijenge Tanzania</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Account Number</label>
+                <input type="text" class="form-control" placeholder="Enter account number" required>
+              </div>
+            </div>
+
+            <!-- Confirm Button -->
+            <button class="btn btn-primary w-100 btn-lg" id="confirm-payment-btn">
+              <i class="bi bi-check-circle"></i> Confirm Payment
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-warning">
+      <div class="card-body">
+        <h6 class="fw-bold mb-2"><i class="bi bi-info-circle"></i> Payment Instructions</h6>
+        <ol class="small mb-0">
+          <li>Select your preferred payment method above</li>
+          <li>Enter the amount you want to pay</li>
+          <li>Fill in the required payment details</li>
+          <li>Click "Confirm Payment" to complete the transaction</li>
+          <li>Your payment will be automatically recorded in the system</li>
+          <li>Your borrowing eligibility will be restored after successful payment</li>
+        </ol>
+      </div>
+    </div>
+
+    <a href="{% url 'my_fines' %}" class="btn btn-outline-secondary mt-3">
+      <i class="bi bi-arrow-left"></i> Back to My Fines
+    </a>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const paymentMethodBtns = document.querySelectorAll('.payment-method-btn');
+  const paymentFormArea = document.getElementById('payment-form-area');
+  const paymentFormTitle = document.getElementById('payment-form-title');
+  const mobileMoneyFields = document.getElementById('mobile-money-fields');
+  const cardFields = document.getElementById('card-fields');
+  const bankFields = document.getElementById('bank-fields');
+  const confirmPaymentBtn = document.getElementById('confirm-payment-btn');
+
+  paymentMethodBtns.forEach(btn => {
+    btn.addEventListener('click', function() {
+      const method = this.getAttribute('data-method');
+      
+      // Reset all buttons
+      paymentMethodBtns.forEach(b => b.classList.remove('btn-dark', 'text-light'));
+      this.classList.add('btn-dark', 'text-light');
+      
+      // Show form area
+      paymentFormArea.style.display = 'block';
+      
+      // Hide all field groups
+      mobileMoneyFields.style.display = 'none';
+      cardFields.style.display = 'none';
+      bankFields.style.display = 'none';
+      
+      // Show appropriate fields based on method
+      if (method === 'mpesa' || method === 'tigopesa' || method === 'airtel' || method === 'halotel') {
+        paymentFormTitle.textContent = 'Mobile Money Payment';
+        mobileMoneyFields.style.display = 'block';
+      } else if (method === 'card') {
+        paymentFormTitle.textContent = 'Card Payment';
+        cardFields.style.display = 'block';
+      } else if (method === 'bank') {
+        paymentFormTitle.textContent = 'Bank Transfer';
+        bankFields.style.display = 'block';
+      }
+    });
+  });
+
+  confirmPaymentBtn.addEventListener('click', function() {
+    const amount = document.getElementById('payment-amount').value;
+    alert(`Payment of TZS ${amount} will be processed. This is a demo - integrate with actual payment gateway.`);
+  });
+});
+</script>
+{% endblock %}
