@@ -12,6 +12,15 @@
             <input type="text" name="army_no" class="form-control" value="{{ user_obj.army_no }}" required>
           </div>
           <div class="col-md-3">
+            <label class="form-label fw-semibold">Rank <span class="text-danger">*</span></label>
+            <select name="rank_id" class="form-select" required>
+              <option value="">-- Select Rank --</option>
+              {% for rank in ranks %}
+              <option value="{{ rank.pk }}" {% if user_obj.rank_id == rank.pk %}selected{% endif %}>{{ rank.rank_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
             <label class="form-label fw-semibold">Surname <span class="text-danger">*</span></label>
             <input type="text" name="surname" class="form-control" value="{{ user_obj.surname }}" required>
           </div>

@@ -1,0 +1,188 @@
+{% extends 'base.html' %}
+{% block title %}Report Lost Book{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="d-flex align-items-center gap-2 mb-3">
+      <a href="{% url 'member_dashboard' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Dashboard</a>
+      <a href="{% url 'member_msict_borrowings' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-book"></i> My Borrowings</a>
+      <h5 class="fw-bold mb-0 ms-2"><i class="bi bi-exclamation-triangle-fill text-danger me-1"></i> Report Lost Book</h5>
+    </div>
+
+    <!-- Book Info Card -->
+    <div class="card border-danger mb-3">
+      <div class="card-header bg-danger text-white fw-bold py-2">
+        <i class="bi bi-book me-1"></i> Book Details
+      </div>
+      <div class="card-body pb-2">
+        <div class="row g-2">
+          <div class="col-sm-7">
+            <div class="small text-muted">Title</div>
+            <div class="fw-semibold">{{ tx.copy.book.title }}</div>
+            <div class="small text-muted mt-1">{{ tx.copy.book.author }}</div>
+          </div>
+          <div class="col-sm-2">
+            <div class="small text-muted">Accession No</div>
+            <div class="fw-semibold"><code>{{ tx.copy.accession_no }}</code></div>
+          </div>
+          <div class="col-sm-3">
+            <div class="small text-muted">Shelf Location</div>
+            <div>{{ tx.copy.shelf_location|default:"—" }}</div>
+          </div>
+          <div class="col-sm-3">
+            <div class="small text-muted">Borrowed On</div>
+            <div>{{ tx.borrow_date|date:"d M Y" }}</div>
+          </div>
+          <div class="col-sm-3">
+            <div class="small text-muted">Due Date</div>
+            <div class="{% if tx.status == 'overdue' %}text-danger fw-bold{% endif %}">{{ tx.due_date|date:"d M Y" }}</div>
+          </div>
+          <div class="col-sm-3">
+            <div class="small text-muted">Borrow Status</div>
+            <div>
+              {% if tx.status == 'overdue' %}
+                <span class="badge bg-danger">Overdue</span>
+              {% elif tx.status == 'lost' %}
+                <span class="badge bg-warning">Lost</span>
+              {% elif tx.status == 'borrowed' %}
+                <span class="badge bg-warning text-dark">Borrowed</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ tx.status|title }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <div class="col-sm-3">
+            <div class="small text-muted">Book Type</div>
+            <div><span class="badge bg-secondary"><i class="bi bi-book me-1"></i>Hardcopy</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Warning Banner -->
+    <div class="alert alert-warning d-flex gap-2 align-items-start mb-3 py-3">
+      <i class="bi bi-info-circle-fill fs-5 flex-shrink-0 mt-1"></i>
+      <div>
+        <strong>Important Notice:</strong> Submitting this form notifies the librarian immediately.
+        A librarian will review your report and <strong>may raise a loss fine</strong> based on the book's replacement value.
+        If you later find and return the book, bring it to the circulation desk — the fine may be waived.
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="card shadow-sm">
+      <div class="card-header fw-bold py-2"><i class="bi bi-file-earmark-text me-1"></i> Loss Report Form</div>
+      <div class="card-body">
+        {% if messages %}
+          {% for msg in messages %}
+          <div class="alert alert-{{ msg.tags }} alert-dismissible mb-3">
+            {{ msg }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+          {% endfor %}
+        {% endif %}
+        <form method="post" id="lossReportForm" novalidate>
+          {% csrf_token %}
+
+          <!-- Section 1: Loss Details -->
+          <h6 class="fw-bold text-danger mb-2"><i class="bi bi-1-circle me-1"></i>Loss Details</h6>
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Circumstances <span class="text-danger">*</span></label>
+              <select name="circumstances" class="form-select" required>
+                <option value="">-- Select circumstances --</option>
+                <option value="Misplaced">Misplaced / Cannot locate</option>
+                <option value="Theft">Stolen / Theft</option>
+                <option value="Fire">Fire / Disaster</option>
+                <option value="Water damage">Water / Flood damage</option>
+                <option value="Other">Other</option>
+              </select>
+              <div class="form-text">Select the closest reason for the loss.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Date/Time Noticed Missing</label>
+              <input type="datetime-local" name="date_noticed" class="form-control">
+              <div class="form-text">When did you first notice the book was missing?</div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Last Known Location</label>
+            <input type="text" name="last_known_location" class="form-control"
+              placeholder="e.g. My dorm room, Study hall Block B, Left at home during holiday…">
+            <div class="form-text">Where was the book last seen?</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Full Description <span class="text-danger">*</span></label>
+            <textarea name="description" class="form-control" rows="5" required minlength="20"
+              placeholder="Describe in detail: how and when the book was lost, what happened, any witnesses, steps you've already taken to find it, etc."></textarea>
+            <div class="form-text">Be as specific as possible. Minimum 20 characters.</div>
+          </div>
+
+          <hr class="my-3">
+
+          <!-- Section 2: Authority Report -->
+          <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-2-circle me-1"></i>Authority Report (If Applicable)</h6>
+          <div class="mb-3">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="authority_reported" id="authorityCheck"
+                     onchange="document.getElementById('authorityRefRow').classList.toggle('d-none', !this.checked)">
+              <label class="form-check-label" for="authorityCheck">
+                I have reported this loss to an authority (police, security office, unit officer, etc.)
+              </label>
+            </div>
+          </div>
+          <div class="mb-3 d-none" id="authorityRefRow">
+            <label class="form-label fw-semibold">Reference Number / Report Number</label>
+            <input type="text" name="authority_reference" class="form-control"
+              placeholder="e.g. OB/123/2025, Security Ref: 045…">
+            <div class="form-text">Police OB number, security incident reference, or unit report number.</div>
+          </div>
+
+          <hr class="my-3">
+
+          <!-- Section 3: Declaration -->
+          <h6 class="fw-bold text-secondary mb-2"><i class="bi bi-3-circle me-1"></i>Declaration</h6>
+          <div class="alert alert-secondary py-2 mb-3 small">
+            <ul class="mb-0 ps-3">
+              <li>I confirm that the information provided above is true and accurate to the best of my knowledge.</li>
+              <li>I understand that a <strong>loss fine</strong> may be charged based on the replacement value of the book.</li>
+              <li>I undertake to inform the library immediately if the book is found.</li>
+              <li>I understand that making a false report is a serious offence.</li>
+            </ul>
+          </div>
+          <div class="mb-4">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" name="declaration" id="declarationCheck" required>
+              <label class="form-check-label fw-semibold" for="declarationCheck">
+                I declare that the above information is true and I accept the consequences outlined. <span class="text-danger">*</span>
+              </label>
+              <div class="invalid-feedback">You must accept the declaration to proceed.</div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-danger px-4">
+              <i class="bi bi-send me-1"></i> Submit Loss Report
+            </button>
+            <a href="{% url 'member_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% block extra_js %}
+<script>
+document.getElementById('lossReportForm').addEventListener('submit', function (e) {
+  if (!document.getElementById('declarationCheck').checked) {
+    e.preventDefault();
+    document.getElementById('declarationCheck').classList.add('is-invalid');
+  }
+});
+</script>
+{% endblock %}
+{% endblock %}

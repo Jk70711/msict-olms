@@ -7,12 +7,13 @@
       <h5 class="fw-bold mb-3"><i class="bi bi-collection"></i> Edit Book Copy</h5>
       <div class="alert alert-info small">
         <strong>Book:</strong> {{ copy.book.title }}<br>
-        <strong>Current Accession:</strong> <code>{{ copy.accession_no }}</code><br>
+        <strong>ID:</strong> <code>{{ copy.display_id }}</code>{% if copy.copy_type == 'softcopy' %} <span class="badge bg-info text-dark ms-1"><i class="bi bi-link-45deg"></i> Softcopy Link</span>{% endif %}<br>
         <strong>Type:</strong> {{ copy.copy_type|title }}
         {% if copy.copy_type == 'softcopy' %}({{ copy.access_type|title }}){% endif %}
       </div>
       <form method="post">{% csrf_token %}
         <div class="row g-3">
+          {% if copy.copy_type == 'hardcopy' %}
           <div class="col-md-6">
             <label class="form-label fw-semibold">Accession Number <span class="text-danger">*</span></label>
             <input type="text" name="accession_no" class="form-control" value="{{ copy.accession_no }}" placeholder="e.g. MSICT/000001" required>
@@ -22,6 +23,14 @@
             <label class="form-label">Barcode</label>
             <input type="text" name="barcode" class="form-control" value="{{ copy.barcode|default:copy.accession_no }}">
           </div>
+          {% else %}
+          <div class="col-12">
+            <div class="alert alert-secondary py-2 small mb-0">
+              <i class="bi bi-lock-fill me-1"></i> Softcopy ID <code>{{ copy.accession_no }}</code> is managed internally.
+              It displays as <strong>Link</strong> to all users.
+            </div>
+          </div>
+          {% endif %}
           <div class="col-md-6">
             <label class="form-label">Shelf Location</label>
             <select name="shelf_location" id="editShelfSelect" class="form-select">

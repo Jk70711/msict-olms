@@ -74,6 +74,7 @@
                 <th>Full Name</th>
                 <th>Card No</th>
                 <th>Army No</th>
+                <th>Rank</th>
                 <th>Role</th>
                 <th>Type</th>
                 <th>Email</th>
@@ -89,6 +90,7 @@
                 <td>{{ u.get_full_name }}</td>
                 <td><code class="text-primary">{{ u.virtual_card.short_card_no|default:"—" }}</code></td>
                 <td><small>{{ u.army_no }}</small></td>
+                <td><small class="badge bg-dark">{{ u.rank.rank_name|default:"—" }}</small></td>
                 <td><span class="badge badge-role-{{ u.role }}">{{ u.role|title }}</span></td>
                 <td>
                   {% if u.member_type == 'student' %}
@@ -118,7 +120,7 @@
               </tr>
               {% empty %}
               <tr>
-                <td colspan="10" class="text-center py-5 text-muted">
+                <td colspan="11" class="text-center py-5 text-muted">
                   <i class="bi bi-check-circle text-success fs-1 d-block mb-2"></i>
                   No suspended members at this time.
                 </td>

@@ -36,18 +36,30 @@
         </button>
       </div>
       <table class="table table-sm mb-0">
-        <thead><tr><th>Title</th><th>ISBN</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+        <thead><tr><th>S/N</th><th>Title</th><th>ISBN</th><th>Qty</th><th>Unit Price</th><th>Total</th><th>Actions</th></tr></thead>
         <tbody>
           {% for item in order.items.all %}
           <tr>
+            <td>{{ forloop.counter }}</td>
             <td><small>{{ item.title|truncatechars:40 }}</small></td>
             <td><small>{{ item.isbn|default:"-" }}</small></td>
             <td>{{ item.quantity }}</td>
             <td>TZS {{ item.unit_price|floatformat:2 }}</td>
             <td>TZS {{ item.total_price|floatformat:2 }}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary py-0 px-2" data-bs-toggle="modal" data-bs-target="#editItemModal{{ item.pk }}" title="Edit">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <form method="post" action="{% url 'purchase_order_delete_item' item.pk %}" class="d-inline" onsubmit="return confirm('Delete this item?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
           </tr>
           {% empty %}
-          <tr><td colspan="5" class="text-center text-muted">No items added.</td></tr>
+          <tr><td colspan="7" class="text-center text-muted">No items added.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -74,4 +86,27 @@
     </div>
   </div>
 </div>
+
+{% for item in order.items.all %}
+<div class="modal fade" id="editItemModal{{ item.pk }}" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">{% csrf_token %}
+        <input type="hidden" name="action" value="edit_item">
+        <input type="hidden" name="item_id" value="{{ item.pk }}">
+        <div class="modal-header"><h5 class="modal-title">Edit Item</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="mb-2"><label class="form-label">Title *</label><input type="text" name="title" class="form-control" value="{{ item.title }}" required></div>
+          <div class="mb-2"><label class="form-label">ISBN</label><input type="text" name="isbn" class="form-control" maxlength="13" value="{{ item.isbn|default:"" }}"></div>
+          <div class="row g-2">
+            <div class="col"><label class="form-label">Quantity</label><input type="number" name="quantity" class="form-control" value="{{ item.quantity }}" min="1" required></div>
+            <div class="col"><label class="form-label">Unit Price (TZS)</label><input type="number" name="unit_price" class="form-control" step="0.01" value="{{ item.unit_price }}" required></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="submit" class="btn btn-msict">Update Item</button></div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endfor %}
 {% endblock %}

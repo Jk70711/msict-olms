@@ -74,6 +74,14 @@
             <div class="mt-2"><img src="{{ book.cover_image.url }}" height="80" class="rounded"></div>
             {% endif %}
           </div>
+          <div class="col-md-3" id="lostFineSection">
+            <label class="form-label fw-semibold">Lost Fine Amount (TZS)</label>
+            <div class="input-group">
+              <span class="input-group-text">TZS</span>
+              <input type="number" name="lost_fine" id="lostFineInput" class="form-control" value="{{ book.lost_fine|default:'0' }}" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-text">Fine charged if a hardcopy of this book is reported lost by a borrower.</div>
+          </div>
           <!-- ── Hardcopy fields ─────────────────────────────── -->
           <div class="col-12" id="hardcopySection">
             <div class="row g-3">
@@ -154,6 +162,9 @@ const accessTypeNote     = document.getElementById('accessTypeNote');
 const accessTypeHidden   = document.getElementById('accessTypeHidden');
 
 /* ── Toggle sections based on book type radio ─── */
+const lostFineSection = document.getElementById('lostFineSection');
+const lostFineInput   = document.getElementById('lostFineInput');
+
 function applyBookType(val) {
   const showHard = (val === 'hardcopy' || val === 'both');
   const showSoft = (val === 'softcopy' || val === 'both');
@@ -161,6 +172,9 @@ function applyBookType(val) {
   softcopySection.style.display = showSoft ? '' : 'none';
   if (!showHard) numberCopies.value = 0;
   else if (numberCopies.value == 0) numberCopies.value = 1;
+  /* Lost fine only applies to hardcopy / both — hide for pure softcopy */
+  if (lostFineSection) lostFineSection.style.display = showHard ? '' : 'none';
+  if (lostFineInput && !showHard) lostFineInput.value = '0';
 
   /* When 'both': force softcopy to Special Borrow and lock */
   if (val === 'both') {

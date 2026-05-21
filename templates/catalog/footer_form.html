@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}Footer Settings{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0"><i class="bi bi-layout-text-sidebar-reverse"></i> Footer Settings</h4>
+  <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Dashboard</a>
+</div>
+
+<div class="card">
+  <div class="card-header fw-bold bg-dark text-white">
+    <span><i class="bi bi-gear"></i> Edit Footer Configuration</span>
+  </div>
+  <div class="card-body">
+    <form method="post">
+      {% csrf_token %}
+      
+      <div class="row g-3">
+        <div class="col-md-12">
+          <label class="form-label fw-semibold">School Name</label>
+          {{ form.school_name }}
+        </div>
+        
+        <div class="col-md-12">
+          <label class="form-label fw-semibold">Address</label>
+          {{ form.address }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Phone</label>
+          {{ form.phone }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Email</label>
+          {{ form.email }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Location/City</label>
+          {{ form.location }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Copyright Text</label>
+          {{ form.copyright_text }}
+        </div>
+        
+        <div class="col-md-12">
+          <label class="form-label fw-semibold">FAQ Link</label>
+          {{ form.faq_link }}
+          <div class="form-text">URL to the FAQ page</div>
+        </div>
+        
+        <div class="col-12">
+          <h6 class="fw-bold mt-4">Social Media Links</h6>
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Facebook</label>
+          {{ form.social_facebook }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Twitter/X</label>
+          {{ form.social_twitter }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">LinkedIn</label>
+          {{ form.social_linkedin }}
+        </div>
+        
+        <div class="col-md-6">
+          <label class="form-label fw-semibold">Instagram</label>
+          {{ form.social_instagram }}
+        </div>
+        
+        <div class="col-md-12">
+          <label class="form-label fw-semibold">Additional Footer Links</label>
+          {{ form.additional_links }}
+          <div class="form-text">One link per line in format: Label|URL</div>
+          <div class="form-text">Example:</div>
+          <div class="form-text">About Us|/about</div>
+          <div class="form-text">Contact|/contact</div>
+          <div class="form-text">Privacy Policy|/privacy</div>
+        </div>
+        
+        <div class="col-md-12">
+          <label class="form-check fw-semibold">
+            {{ form.is_active }}
+            <span class="form-check-label">Active</span>
+          </label>
+          <div class="form-text">Uncheck to disable this footer configuration</div>
+        </div>
+      </div>
+      
+      <div class="mt-4">
+        <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Changes</button>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}

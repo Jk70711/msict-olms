@@ -125,7 +125,13 @@ def send(request):
     if history_payload and history_payload[-1]['text'] == text:
         history_payload = history_payload[:-1]
 
-    result = gemini.chat(history_payload, text)
+    # Pass user authentication status and role to Gemini
+    user_context = {
+        'is_authenticated': request.user.is_authenticated,
+        'role': getattr(request.user, 'role', None) if request.user.is_authenticated else None,
+    }
+
+    result = gemini.chat(history_payload, text, user_context=user_context)
 
     reply = result.get('reply', '')
     metadata = {

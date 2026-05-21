@@ -17,6 +17,25 @@ army_no_validator = RegexValidator(
 )
 
 
+# Jedwali la vyeo vya kijeshi — linatumika kwa utambulisho wa kijeshi
+class Rank(models.Model):
+    rank_name = models.CharField(max_length=50, unique=True)
+
+    RANK_LIST = [
+        'GENERAL', 'LIEUTENANT GENERAL', 'MAJOR GENERAL', 'BRIGADIER GENERAL',
+        'COLONEL', 'LIEUTENANT COLONEL', 'MAJOR', 'CAPTAIN',
+        'LIEUTENANT', 'SECOND LIEUTENANT',
+        'WI', 'WII', 'SSGT', 'SGT', 'CPL', 'PTE',
+    ]
+
+    class Meta:
+        db_table = 'ranks'
+        ordering = ['pk']
+
+    def __str__(self):
+        return self.rank_name
+
+
 # Manager maalum wa kuunda watumiaji wa OLMSUser
 class OLMSUserManager(BaseUserManager):
     def create_user(self, username, password=None, **extra_fields):
@@ -72,6 +91,11 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
     last_password_change = models.DateTimeField(default=timezone.now)  # Mara ya mwisho kubadilisha nywila
     created_at = models.DateTimeField(auto_now_add=True)  # Tarehe ya kuunda akaunti
     photo = models.ImageField(upload_to='user_photos/', null=True, blank=True)  # Picha ya wasifu
+    rank = models.ForeignKey(
+        'Rank', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='users', db_column='rank_id'
+    )  # Cheo cha kijeshi
+    password_changed_after_first_login = models.BooleanField(default=False)  # Kuzuia kuingia mara ya pili bila kubadilisha nywila
     theme = models.CharField(
         max_length=10,
         choices=[('light', 'Light'), ('dark', 'Dark')],
@@ -98,6 +122,13 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         parts.append(self.surname)
         return ' '.join(parts)
 
+    def get_ranked_name(self):
+        """Return rank + full name, e.g. 'MAJOR J. Mkombozi'"""
+        name = self.get_full_name()
+        if self.rank:
+            return f'{self.rank.rank_name} {name}'
+        return name
+
     def get_short_name(self):
         return self.first_name
 
@@ -112,12 +143,22 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         return re.sub(r'[^0-9]', '', army_no)
 
     def has_overdue(self):
-        from circulation.models import BorrowingTransaction
-        from django.db.models import Q
-        return BorrowingTransaction.objects.filter(
+        """Returns True only when the user has overdue books where the fine is
+        still unpaid (or no fine has been created yet).  Users who have fully
+        paid their overdue fines are NOT restricted."""
+        from circulation.models import BorrowingTransaction, Fine
+        from django.db.models import Q, Exists, OuterRef, F
+        overdue_qs = BorrowingTransaction.objects.filter(
             Q(user=self, status='overdue') |
             Q(user=self, status='borrowed', due_date__lt=timezone.now())
-        ).exists()
+        )
+        if not overdue_qs.exists():
+            return False
+        unpaid_fine = Exists(
+            Fine.objects.filter(transaction=OuterRef('pk'), paid=False, amount__gt=F('amount_paid'))
+        )
+        no_fine_yet = ~Exists(Fine.objects.filter(transaction=OuterRef('pk')))
+        return overdue_qs.filter(unpaid_fine | no_fine_yet).exists()
 
     def active_borrows_count(self):
         from circulation.models import BorrowingTransaction
@@ -126,8 +167,18 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         ).count()
 
     def has_unpaid_fines(self):
-        from circulation.models import Fine
-        return Fine.objects.filter(user=self, paid=False).exists()
+        from circulation.models import Fine, LossReport
+        from django.db.models import F
+        # Check BOTH the paid flag AND that amount_paid < amount (guards against stale flags)
+        # This includes both overdue fines AND loss fines
+        unpaid_overdue_fines = Fine.objects.filter(user=self, paid=False, amount__gt=F('amount_paid')).exists()
+        unpaid_loss_fines = LossReport.objects.filter(
+            user=self,
+            loss_fine__isnull=False,
+            loss_fine__paid=False,
+            loss_fine__amount__gt=F('loss_fine__amount_paid')
+        ).exists()
+        return unpaid_overdue_fines or unpaid_loss_fines
 
     def password_is_old(self):
         from django.conf import settings

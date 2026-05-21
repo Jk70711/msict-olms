@@ -24,6 +24,22 @@ from django.views.decorators.http import require_POST
 from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP
 from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user
 from .forms import LoginForm
+from .security_utils import safe_redirect, build_content_disposition
+
+
+# ----------------------------------------------------------------------
+# Password helper — runs the FULL configured AUTH_PASSWORD_VALIDATORS list
+# (length, common-password, user-similarity, numeric-only) and returns the
+# first validation error message, or None if the password is acceptable.
+# ----------------------------------------------------------------------
+def _validate_password(password, user=None):
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError
+    try:
+        validate_password(password, user=user)
+    except ValidationError as exc:
+        return ' '.join(exc.messages)
+    return None
 
 
 # Ukurasa wa kuingia — inashughulikia uthibitishaji wa mtumiaji
@@ -49,6 +65,11 @@ def login_view(request):
                 if not db_user.is_active:
                     messages.error(request, 'Account is permanently locked. Contact admin to restore access.')
                     return render(request, 'accounts/login.html', {'form': form})
+
+                # Second login restriction: user must change password via forgot password if they haven't changed after first login
+                if db_user.last_login and not db_user.password_changed_after_first_login:
+                    messages.error(request, 'You must change your password via "Forgot Password" before your second login.')
+                    return redirect('forgot_password')
 
                 # Group-1 suspension: active when failed_attempts == 3 and within 10-min window
                 if db_user.failed_attempts == 3:
@@ -197,6 +218,20 @@ def forgot_password_view(request):
         identifier = request.POST.get('identifier', '').strip()
         try:
             user = OLMSUser.objects.get(Q(army_no=identifier) | Q(email=identifier))
+
+            # ── Rate-limit OTP issuance: max 3 OTPs per user per hour ──
+            window_start = timezone.now() - timedelta(hours=1)
+            recent_otps = OTPRecord.objects.filter(
+                user=user, created_at__gte=window_start,
+            ).count()
+            if recent_otps >= 3:
+                log_audit(user, f"OTP rate-limit hit (>=3/hr) for '{user.username}'", request)
+                messages.error(
+                    request,
+                    'Too many OTP requests. Please wait an hour before requesting another.'
+                )
+                return render(request, 'accounts/forgot_password.html')
+
             otp = create_otp_for_user(user)
             msg = f"MSICT OLMS: Your password reset OTP is {otp.otp_code}. Valid for 10 minutes."
 
@@ -233,12 +268,31 @@ def forgot_password_view(request):
 
 
 # Thibitisha OTP — inachunguza kama OTP ni sahihi na bado haijaisha muda
+# Brute-force protection: max 5 wrong attempts per session — then the
+# pending OTP is invalidated and the user must request a fresh one.
 def verify_otp_view(request):
     user_id = request.session.get('otp_user_id')
     if not user_id:
         return redirect('forgot_password')
 
+    MAX_OTP_ATTEMPTS = 5
+    attempts = int(request.session.get('otp_attempts', 0))
+
     if request.method == 'POST':
+        if attempts >= MAX_OTP_ATTEMPTS:
+            # Burn ALL pending OTPs for this user so the brute force has
+            # nothing left to grind against, and force a fresh request.
+            OTPRecord.objects.filter(user_id=user_id, used=False).update(used=True)
+            request.session.pop('otp_attempts', None)
+            request.session.pop('otp_user_id', None)
+            try:
+                _u = OLMSUser.objects.get(pk=user_id)
+                log_audit(_u, f"OTP brute-force lockout for '{_u.username}' after {attempts} attempts", request)
+            except OLMSUser.DoesNotExist:
+                pass
+            messages.error(request, 'Too many incorrect OTP attempts. Please request a new OTP.')
+            return redirect('forgot_password')
+
         code = request.POST.get('otp_code', '').strip()
         try:
             otp = OTPRecord.objects.get(user_id=user_id, otp_code=code, used=False)
@@ -246,11 +300,18 @@ def verify_otp_view(request):
                 otp.used = True
                 otp.save()
                 request.session['otp_verified_user_id'] = user_id
+                request.session.pop('otp_attempts', None)
                 return redirect('reset_password')
             else:
                 messages.error(request, 'OTP expired.')
         except OTPRecord.DoesNotExist:
-            messages.error(request, 'Invalid OTP.')
+            attempts += 1
+            request.session['otp_attempts'] = attempts
+            remaining = MAX_OTP_ATTEMPTS - attempts
+            if remaining > 0:
+                messages.error(request, f'Invalid OTP. {remaining} attempt(s) remaining.')
+            else:
+                messages.error(request, 'Invalid OTP.')
     return render(request, 'accounts/verify_otp.html')
 
 
@@ -263,15 +324,19 @@ def reset_password_view(request):
     if request.method == 'POST':
         new_password = request.POST.get('new_password', '')
         confirm = request.POST.get('confirm_password', '')
+        user = get_object_or_404(OLMSUser, pk=user_id)
+        err = None
         if new_password != confirm:
-            messages.error(request, 'Passwords do not match.')
-        elif len(new_password) < 8:
-            messages.error(request, 'Password must be at least 8 characters.')
+            err = 'Passwords do not match.'
         else:
-            user = get_object_or_404(OLMSUser, pk=user_id)
+            err = _validate_password(new_password, user=user)
+        if err:
+            messages.error(request, err)
+        else:
             user.set_password(new_password)
             user.last_password_change = timezone.now()
-            user.save()
+            user.password_changed_after_first_login = True
+            user.save(update_fields=['password', 'last_password_change', 'password_changed_after_first_login'])
             del request.session['otp_verified_user_id']
             request.session.pop('otp_user_id', None)
             log_audit(user, f"Password reset via OTP for '{user.username}'", request)
@@ -316,16 +381,23 @@ def change_password_view(request):
         new_pw = request.POST.get('new_password', '')
         confirm = request.POST.get('confirm_password', '')
 
+        err = None
         if not request.user.check_password(old_pw):
-            messages.error(request, 'Current password is incorrect.')
+            err = 'Current password is incorrect.'
         elif new_pw != confirm:
-            messages.error(request, 'New passwords do not match.')
-        elif len(new_pw) < 8:
-            messages.error(request, 'Password must be at least 8 characters.')
+            err = 'New passwords do not match.'
+        elif old_pw == new_pw:
+            err = 'New password must be different from your current password.'
+        else:
+            err = _validate_password(new_pw, user=request.user)
+
+        if err:
+            messages.error(request, err)
         else:
             request.user.set_password(new_pw)
             request.user.last_password_change = timezone.now()
-            request.user.save()
+            request.user.password_changed_after_first_login = True
+            request.user.save(update_fields=['password', 'last_password_change', 'password_changed_after_first_login'])
             login(request, request.user)
             log_audit(request.user, f"Password changed by '{request.user.username}'", request)
             messages.success(request, 'Password changed successfully.')
@@ -336,16 +408,34 @@ def change_password_view(request):
 # Wasifu wa mtumiaji — anaweza kusasisha barua pepe, simu na picha
 @login_required
 def profile_view(request):
+    from accounts.models import Rank
     if request.method == 'POST':
         user = request.user
         user.email = request.POST.get('email', user.email)
         user.phone = request.POST.get('phone', user.phone)
+        rank_id = request.POST.get('rank_id')
+        if rank_id:
+            user.rank_id = rank_id
+        else:
+            user.rank_id = None
         if 'photo' in request.FILES:
-            user.photo = request.FILES['photo']
-        user.save(update_fields=['email', 'phone', 'photo'])
+            from django.core.exceptions import ValidationError as _VErr
+            from .security_utils import validate_upload as _vu
+            try:
+                _vu(
+                    request.FILES['photo'],
+                    allowed_extensions={'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'},
+                    max_size=5 * 1024 * 1024,
+                )
+                user.photo = request.FILES['photo']
+            except _VErr as _exc:
+                messages.error(request, f'Profile photo: {_exc.messages[0]}')
+                return redirect('profile')
+        user.save(update_fields=['email', 'phone', 'photo', 'rank_id'])
         messages.success(request, 'Profile updated successfully.')
         return redirect('profile')
-    return render(request, 'accounts/profile.html', {'user_obj': request.user})
+    ranks = Rank.objects.all()
+    return render(request, 'accounts/profile.html', {'user_obj': request.user, 'ranks': ranks})
 
 
 # Onyesha kadi ya maktaba ya kidijitali (QR code + barcode)
@@ -360,7 +450,9 @@ def virtual_card_view(request):
 def virtual_card_pdf_view(request):
     buf = generate_virtual_card_pdf(request.user)
     response = HttpResponse(buf, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="MSICT_Card_{request.user.username}.pdf"'
+    response['Content-Disposition'] = build_content_disposition(
+        'attachment', f'MSICT_Card_{request.user.username}.pdf'
+    )
     return response
 
 
@@ -397,7 +489,7 @@ def user_list_view(request):
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
     role_filter = request.GET.get('role', '')
-    users = OLMSUser.objects.exclude(role='admin').select_related('virtual_card').order_by('surname', 'first_name')
+    users = OLMSUser.objects.exclude(role='admin').select_related('virtual_card', 'rank').order_by('surname', 'first_name')
 
     if query:
         users = users.filter(
@@ -501,6 +593,7 @@ def create_user_view(request):
         registration_no = request.POST.get('registration_no', '').strip() or None
         if member_type != 'student':
             registration_no = None
+        rank_id = request.POST.get('rank_id') or None
 
         if not re.match(r'^(MTM|MT|PW|P)\s?\d+$', army_no):
             messages.error(request, 'Army number must start with MT, MTM, P, or PW followed by digits (e.g. MT 134513, MTM 456, P 789, PW 101).')
@@ -516,6 +609,9 @@ def create_user_view(request):
         if OLMSUser.objects.filter(username=username).exists():
             username = f"{username}_{army_no.replace(' ', '').replace('MT', '').lower()}"
 
+        from accounts.models import Rank as RankModel
+        rank_obj = RankModel.objects.filter(pk=rank_id).first() if rank_id else None
+
         user = OLMSUser.objects.create_user(
             username=username,
             password=initial_password,
@@ -528,6 +624,7 @@ def create_user_view(request):
             role=role,
             member_type=member_type,
             registration_no=registration_no,
+            rank=rank_obj,
             last_password_change=timezone.now(),
         )
 
@@ -573,7 +670,8 @@ def create_user_view(request):
         request.session['new_user_credentials'] = {'username': username, 'password': initial_password, 'name': user.get_full_name()}
         return redirect('user_list')
 
-    return render(request, 'accounts/create_user.html')
+    from accounts.models import Rank as RankModel
+    return render(request, 'accounts/create_user.html', {'ranks': RankModel.objects.all()})
 
 
 @login_required
@@ -587,6 +685,9 @@ def edit_user_view(request, user_id):
         user_obj.middle_name = request.POST.get('middle_name', user_obj.middle_name)
         user_obj.surname = request.POST.get('surname', user_obj.surname)
         user_obj.army_no = request.POST.get('army_no', user_obj.army_no)
+        rank_id = request.POST.get('rank_id') or None
+        from accounts.models import Rank as RankModel
+        user_obj.rank = RankModel.objects.filter(pk=rank_id).first() if rank_id else None
 
         new_reg_no = request.POST.get('registration_no', '').strip() or None
         # Update username for students if registration_no changed
@@ -598,21 +699,46 @@ def edit_user_view(request, user_id):
         log_audit(request.user, f"Edited user '{user_obj.username}'", request)
         messages.success(request, 'User updated successfully.')
         return redirect('user_list')
-    return render(request, 'accounts/edit_user.html', {'user_obj': user_obj})
+    from accounts.models import Rank as RankModel
+    return render(request, 'accounts/edit_user.html', {'user_obj': user_obj, 'ranks': RankModel.objects.all()})
 
 
 @login_required
 @librarian_required
+@require_POST
 def reset_user_password_view(request, user_id):
+    """
+    Librarian-triggered password reset.
+
+    POST-only — protected by CSRF + librarian role decorator. Generates
+    a strong random temporary password (10 chars, mixed-case + digits,
+    no ambiguous characters) instead of the predictable army_no-derived
+    pattern. The user is required to change it on first login
+    (enforced by the password-age reminder + dashboard banner).
+    """
+    import secrets
+    import string
+
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
-    new_pw = OLMSUser.generate_initial_password(user_obj.army_no)
+
+    # Strong random — 10 chars, alphanum, exclude visually similar (0/O, 1/l/I)
+    alphabet = ''.join(c for c in (string.ascii_letters + string.digits)
+                       if c not in '0O1lI')
+    new_pw = ''.join(secrets.choice(alphabet) for _ in range(10))
+
     user_obj.set_password(new_pw)
     user_obj.last_password_change = timezone.now()
     user_obj.save()
-    send_email_notification(user_obj.email, "MSICT OLMS - Password Reset", f"Your new password is: {new_pw}")
-    send_sms(user_obj.phone, f"MSICT OLMS: Your password has been reset to: {new_pw}")
+
+    body = (
+        f"MSICT OLMS: Your password has been reset by the librarian.\n"
+        f"Temporary password: {new_pw}\n"
+        f"You must change this password on next login."
+    )
+    send_email_notification(user_obj.email, "MSICT OLMS - Password Reset", body)
+    send_sms(user_obj.phone, f"MSICT OLMS: New password: {new_pw}. Change it on next login.")
     log_audit(request.user, f"Reset password for user '{user_obj.username}'", request)
-    messages.success(request, f"Password reset to: {new_pw}")
+    messages.success(request, f"Password reset to: {new_pw} — sent to user by SMS and email.")
     return redirect('user_list')
 
 
@@ -621,6 +747,9 @@ def reset_user_password_view(request, user_id):
 def admin_dashboard_view(request):
     from circulation.models import BorrowingTransaction, Fine
     from django.db.models.functions import TruncDay
+    from catalog.models import Book, BookCopy
+    from datetime import datetime, timedelta
+    from collections import defaultdict
     
     # Check if user is admin
     if request.user.role != 'admin':
@@ -636,7 +765,7 @@ def admin_dashboard_view(request):
     unpaid_fines = sum(fine.remaining_balance for fine in Fine.objects.filter(paid=False))
 
     # Analytics - Users by role
-    users_by_role = OLMSUser.objects.values('role').annotate(count=Count('id'))
+    users_by_role = list(OLMSUser.objects.values('role').annotate(count=Count('id')))
     
     # Analytics - Most borrowed books
     most_borrowed = BorrowingTransaction.objects.values('copy__book__title').annotate(
@@ -645,15 +774,65 @@ def admin_dashboard_view(request):
 
     recent_logs = AuditLog.objects.select_related('user').order_by('-timestamp')[:20]
 
+    # Find users with failed attempts (temporarily suspended or locked)
+    # Users with 3+ failed attempts are considered suspended/locked
     recent_suspended = OLMSUser.objects.filter(
-        is_active=False, role='member'
-    ).select_related('virtual_card').order_by('-created_at')[:5]
+        failed_attempts__gte=3, role='member'
+    ).select_related('virtual_card').order_by('-failed_attempts', '-created_at')[:5]
 
-    # Security - System Alerts
+    # Security - System Alerts (exclude OTP and password reset messages)
     from circulation.models import Notification
     security_alerts = Notification.objects.filter(
         is_security_alert=True
+    ).exclude(
+        message__icontains='OTP'
+    ).exclude(
+        message__icontains='password reset'
     ).order_by('-created_at')[:5]
+
+    # Additional Analytics
+    # Monthly borrowing stats for the last 6 months
+    monthly_borrows = defaultdict(int)
+    for i in range(6):
+        month = datetime.now() - timedelta(days=30*i)
+        month_key = month.strftime('%b %Y')
+        count = BorrowingTransaction.objects.filter(
+            borrow_date__month=month.month,
+            borrow_date__year=month.year
+        ).count()
+        monthly_borrows[month_key] = count
+
+    # Calculate max borrows for percentage
+    max_borrows = max(monthly_borrows.values()) if monthly_borrows else 1
+    monthly_borrows_with_pct = {}
+    for month, count in monthly_borrows.items():
+        monthly_borrows_with_pct[month] = {
+            'count': count,
+            'percentage': int((count / max_borrows) * 100) if max_borrows > 0 else 0
+        }
+
+    # Category distribution with percentages
+    from catalog.models import Category
+    category_stats = list(Book.objects.values('category__name').annotate(
+        count=Count('id')
+    ).order_by('-count')[:5])
+    total_category_books = sum(stat['count'] for stat in category_stats) if category_stats else 1
+    for stat in category_stats:
+        stat['percentage'] = int((stat['count'] / total_category_books) * 100)
+
+    # Copy type distribution
+    copy_type_stats = list(BookCopy.objects.values('copy_type').annotate(
+        count=Count('id')
+    ))
+
+    # Total books and copies
+    total_books = Book.objects.count()
+    total_copies = BookCopy.objects.count()
+    available_copies = BookCopy.objects.filter(status='available').count()
+
+    # Fine statistics
+    total_fines_amount = sum(fine.amount for fine in Fine.objects.all())
+    paid_fines_amount = sum(fine.amount_paid for fine in Fine.objects.all())
 
     context = {
         'total_users': total_users,
@@ -667,6 +846,14 @@ def admin_dashboard_view(request):
         'recent_logs': recent_logs,
         'recent_suspended': recent_suspended,
         'security_alerts': security_alerts,
+        'monthly_borrows': monthly_borrows_with_pct,
+        'category_stats': category_stats,
+        'copy_type_stats': copy_type_stats,
+        'total_books': total_books,
+        'total_copies': total_copies,
+        'available_copies': available_copies,
+        'total_fines_amount': total_fines_amount,
+        'paid_fines_amount': paid_fines_amount,
     }
     return render(request, 'accounts/admin_dashboard.html', context)
 
@@ -728,6 +915,10 @@ def suspicious_activity_view(request):
     security_alerts = Notification.objects.filter(
         is_security_alert=True,
         message__icontains='suspicious'
+    ).exclude(
+        message__icontains='OTP'
+    ).exclude(
+        message__icontains='password reset'
     ).order_by('-created_at')[:10]
 
     return render(request, 'accounts/suspicious_activity.html', {
@@ -741,15 +932,21 @@ def suspicious_activity_view(request):
 @login_required
 @admin_required
 def suspended_members_view(request):
+    # Find users with failed attempts (temporarily suspended or locked)
+    # Users with 3+ failed attempts are considered suspended/locked
     suspended = OLMSUser.objects.filter(
-        is_active=False, role='member'
-    ).select_related('virtual_card').order_by('-created_at')
+        failed_attempts__gte=3, role='member'
+    ).select_related('virtual_card').order_by('-failed_attempts', '-created_at')
 
     # Get security alerts related to suspensions
     from circulation.models import Notification
     security_alerts = Notification.objects.filter(
         is_security_alert=True,
         message__icontains='suspended'
+    ).exclude(
+        message__icontains='OTP'
+    ).exclude(
+        message__icontains='password reset'
     ).order_by('-created_at')[:10]
 
     return render(request, 'accounts/suspended_members.html', {
@@ -793,6 +990,10 @@ def security_alerts_view(request):
     from circulation.models import Notification
     alerts = Notification.objects.filter(
         is_security_alert=True
+    ).exclude(
+        message__icontains='OTP'
+    ).exclude(
+        message__icontains='password reset'
     ).select_related('user').order_by('-created_at')
     return render(request, 'accounts/security_alerts.html', {'alerts': alerts})
 
@@ -804,7 +1005,8 @@ def delete_audit_log_view(request, pk):
     entry = get_object_or_404(AuditLog, pk=pk)
     entry.delete()
     messages.success(request, 'Audit log entry deleted.')
-    return redirect(request.POST.get('next', 'admin_dashboard'))
+    # Anti open-redirect: validate the user-supplied "next" before honouring it.
+    return safe_redirect(request, request.POST.get('next'), 'admin_dashboard')
 
 
 @login_required

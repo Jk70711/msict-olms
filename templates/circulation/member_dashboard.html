@@ -1,158 +1,438 @@
 {% extends 'base.html' %}
 {% block title %}My Dashboard{% endblock %}
 {% block content %}
-<h4 class="fw-bold mb-4 text-body-emphasis"><i class="bi bi-speedometer2"></i> My Library Dashboard</h4>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-4">
+      <div class="position-relative">
+        {% if user.photo %}
+        <img src="{{ user.photo.url }}" alt="" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover; border: 3px solid var(--primary);">
+        {% else %}
+        <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center" style="width: 80px; height: 80px; font-size: 2rem; font-weight: bold; border: 3px solid var(--primary);">
+          {{ user.get_full_name|slice:":1"|upper }}
+        </div>
+        {% endif %}
+      </div>
+      <div class="flex-grow-1">
+        <h4 class="fw-bold mb-1">Welcome back, {{ user.get_full_name }}</h4>
+        <p class="text-muted small mb-2">{{ user.email }}</p>
+        <div class="d-flex gap-2">
+          {% if user.member_type == 'student' %}<span class="badge bg-primary"><i class="bi bi-mortarboard me-1"></i>Student</span>
+          {% elif user.member_type == 'lecturer' %}<span class="badge bg-info text-dark"><i class="bi bi-person-workspace me-1"></i>Instructor</span>
+          {% elif user.member_type == 'staff' %}<span class="badge bg-secondary"><i class="bi bi-briefcase me-1"></i>Staff</span>
+          {% endif %}
+          {% if user.virtual_card %}
+          <span class="badge bg-success"><i class="bi bi-credit-card me-1"></i>{{ user.virtual_card.short_card_no }}</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{% url 'borrow_catalog' %}" class="btn btn-primary">
+          <i class="bi bi-plus-lg me-1"></i> Borrow New Book
+        </a>
+       <!--<a href="{% url 'profile' %}" class="btn btn-outline-secondary">
+          <i class="bi bi-gear me-1"></i> Settings
+        </a> -->
+      </div>
+    </div>
+  </div>
+</div>
 
 {% if has_overdue %}
-<div class="overdue-banner mb-3">
-  <i class="bi bi-exclamation-triangle-fill me-2"></i>
-  <strong>You have overdue items!</strong> Return overdue books before borrowing new ones. Fines are accumulating.
+<div class="card border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-3">
+      <div class="bg-danger text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+        <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+      </div>
+      <div class="flex-grow-1">
+        <strong class="text-danger">You have overdue items!</strong>
+        <p class="small text-danger mb-0">Return overdue books before borrowing new ones. Fines are accumulating daily.</p>
+      </div>
+      <a href="{% url 'member_msict_borrowings' %}" class="btn btn-sm btn-danger">View Details</a>
+    </div>
+  </div>
 </div>
 {% endif %}
 
-{% if unpaid_fines %}
-<div class="alert alert-danger border-danger d-flex align-items-center gap-2 mb-3">
-  <i class="bi bi-cash-coin fs-4 text-danger"></i>
-  <div class="text-dark fw-semibold" style="font-size: 1.05rem; line-height: 1.5;">
-    <strong class="text-danger">BORROWING BLOCKED:</strong> You have unpaid fines. 
-    <span class="text-dark">Pay at the circulation desk before browsing new borrows.</span>
-    <div class="mt-1 small text-muted">Total fines: <strong class="text-danger">TZS {{ total_fines|floatformat:2 }}</strong></div>
+{% if has_lost %}
+<div class="card border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-3">
+      <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+        <i class="bi bi-exclamation-triangle-fill fs-4"></i>
+      </div>
+      <div class="flex-grow-1">
+        <strong class="text-dark">Book Lost</strong>
+        <p class="small text-dark mb-0">Book lost - Pay loss fine or recover it to continue with MSICT library services.</p>
+      </div>
+      <a href="{% url 'my_loss_reports' %}" class="btn btn-sm btn-warning">View Details</a>
+    </div>
   </div>
 </div>
 {% endif %}
 
-<div class="row g-3 mb-4">
+{% if total_all_unpaid > 0 %}
+<div class="card border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-3">
+      <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+        <i class="bi bi-cash-coin fs-4"></i>
+      </div>
+      <div class="flex-grow-1">
+        <strong class="text-dark">Borrowing Blocked - Unpaid Fines</strong>
+        <p class="small text-dark mb-0">
+          {% if total_unpaid > 0 %}Overdue fines: <strong>TZS {{ total_unpaid|floatformat:0 }}</strong>{% endif %}
+          {% if total_unpaid > 0 and total_loss_unpaid > 0 %} + {% endif %}
+          {% if total_loss_unpaid > 0 %}Loss fines: <strong>TZS {{ total_loss_unpaid|floatformat:0 }}</strong>{% endif %}
+          {% if total_all_unpaid > 0 %} = Total: <strong>TZS {{ total_all_unpaid|floatformat:0 }}</strong>{% endif %}
+        </p>
+        {% if total_loss_unpaid > 0 %}
+        <p class="small text-muted mb-0">
+          <i class="bi bi-info-circle"></i> Loss fines are one-time. Overdue fines accrue daily until paid.
+        </p>
+        {% endif %}
+      </div>
+      <a href="{% url 'my_fines' %}" class="btn btn-sm btn-warning">Pay Fines</a>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="row g-3 mb-3">
   <div class="col-6 col-md-3">
-    <div class="card stat-card p-3 text-center">
-      <i class="bi bi-book-fill fs-2 text-primary mb-1"></i>
-      <div class="fs-3 fw-bold text-body-emphasis">{{ active_transactions.count }}</div>
-      <div class="small fw-medium text-body-secondary">Active Borrows</div>
+    <div class="card stat-card h-100 border-0 shadow-sm text-center">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 70px; height: 70px;">
+            <div class="rounded-circle position-absolute" style="width: 70px; height: 70px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 5px 14px rgba(13, 110, 253, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 56px; height: 56px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <i class="bi bi-book-fill fs-4" style="color: #0d6efd;"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ active_transactions.count }}</div>
+            <div class="small text-muted">Active Borrows</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card danger p-3 text-center">
-      <i class="bi bi-exclamation-triangle-fill fs-2 text-danger mb-1"></i>
-      <div class="fs-3 fw-bold text-danger">{{ overdue_transactions.count }}</div>
-      <div class="small fw-medium text-body-secondary">Overdue</div>
+    <div class="card stat-card h-100 border-0 shadow-sm text-center">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 70px; height: 70px;">
+            <div class="rounded-circle position-absolute" style="width: 70px; height: 70px; background: conic-gradient(#dc3545 0% 100%, rgba(220, 53, 69, 0.1) 100% 100%); box-shadow: 0 5px 14px rgba(220, 53, 69, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 56px; height: 56px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <i class="bi bi-exclamation-triangle-fill fs-4" style="color: #dc3545;"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <div class="fs-3 fw-bold" style="color: #dc3545;">{{ overdue_transactions.count }}</div>
+            <div class="small text-muted">Overdue</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card warning p-3 text-center">
-      <i class="bi bi-bookmark-fill fs-2 text-warning mb-1"></i>
-      <div class="fs-3 fw-bold text-body-emphasis">{{ reservations.count }}</div>
-      <div class="small fw-medium text-body-secondary">Reservations</div>
+    <div class="card stat-card h-100 border-0 shadow-sm text-center">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 70px; height: 70px;">
+            <div class="rounded-circle position-absolute" style="width: 70px; height: 70px; background: conic-gradient(#ffc107 0% 100%, rgba(255, 193, 7, 0.1) 100% 100%); box-shadow: 0 5px 14px rgba(255, 193, 7, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 56px; height: 56px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <i class="bi bi-bookmark-fill fs-4" style="color: #ffc107;"></i>
+            </div>
+          </div>
+          <div class="mt-2">
+            <div class="fs-3 fw-bold" style="color: #ffc107;">{{ reservations.count }}</div>
+            <div class="small text-muted">Reservations</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
     <a href="{% url 'my_fines' %}" class="text-decoration-none">
-      <div class="card stat-card p-3 text-center">
-        <i class="bi bi-cash-coin fs-2 text-danger mb-1"></i>
-        <div class="fs-3 fw-bold text-body-emphasis">{{ total_fines|floatformat:0 }}</div>
-        <div class="small fw-medium text-body-secondary">Unpaid Fines (TZS)</div>
+      <div class="card stat-card h-100 border-0 shadow-sm text-center">
+        <div class="card-body p-3">
+          <div class="d-flex flex-column align-items-center">
+            <div class="position-relative d-flex align-items-center justify-content-center" style="width: 70px; height: 70px;">
+              <div class="rounded-circle position-absolute" style="width: 70px; height: 70px; background: conic-gradient(#7c3aed 0% 100%, rgba(124, 58, 237, 0.1) 100% 100%); box-shadow: 0 5px 14px rgba(124, 58, 237, 0.3);"></div>
+              <div class="rounded-circle position-absolute" style="width: 56px; height: 56px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+              <div class="text-center position-relative z-1">
+                <i class="bi bi-cash-coin fs-4" style="color: #7c3aed;"></i>
+              </div>
+            </div>
+            <div class="mt-2">
+              <div class="fs-3 fw-bold" style="color: #7c3aed;">{{ total_fines|floatformat:0 }}</div>
+              <div class="small text-muted">Unpaid Fines</div>
+            </div>
+          </div>
+        </div>
       </div>
     </a>
+  </div>
+</div>
+
+<!-- Quick Links -->
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body p-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-2 text-primary"></i>Quick Links</h6>
+    <div class="row g-2">
+      <div class="col-6 col-md-3">
+        <a href="{% url 'borrow_catalog' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-book me-2"></i> Browse Catalog
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="{% url 'member_msict_borrowings' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-arrow-left-right me-2"></i> My Borrowings
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="{% url 'my_reservations' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-bookmark me-2"></i> My Reservations
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="dropdown w-100">
+          <button class="btn btn-outline-primary w-100 text-start dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-cash-coin me-2"></i> My Fines
+          </button>
+          <ul class="dropdown-menu w-100">
+            <li>
+              <a class="dropdown-item" href="{% url 'my_fines' %}">
+                <i class="bi bi-clock-history me-2 text-danger"></i> Overdue Fines
+              </a>
+            </li>
+            <li>
+              <a class="dropdown-item" href="{% url 'my_loss_reports' %}">
+                <i class="bi bi-exclamation-triangle me-2 text-warning"></i> Loss Fines
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="{% url 'member_msict_borrowings' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-clock-history me-2"></i> History
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="{% url 'softcopy_library' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-file-text me-2"></i> Softcopy Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="{% url 'profile' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-person me-2"></i> My Profile
+        </a>
+      </div>
+      {% if my_loss_reports %}
+      <div class="col-6 col-md-3">
+        <a href="{% url 'member_msict_borrowings' %}" class="btn btn-outline-danger w-100 text-start">
+          <i class="bi bi-exclamation-triangle me-2"></i> Loss Reports
+          <span class="badge bg-danger ms-1">{{ my_loss_reports|length }}</span>
+        </a>
+      </div>
+      {% endif %}
+      <!--<div class="col-6 col-md-3">
+        <a href="{% url 'change_password' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-lock me-2"></i> Change Password
+        </a>
+      </div>-->
+    </div>
+  </div>
+</div>
+
+<!-- Tanzanian University Libraries -->
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body p-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-globe me-2 text-primary"></i>Tanzanian University Libraries</h6>
+    <div class="row g-2">
+      <div class="col-6 col-md-3">
+        <a href="https://www.udsm.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> UDSM Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.udom.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> UDOM Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.must.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> MUST Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.sua.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> SUA Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.nm-aist.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> NM-AIST Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.ardhi.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> ARU Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.mzumbe.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> MZUMBE Library
+        </a>
+      </div>
+      <div class="col-6 col-md-3">
+        <a href="https://www.coast.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+          <i class="bi bi-building me-2"></i> COAST University Library
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
 <div class="row g-3">
   <div class="col-md-7">
     <!-- Active Borrows -->
-    <div class="card p-3 mb-3">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-book"></i> Current Borrows</h6>
-        <a href="{% url 'borrow_catalog' %}" class="btn btn-sm btn-msict"><i class="bi bi-plus"></i> Borrow</a>
-      </div>
-      {% if active_transactions %}
-      <div class="table-responsive">
-        <table class="table table-sm table-hover align-middle mb-0">
-          <thead class="table-light">
-            <tr><th>S/N</th><th>Book</th><th>Type</th><th>Due Date</th><th>Status</th><th>Actions</th></tr>
-          </thead>
-          <tbody>
-            {% for tx in active_transactions %}
-            <tr class="{% if tx.status == 'overdue' %}table-danger{% endif %}">
-              <td>{{ forloop.counter }}</td>
-              <td><small class="fw-semibold">{{ tx.copy.book.title|truncatechars:35 }}</small></td>
-              <td><span class="badge bg-secondary">{{ tx.copy.copy_type }}</span></td>
-              <td>
-                <small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% endif %}">
-                  {{ tx.due_date|date:"d M Y" }}
-                  {% if tx.status == 'overdue' %}<br><span class="badge bg-danger">{{ tx.days_overdue }} days late</span>{% endif %}
-                </small>
-              </td>
-              <td>
-                {% if tx.is_link_expired %}
-                  <span class="badge bg-dark">Link Expired</span>
-                  {% if tx.has_unpaid_fine %}<br><small class="text-danger">Fine: TZS {{ tx.total_fine_remaining }}</small>{% endif %}
-                {% elif tx.status == 'overdue' %}
-                  <span class="badge bg-danger">Overdue</span>
-                {% else %}
-                  <span class="badge bg-warning text-dark">Borrowed</span>
-                {% endif %}
-              </td>
-              <td>
-                {% if tx.copy.copy_type == 'softcopy' and tx.copy.file_path and tx.is_link_active %}
-                <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-xs btn-sm btn-primary py-0" target="_blank">
-                  <i class="bi bi-book-fill"></i> Read
-                </a>
-                {% elif tx.is_link_expired %}
-                <span class="btn btn-xs btn-sm btn-outline-secondary disabled py-0" title="Link expired. Pay fine to return.">
-                  <i class="bi bi-clock-history"></i> Expired
-                </span>
-                {% endif %}
-                {% if tx.is_renewable %}
-                <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-xs btn-sm btn-outline-success py-0">Renew</a>
-                <span class="small text-muted">({{ tx.renewals_left }})</span>
-                {% endif %}
-                {% if tx.copy.copy_type == 'softcopy' %}
-                  {% if not tx.is_overdue %}
-                  <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0"><i class="bi bi-book me-2 text-primary"></i>Current Borrows</h6>
+          <a href="{% url 'borrow_catalog' %}" class="btn btn-sm btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Borrow
+          </a>
+        </div>
+        {% if active_transactions %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr><th class="small text-muted">Book</th><th class="small text-muted">Type</th><th class="small text-muted">Due Date</th><th class="small text-muted">Status</th><th class="small text-muted text-end">Actions</th></tr>
+            </thead>
+            <tbody>
+              {% for tx in active_transactions %}
+              <tr class="{% if tx.status == 'overdue' %}table-danger{% endif %}">
+                <td>
+                  <div class="fw-semibold small">{{ tx.copy.book.title|truncatechars:35 }}</div>
+                  {% if tx.status == 'overdue' %}<small class="text-danger">{{ tx.days_overdue }} days late</small>{% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ tx.copy.copy_type }}</span></td>
+                <td>
+                  <small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% endif %}">
+                    {{ tx.due_date|date:"d M Y" }}
+                  </small>
+                </td>
+                <td>
+                  {% if tx.is_link_expired %}
+                    <span class="badge bg-dark">Link Expired</span>
+                  {% elif tx.status == 'overdue' %}
+                    <span class="badge bg-danger">Overdue</span>
+                  {% elif tx.status == 'lost' %}
+                    <span class="badge bg-warning">Lost</span>
                   {% else %}
-                  {# Overdue - check if fines are paid #}
-                  {% for tid, fine_info in tx_fines.items %}
-                    {% if tid == tx.id %}
-                      {% if fine_info.remaining > 0 %}
-                      <span class="btn btn-xs btn-sm btn-outline-danger disabled py-0" title="Pay fines first (TZS {{ fine_info.remaining|floatformat:0 }})">Return Blocked</span>
-                      {% else %}
-                      <a href="{% url 'return_early' tx.pk %}" class="btn btn-xs btn-sm btn-outline-secondary py-0">Return</a>
-                      {% endif %}
-                    {% endif %}
-                  {% empty %}
-                  <span class="btn btn-xs btn-sm btn-outline-danger disabled py-0" title="Pay fines first">Return Blocked</span>
-                  {% endfor %}
+                    <span class="badge bg-warning text-dark">Borrowed</span>
                   {% endif %}
-                {% endif %}
-              </td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+                </td>
+                <td class="text-end">
+                  <div class="d-flex flex-column gap-1">
+                    <div class="btn-group btn-group-sm">
+                      {% if tx.copy.copy_type == 'softcopy' and tx.copy.file_path and tx.is_link_active %}
+                      <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-outline-primary" target="_blank">
+                        <i class="bi bi-book"></i> Read
+                      </a>
+                      {% endif %}
+                      {% if tx.copy.copy_type == 'softcopy' and not tx.is_overdue %}
+                      <form method="post" action="{% url 'return_early' tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-secondary">
+                          <i class="bi bi-arrow-return-left"></i> Return
+                        </button>
+                      </form>
+                      {% endif %}
+                      {% if tx.is_renewable %}
+                      <form method="post" action="{% url 'renew_transaction' tx.pk %}" class="d-inline" onsubmit="return confirm('Renew this borrowing?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-success">
+                          <i class="bi bi-arrow-clockwise"></i> Renew
+                        </button>
+                      </form>
+                      {% endif %}
+                    </div>
+                    <div>
+                      {% if tx.is_renewable %}
+                        <span class="badge bg-success">Renewal available ({{ tx.renewals_left }} left)</span>
+                      {% else %}
+                        <span class="badge bg-secondary">Renewal not available</span>
+                      {% endif %}
+                    </div>
+                    {% if tx.copy.copy_type == 'hardcopy' %}
+                    <div class="mt-1">
+                      {% if not tx.loss_report_exists %}
+                      <a href="{% url 'report_loss' tx.pk %}" class="btn btn-sm btn-outline-danger w-100"
+                         onclick="return confirm('Report this book as lost? This will notify the librarian.')">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Report Lost
+                      </a>
+                      {% else %}
+                      <span class="badge bg-danger w-100 py-2">
+                        <i class="bi bi-clock me-1"></i>Loss Report Submitted
+                      </span>
+                      {% endif %}
+                    </div>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-4">
+          <i class="bi bi-book text-muted fs-1 mb-2"></i>
+          <p class="text-muted mb-0">No active borrows.</p>
+          <a href="{% url 'borrow_catalog' %}" class="btn btn-sm btn-outline-primary mt-2">Browse Catalog</a>
+        </div>
+        {% endif %}
       </div>
-      {% else %}
-      <p class="text-muted text-center py-3 mb-0">No active borrows.</p>
-      {% endif %}
     </div>
 
     <!-- Pending Requests -->
     {% if pending_requests %}
-    <div class="card p-3 mb-3">
-      <h6 class="fw-bold mb-2 text-body-emphasis"><i class="bi bi-clock text-warning"></i> Pending Requests</h6>
-      <table class="table table-sm table-hover align-middle mb-0">
-        <thead class="table-light">
-          <tr><th>S/N</th><th>Book</th><th>Requested</th><th>Actions</th></tr>
-        </thead>
-        <tbody>
-          {% for req in pending_requests %}
-          <tr>
-            <td>{{ forloop.counter }}</td>
-            <td><small>{{ req.copy.book.title|truncatechars:40 }}</small></td>
-            <td><small class="text-muted">{{ req.request_date|timesince }} ago</small></td>
-            <td><a href="{% url 'cancel_borrow_request' req.pk %}" class="btn btn-xs btn-sm btn-outline-danger py-0"
-              onclick="return confirm('Cancel this request?')">Cancel</a></td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-clock-history me-2 text-warning"></i>Pending Requests</h6>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr><th class="small text-muted">Book</th><th class="small text-muted">Requested</th><th class="small text-muted text-end">Actions</th></tr>
+            </thead>
+            <tbody>
+              {% for req in pending_requests %}
+              <tr>
+                <td><small class="fw-semibold">{{ req.copy.book.title|truncatechars:40 }}</small></td>
+                <td><small class="text-muted">{{ req.request_date|timesince }} ago</small></td>
+                <td class="text-end">
+                  <form method="post" action="{% url 'cancel_borrow_request' req.pk %}" class="d-inline" onsubmit="return confirm('Cancel this request?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                      <i class="bi bi-x-lg"></i> Cancel
+                    </button>
+                  </form>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
     {% endif %}
   </div>
@@ -160,146 +440,282 @@
   <div class="col-md-5">
     <!-- Notified Reservations — Borrow Now Alert -->
     {% for res in notified_reservations %}
-    <div class="alert alert-success border-success mb-3">
-      <div class="fw-bold"><i class="bi bi-bell-fill"></i> Your Turn — Borrow Now!</div>
-      <div class="small mb-2"><strong>{{ res.book.title }}</strong></div>
-      <div class="small text-muted mb-2">
-        Notified {{ res.notified_at|timesince }} ago &mdash; submit your request within 24 hours.
+    <div class="card border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-start gap-3">
+          <div class="bg-success text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 48px; height: 48px;">
+            <i class="bi bi-bell-fill fs-5"></i>
+          </div>
+          <div class="flex-grow-1">
+            <div class="fw-bold text-success mb-1">Your Turn — Borrow Now!</div>
+            <div class="small fw-semibold mb-1">{{ res.book.title }}</div>
+            <div class="small text-muted mb-3">
+              Notified {{ res.notified_at|timesince }} ago — submit within 24 hours
+            </div>
+            <div class="d-flex gap-2">
+              <a href="{% url 'queue_borrow' res.pk %}"
+                 class="btn btn-sm btn-success flex-grow-1"
+                 onclick="return confirm('Submit borrow request for {{ res.book.title }}?')">
+                <i class="bi bi-bag-plus-fill me-1"></i> Request
+              </a>
+              <a href="{% url 'my_reservations' %}" class="btn btn-sm btn-outline-success">View Queue</a>
+            </div>
+          </div>
+        </div>
       </div>
-      <a href="{% url 'queue_borrow' res.pk %}"
-         class="btn btn-success btn-sm"
-         onclick="return confirm('Submit borrow request for {{ res.book.title }}? Awaiting librarian approval.')">
-        <i class="bi bi-bag-plus-fill"></i> Request Borrow
-      </a>
-      <a href="{% url 'my_reservations' %}" class="btn btn-outline-secondary btn-sm ms-1">View Queue</a>
     </div>
     {% endfor %}
 
     <!-- Pending Reservations -->
     {% if reservations %}
-    <div class="card p-3 mb-3">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-bookmark text-warning"></i> My Reservations</h6>
-        <a href="{% url 'my_reservations' %}" class="btn btn-outline-secondary btn-sm py-0">View All</a>
-      </div>
-      {% for res in reservations %}
-      <div class="d-flex justify-content-between align-items-center border-bottom py-2">
-        <div>
-          <div class="small fw-semibold">{{ res.book.title|truncatechars:30 }}</div>
-          <div class="small text-muted">
-            Queue: <b>#{{ res.position }}</b>
-            {% if res.status == 'notified' %}
-              <span class="badge bg-success ms-1">Your Turn!</span>
-            {% endif %}
-          </div>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0"><i class="bi bi-bookmark me-2 text-warning"></i>My Reservations</h6>
+          <a href="{% url 'my_reservations' %}" class="btn btn-sm btn-outline-secondary">View All</a>
         </div>
-        <a href="{% url 'cancel_reservation' res.pk %}" class="btn btn-sm btn-outline-danger py-0 px-1"
-           onclick="return confirm('Cancel reservation for {{ res.book.title }}?')">
-          <i class="bi bi-x-circle"></i>
-        </a>
+        {% for res in reservations %}
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+          <div>
+            <div class="small fw-semibold">{{ res.book.title|truncatechars:30 }}</div>
+            <div class="small text-muted">
+              Queue: <b>#{{ res.position }}</b>
+              {% if res.status == 'notified' %}
+                <span class="badge bg-success ms-1">Your Turn!</span>
+              {% endif %}
+            </div>
+          </div>
+          <form method="post" action="{% url 'cancel_reservation' res.pk %}" class="d-inline" onsubmit="return confirm('Cancel reservation for {{ res.book.title }}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger">
+              <i class="bi bi-x-circle"></i>
+            </button>
+          </form>
+        </div>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
     {% endif %}
 
     <!-- Fines -->
     {% if overdue_fines %}
-    <div class="card p-3 mb-3 border-danger">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-cash-coin"></i> Overdue Book Fines</h6>
-        <a href="{% url 'my_fines' %}" class="btn btn-sm btn-outline-danger py-0">View All</a>
-      </div>
+    <div class="card border-0 shadow-sm mb-3 border-start border-4 border-danger">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0"><i class="bi bi-cash-coin me-2 text-danger"></i>Overdue Book Fines</h6>
+          <a href="{% url 'my_fines' %}" class="btn btn-sm btn-outline-danger">View All</a>
+        </div>
 
-      <!-- Fine Summary -->
-      <div class="row g-2 mb-3">
-        <div class="col-4">
-          <div class="text-center p-2 bg-light rounded">
-            <div class="small text-muted">Total Fine</div>
-            <div class="fw-bold text-danger fs-5">TZS {{ total_fine_amount|floatformat:0 }}</div>
+        <!-- Fine Summary -->
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <div class="text-center p-2 bg-light rounded">
+              <div class="small text-muted">Total</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_fine_amount|floatformat:0 }}</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="text-center p-2 bg-light rounded">
+              <div class="small text-muted">Paid</div>
+              <div class="fw-bold text-success fs-5">TZS {{ total_paid|floatformat:0 }}</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="text-center p-2 bg-light rounded">
+              <div class="small text-muted">Remaining</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_unpaid|floatformat:0 }}</div>
+            </div>
           </div>
         </div>
-        <div class="col-4">
-          <div class="text-center p-2 bg-light rounded">
-            <div class="small text-muted">Paid</div>
-            <div class="fw-bold text-success fs-5">TZS {{ total_paid|floatformat:0 }}</div>
-          </div>
-        </div>
-        <div class="col-4">
-          <div class="text-center p-2 bg-light rounded">
-            <div class="small text-muted">Remaining</div>
-            <div class="fw-bold text-danger fs-5">TZS {{ total_unpaid|floatformat:0 }}</div>
-          </div>
-        </div>
-      </div>
 
-      {% for fine in overdue_fines %}
-      <div class="border-bottom py-2">
-        <div class="d-flex justify-content-between align-items-start mb-1">
-          <div class="flex-grow-1">
-            <small class="fw-semibold">{{ fine.reason }}</small>
-            {% if fine.transaction %}
-            <br><small class="text-muted">Book: {{ fine.transaction.copy.book.title|truncatechars:30 }}</small>
-            {% endif %}
+        {% for fine in overdue_fines %}
+        <div class="border-bottom py-2">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <div class="flex-grow-1">
+              <small class="fw-semibold">{{ fine.reason }}</small>
+              {% if fine.transaction %}
+              <br><small class="text-muted">Book: {{ fine.transaction.copy.book.title|truncatechars:30 }}</small>
+              {% endif %}
+            </div>
+            <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0 }}</small>
           </div>
-          <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0 }}</small>
-        </div>
-        <div class="d-flex justify-content-between align-items-center mt-1">
-          <div class="small">
-            <span class="text-muted">Paid: TZS {{ fine.amount_paid|floatformat:0 }}</span>
-            <span class="text-danger fw-bold mx-1">|</span>
-            <span class="text-danger fw-bold">Unpaid: TZS {{ fine.remaining_balance|floatformat:0 }}</span>
+          <div class="d-flex justify-content-between align-items-center mt-1">
+            <div class="small">
+              {% if fine.paid %}
+                <span class="badge bg-success">Paid</span>
+              {% else %}
+                <span class="badge bg-danger">Unpaid</span>
+              {% endif %}
+            </div>
+            <div class="small text-muted">{{ fine.created_at|date:"d M Y" }}</div>
           </div>
-          {% if not fine.paid %}
-          <a href="{% url 'pay_fine' fine.id %}" class="btn btn-sm btn-success py-0">
-            <i class="bi bi-credit-card"></i> Pay
-          </a>
-          {% else %}
-          <span class="badge bg-success">Paid</span>
-          {% endif %}
         </div>
+        {% endfor %}
       </div>
-      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Loss Fines -->
+    {% if loss_fines %}
+    <div class="card border-0 shadow-sm mb-3 border-start border-4 border-danger">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle-fill me-2 text-danger"></i>Loss Fines</h6>
+          <a href="{% url 'my_loss_reports' %}" class="btn btn-sm btn-outline-danger">View All</a>
+        </div>
+
+        <!-- Loss Fine Summary -->
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <div class="text-center p-2 bg-light rounded">
+              <div class="small text-muted">Total</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_loss_fine_amount|floatformat:0 }}</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="text-center p-2 bg-light rounded">
+              <div class="small text-muted">Paid</div>
+              <div class="fw-bold text-success fs-5">TZS {{ total_loss_paid|floatformat:0 }}</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="text-center p-2 bg-light rounded">
+              <div class="small text-muted">Remaining</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_loss_unpaid|floatformat:0 }}</div>
+            </div>
+          </div>
+        </div>
+
+        {% for fine in loss_fines %}
+        <div class="border-bottom py-2">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <div class="flex-grow-1">
+              <small class="fw-semibold">{{ fine.reason }}</small>
+              {% if fine.lossreport_set.exists %}
+              {% with lr=fine.lossreport_set.first %}
+              <br><small class="text-muted">Book: {{ lr.transaction.copy.book.title|truncatechars:30 }}</small>
+              <br><small class="text-muted">Report Ref: LR-{{ lr.pk }}</small>
+              {% endwith %}
+              {% endif %}
+            </div>
+            <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0 }}</small>
+          </div>
+          <div class="d-flex justify-content-between align-items-center mt-1">
+            <div class="small">
+              {% if fine.paid %}
+                <span class="badge bg-success">Paid</span>
+              {% else %}
+                <span class="badge bg-danger">Unpaid</span>
+              {% endif %}
+            </div>
+            <div class="small text-muted">{{ fine.created_at|date:"d M Y" }}</div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
     </div>
     {% endif %}
 
     <!-- Borrow History -->
     {% if borrow_history %}
-    <div class="card p-3 mb-3">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-clock-history text-success"></i> Recent Returns</h6>
-        <a href="{% url 'member_msict_borrowings' %}" class="btn btn-outline-secondary btn-sm py-0">View All</a>
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0"><i class="bi bi-clock-history me-2 text-success"></i>Recent Returns</h6>
+          <a href="{% url 'member_msict_borrowings' %}" class="btn btn-sm btn-outline-secondary">View All</a>
+        </div>
+        {% for tx in borrow_history %}
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+          <div>
+            <div class="small fw-semibold">{{ tx.copy.book.title|truncatechars:32 }}</div>
+            <div class="small text-muted">
+              <span class="badge bg-secondary"><i class="bi bi-book"></i> {{ tx.copy.copy_type|title }}</span>
+              {% if tx.status == 'returned' %}Returned: {{ tx.return_date|date:"d M Y" }}{% elif tx.status == 'lost' %}Reported Lost: {{ tx.reported_at|default:tx.return_date|date:"d M Y" }}{% endif %}
+            </div>
+          </div>
+          {% if tx.status == 'returned' %}
+            <span class="badge bg-success">Returned</span>
+          {% elif tx.status == 'lost' %}
+            <span class="badge bg-warning">Lost</span>
+          {% else %}
+            <span class="badge bg-secondary">{{ tx.status|title }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
       </div>
-      {% for tx in borrow_history %}
-      <div class="d-flex justify-content-between align-items-center border-bottom py-2">
-        <div>
-          <div class="small fw-semibold">{{ tx.copy.book.title|truncatechars:32 }}</div>
-          <div class="small text-muted">
-            <span class="badge bg-secondary"><i class="bi bi-book"></i> {{ tx.copy.copy_type|title }}</span>
-            Returned: {{ tx.return_date|date:"d M Y" }}
+    </div>
+    {% endif %}
+
+    <!-- My Loss Reports -->
+    {% if my_loss_reports %}
+    <div class="card border-0 shadow-sm mb-3 border-start border-4 border-danger">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h6 class="fw-bold mb-0 text-danger"><i class="bi bi-exclamation-triangle-fill me-2"></i>My Loss Reports</h6>
+          <a href="{% url 'member_msict_borrowings' %}" class="btn btn-sm btn-outline-danger">View Borrowings</a>
+        </div>
+        {% for rpt in my_loss_reports %}
+        <div class="border-bottom py-2 d-flex justify-content-between align-items-start">
+          <div>
+            <div class="small fw-semibold">{{ rpt.transaction.copy.book.title|truncatechars:38 }}</div>
+            <div class="small text-muted">
+              <code class="small">{{ rpt.transaction.copy.accession_no }}</code> &nbsp;·&nbsp;
+              Reported {{ rpt.reported_at|date:"d M Y" }}
+            </div>
+            {% if rpt.circumstances %}
+            <div class="small text-muted"><i class="bi bi-tag me-1"></i>{{ rpt.circumstances }}</div>
+            {% endif %}
+            {% if rpt.loss_fine %}
+            <div class="small text-danger fw-bold mt-1"><i class="bi bi-cash me-1"></i>Fine: TZS {{ rpt.loss_fine.amount|floatformat:0 }}
+              {% if rpt.loss_fine.paid %}<span class="badge bg-success ms-1">Paid</span>{% else %}<span class="badge bg-danger ms-1">Unpaid</span>{% endif %}
+            </div>
+            {% if not rpt.loss_fine.paid %}
+            <div class="mt-1">
+              <a href="{% url 'pay_loss_fine' rpt.pk %}" class="btn btn-sm btn-success w-100">
+                <i class="bi bi-credit-card me-1"></i>Pay Fine
+              </a>
+            </div>
+            {% endif %}
+            {% endif %}
+          </div>
+          <div class="ms-2 flex-shrink-0">
+            {% if rpt.status == 'pending' %}
+              <span class="badge bg-warning text-dark">Pending</span>
+            {% elif rpt.status == 'confirmed' %}
+              <span class="badge bg-danger">Confirmed</span>
+            {% elif rpt.status == 'resolved' %}
+              <span class="badge bg-success">Resolved</span>
+            {% elif rpt.status == 'dismissed' %}
+              <span class="badge bg-secondary">Dismissed</span>
+            {% endif %}
           </div>
         </div>
-        <span class="badge bg-success">Returned</span>
+        {% endfor %}
       </div>
-      {% endfor %}
     </div>
     {% endif %}
 
     <!-- Notifications -->
-    <div class="card p-3">
-      <h6 class="fw-bold mb-2 text-body-emphasis"><i class="bi bi-bell"></i> Recent Notifications</h6>
-      {% for notif in notifications %}
-      <div class="border-bottom py-2">
-        <div class="small">{{ notif.message|truncatechars:80 }}</div>
-        <div class="small text-body-secondary">{{ notif.created_at|timesince }} ago
-          {% if notif.channel == 'sms' %}<span class="badge bg-success ms-1">SMS</span>
-          {% elif notif.channel == 'email' %}<span class="badge bg-primary ms-1">Email</span>
-          {% else %}<span class="badge bg-secondary ms-1">{{ notif.channel }}</span>{% endif %}
-          {% if notif.status == 'failed' %}<span class="badge bg-danger ms-1">failed</span>{% endif %}
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-bell me-2 text-primary"></i>Recent Notifications</h6>
+        {% for notif in notifications %}
+        <div class="border-bottom py-2">
+          <div class="small">{{ notif.message|truncatechars:80 }}</div>
+          <div class="small text-muted">{{ notif.created_at|timesince }} ago
+            {% if notif.channel == 'sms' %}<span class="badge bg-success ms-1">SMS</span>
+            {% elif notif.channel == 'email' %}<span class="badge bg-primary ms-1">Email</span>
+            {% else %}<span class="badge bg-secondary ms-1">{{ notif.channel }}</span>{% endif %}
+            {% if notif.status == 'failed' %}<span class="badge bg-danger ms-1">failed</span>{% endif %}
+          </div>
         </div>
+        {% empty %}
+        <div class="text-center py-4">
+          <i class="bi bi-bell text-muted fs-1 mb-2"></i>
+          <p class="text-muted mb-0 small">No notifications.</p>
+        </div>
+        {% endfor %}
       </div>
-      {% empty %}
-      <p class="text-muted text-center py-3 mb-0 small">No notifications.</p>
-      {% endfor %}
     </div>
   </div>
 </div>

@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% block title %}My Loss Reports{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle-fill"></i> My Loss Reports</h4>
+
+<div class="row mb-3">
+  <div class="col-md-4">
+    <div class="card p-3 border-danger border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if total_unpaid_loss_fine > 0 %}
+          {% widthratio total_unpaid_loss_fine reports|length 100 as unpaid_pct %}
+        {% else %}
+          {% with unpaid_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+          <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#dc2626 0% {{ unpaid_pct|default:0 }}%, rgba(220, 38, 38, 0.1) {{ unpaid_pct|default:0 }}% 100%); box-shadow: 0 5px 14px rgba(220, 38, 38, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 100px; height: 75px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-6 fw-bold" style="color: #dc2626; font-size: 0.15rem;">TZS {{ total_unpaid_loss_fine|floatformat:2 }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <div class="small fw-semibold">Total Unpaid Loss Fine</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if reports|length > 0 %}
+          {% widthratio reports|length|add:"-"|add:unpaid_loss_reports|length reports|length 100 as paid_pct %}
+        {% else %}
+          {% with paid_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+          <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#198754 0% {{ paid_pct|default:0 }}%, rgba(25, 135, 84, 0.1) {{ paid_pct|default:0 }}% 100%); box-shadow: 0 5px 14px rgba(25, 135, 84, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-4 fw-bold" style="color: #198754;">{{ reports|length|add:"-"|add:unpaid_loss_reports|length }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <div class="small fw-semibold">Resolved Loss Reports</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card p-3 border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+          <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 5px 14px rgba(13, 110, 253, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-4 fw-bold" style="color: #0d6efd;">{{ reports|length }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <div class="small fw-semibold">Total Loss Reports</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if unpaid_loss_reports %}
+<div class="alert alert-danger border-danger mb-3">
+  <h6 class="fw-bold mb-2"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Loss Fines Detected</h6>
+  <p class="mb-2">You have unpaid loss fines totaling <strong>TZS {{ total_unpaid_loss_fine|floatformat:0 }}</strong>.</p>
+  <p class="mb-0">Click the <strong>Pay</strong> button next to each loss report to proceed with payment.</p>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>S/N</th>
+            <th>Report Ref</th>
+            <th>Book</th>
+            <th>Circumstances</th>
+            <th>Fine Amount</th>
+            <th>Paid</th>
+            <th>Unpaid</th>
+            <th>Status</th>
+            <th>Date Reported</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for report in reports %}
+          <tr class="{% if report.loss_fine and not report.loss_fine.paid %}table-danger{% endif %}">
+            <td>{{ forloop.counter }}</td>
+            <td><strong>LR-{{ report.pk }}</strong></td>
+            <td><small>{{ report.transaction.copy.book.title }}<br><code>{{ report.transaction.copy.accession_no }}</code></small></td>
+            <td><small>{{ report.circumstances|default:"—" }}</small></td>
+            <td class="fw-bold text-danger">
+              {% if report.loss_fine %}TZS {{ report.loss_fine.amount|floatformat:0 }}{% else %}—{% endif %}
+            </td>
+            <td><small class="text-success fw-semibold">
+              {% if report.loss_fine %}TZS {{ report.loss_fine.amount_paid|floatformat:0 }}{% else %}—{% endif %}
+            </small></td>
+            <td><small class="text-danger fw-semibold">
+              {% if report.loss_fine %}TZS {{ report.loss_fine.remaining_balance|floatformat:0 }}{% else %}—{% endif %}
+            </small></td>
+            <td>
+              {% if report.status == 'confirmed' %}
+                <span class="badge bg-danger">Confirmed</span>
+              {% elif report.status == 'resolved' %}
+                <span class="badge bg-success">Resolved</span>
+              {% elif report.status == 'dismissed' %}
+                <span class="badge bg-secondary">Dismissed</span>
+              {% else %}
+                <span class="badge bg-warning text-dark">Pending</span>
+              {% endif %}
+            </td>
+            <td><small class="text-muted">{{ report.reported_at|date:"d M Y" }}</small></td>
+            <td>
+              {% if report.loss_fine and not report.loss_fine.paid %}
+              <a href="{% url 'pay_loss_fine' report.pk %}" class="btn btn-sm btn-success py-0">
+                <i class="bi bi-credit-card"></i> Pay
+              </a>
+              {% elif report.loss_fine and report.loss_fine.paid %}
+              <small class="text-muted">
+                <span class="fw-semibold">{{ report.loss_fine.get_payment_method_display|default:report.loss_fine.payment_method }}</span>
+                {% if report.loss_fine.receipt_no %}<br><code>{{ report.loss_fine.receipt_no }}</code>{% endif %}
+              </small>
+              {% else %}
+              <small class="text-muted">No fine</small>
+              {% endif %}
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="10" class="text-center py-4 text-muted"><i class="bi bi-check-circle text-success"></i> No loss reports. Great job!</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

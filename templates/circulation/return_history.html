@@ -9,28 +9,73 @@
 {# Summary cards #}
 <div class="row g-3 mb-3">
   <div class="col-md-4">
-    <div class="card stat-card p-3 text-center">
-      <div class="fs-2 fw-bold text-success">{{ total_returned }}</div>
-      <div class="small text-muted">Total Returned</div>
+    <div class="card stat-card p-3 text-center border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if total_returned > 0 %}
+          {% widthratio total_returned total_returned 100 as total_pct %}
+        {% else %}
+          {% with total_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+          <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#198754 0% 100%, rgba(25, 135, 84, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(25, 135, 84, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-3 fw-bold" style="color: #198754;">{{ total_returned }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <div class="small fw-semibold">Total Returned</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-md-4">
-    <div class="card stat-card p-3 text-center">
-      <div class="fs-2 fw-bold text-secondary">{{ hard_returned }}</div>
-      <div class="small text-muted">Hardcopy Returned</div>
+    <div class="card stat-card p-3 text-center border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if total_returned > 0 %}
+          {% widthratio hard_returned total_returned 100 as hard_pct %}
+        {% else %}
+          {% with hard_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+          <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#6c757d 0% {{ hard_pct|default:0 }}%, rgba(108, 117, 125, 0.1) {{ hard_pct|default:0 }}% 100%); box-shadow: 0 6px 16px rgba(108, 117, 125, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-3 fw-bold" style="color: #6c757d;">{{ hard_returned }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <div class="small fw-semibold">Hardcopy Returned</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-md-4">
-    <div class="card stat-card p-3 text-center">
-      <div class="fs-2 fw-bold text-primary">{{ soft_returned }}</div>
-      <div class="small text-muted">Softcopy Returned</div>
+    <div class="card stat-card p-3 text-center border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if total_returned > 0 %}
+          {% widthratio soft_returned total_returned 100 as soft_pct %}
+        {% else %}
+          {% with soft_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+          <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#0d6efd 0% {{ soft_pct|default:0 }}%, rgba(13, 110, 253, 0.1) {{ soft_pct|default:0 }}% 100%); box-shadow: 0 6px 16px rgba(13, 110, 253, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ soft_returned }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-2">
+          <div class="small fw-semibold">Softcopy Returned</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 {# Filters #}
 <div class="card p-3 mb-3">
-  <form method="get" class="row g-2 align-items-end">
+  <form method="get" class="row g-2 align-items-end" data-no-auto-submit data-live-search data-search-target="#liveResults">
     <div class="col-md-4">
       <input type="text" name="q" class="form-control" placeholder="Search book, member, acc. no, army no..." value="{{ query }}">
     </div>
@@ -47,6 +92,7 @@
 </div>
 
 {# Table #}
+<div id="liveResults">
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover table-sm mb-0 align-middle">
@@ -56,6 +102,7 @@
           <th>Book Title</th>
           <th>Member</th>
           <th>Army No</th>
+          <th>Rank</th>
           <th>Acc. No</th>
           <th>Type</th>
           <th>Borrow Date</th>
@@ -75,7 +122,8 @@
           </td>
           <td><small>{{ tx.user.get_full_name }}</small></td>
           <td><small class="text-muted">{{ tx.user.army_no|default:"—" }}</small></td>
-          <td><code class="small">{{ tx.copy.accession_no }}</code></td>
+          <td><small class="badge bg-dark">{{ tx.user.rank.rank_name|default:"—" }}</small></td>
+          <td><code class="small">{{ tx.copy.display_id }}</code></td>
           <td>
             {% if tx.borrow_type == 'hardcopy' %}
             <span class="badge bg-secondary"><i class="bi bi-book"></i> Hardcopy</span>
@@ -108,5 +156,6 @@
       </tbody>
     </table>
   </div>
+</div>
 </div>
 {% endblock %}

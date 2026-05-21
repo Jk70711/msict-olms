@@ -24,9 +24,10 @@ urlpatterns = [
     path('copies/add/', views.copy_add_standalone_view, name='copy_add'),                      # Ongeza nakala (njia mbadala)
     path('copies/<int:copy_id>/edit/', views.copy_edit_view, name='copy_edit'),                # Hariri nakala
     path('copies/<int:copy_id>/delete/', views.copy_delete_view, name='copy_delete'),          # Futa nakala
-    path('copies/<int:copy_id>/mark-lost/', views.copy_mark_lost_view, name='copy_mark_lost'), # Taja nakala kama imepotea
-    path('copies/<int:copy_id>/read/', views.serve_softcopy_view, name='serve_softcopy'),      # Soma PDF online
-    path('copies/<int:copy_id>/download/', views.free_softcopy_download_view, name='free_softcopy_download'),  # Pakua PDF bure
+    path('copies/<int:copy_id>/mark-lost/', views.copy_mark_lost_view, name='copy_mark_lost'), # Taji nakala kama imepotea
+    path('copies/<int:copy_id>/read/', views.serve_softcopy_view, name='serve_softcopy'),                          # Soma PDF online
+    path('copies/<int:copy_id>/pdf-data/', views.special_pdf_data_view, name='special_pdf_data'),                 # Raw PDF bytes (viewer only)
+    path('copies/<int:copy_id>/download/', views.free_softcopy_download_view, name='free_softcopy_download'),     # Pakua PDF bure
 
     # ── Kozi na Makategoria ────────────────────────────────
     path('courses/', views.course_list_view, name='course_list'),                              # Orodha ya kozi
@@ -35,6 +36,8 @@ urlpatterns = [
     path('courses/<int:course_id>/delete/', views.course_delete_view, name='course_delete'),   # Futa kozi
     path('categories/', views.category_list_view, name='category_list'),                       # Orodha ya makategoria
     path('categories/create/', views.category_create_view, name='category_create'),            # Unda kategoria mpya
+    path('categories/<int:category_id>/edit/', views.category_edit_view, name='category_edit'), # Hariri kategoria
+    path('categories/<int:category_id>/delete/', views.category_delete_view, name='category_delete'), # Futa kategoria
 
     # ── Rafu ──────────────────────────────────────────────
     path('shelf-locations/', views.shelf_location_view, name='shelf_location'),                # Orodha ya mahali pa rafu
@@ -64,4 +67,5 @@ urlpatterns = [
     path('news/<int:news_id>/edit/', views.news_edit_view, name='news_edit'),                  # Hariri habari
     path('news/<int:news_id>/delete/', views.news_delete_view, name='news_delete'),            # Futa habari
     path('news/<int:news_id>/toggle/', views.news_toggle_view, name='news_toggle'),            # Washa/zima habari
+    path('footer/edit/', views.footer_edit_view, name='footer_edit'),                          # Hariri maelezo ya footer
 ]

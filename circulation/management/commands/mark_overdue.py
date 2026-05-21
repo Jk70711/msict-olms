@@ -22,31 +22,38 @@ class Command(BaseCommand):
         newly_marked = 0
         daily_reminded = 0
 
+        from accounts.models import SystemPreference
+        fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 500))
+
         # ── Step 1: Mark borrowed→overdue and send first alert ─────────────
         new_overdue_qs = BorrowingTransaction.objects.filter(
             status='borrowed',
             due_date__lt=now,
         ).select_related('user', 'copy__book')
 
+        newly_marked_ids = []
         for tx in new_overdue_qs:
             tx.status = 'overdue'
             tx.save(update_fields=['status'])
             days = max(1, (now - tx.due_date).days)
-            
-            # Create Fine record for new overdue transaction
-            from accounts.models import SystemPreference
-            fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 500))
             fine_amount = days * fine_per_day
-            Fine.objects.get_or_create(
-                user=tx.user,
-                transaction=tx,
-                paid=False,
-                defaults={
-                    'amount': fine_amount,
-                    'reason': f"Overdue fine for '{tx.copy.book.title}' ({days} days)",
-                }
-            )
-            
+
+            # Upsert fine — never use paid=False as lookup key (avoids duplicates)
+            existing_fine = Fine.objects.filter(transaction=tx).first()
+            if existing_fine:
+                if not existing_fine.paid:
+                    existing_fine.amount = fine_amount
+                    existing_fine.reason = f"Overdue fine for '{tx.copy.book.title}' ({days} days)"
+                    existing_fine.save(update_fields=['amount', 'reason'])
+            else:
+                Fine.objects.create(
+                    user=tx.user,
+                    transaction=tx,
+                    amount=fine_amount,
+                    reason=f"Overdue fine for '{tx.copy.book.title}' ({days} days)",
+                    paid=False,
+                )
+
             return_hint = (
                 "Return the soft copy online from your dashboard or "
                 if tx.copy.copy_type == 'softcopy'
@@ -54,30 +61,33 @@ class Command(BaseCommand):
             )
             msg = (
                 f"MSICT OLMS: OVERDUE - '{tx.copy.book.title}' is overdue by {days} day(s). "
+                f"Fine so far: TZS {fine_amount:,.0f}. "
                 f"{return_hint}contact the librarian immediately to avoid further fines."
             )
             notify_user(tx.user, msg, 'sms', priority='high')
             notify_user(tx.user, msg, 'email',
                         subject='OVERDUE Book Notice - MSICT OLMS', priority='high')
+            newly_marked_ids.append(tx.pk)
             newly_marked += 1
 
-        # ── Step 2: Daily consecutive alert to already-overdue transactions ─
+        # ── Step 2: Daily consecutive alert — EXCLUDE transactions just marked ─
         already_overdue_qs = BorrowingTransaction.objects.filter(
             status='overdue',
+        ).exclude(
+            pk__in=newly_marked_ids,  # Don't double-notify on day 1
         ).select_related('user', 'copy__book')
 
         for tx in already_overdue_qs:
             days = max(1, (now - tx.due_date).days)
-            from accounts.models import SystemPreference
-            fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 1000))
             total_fine = days * fine_per_day
-            
-            # Update Fine record for already overdue transaction
-            existing_fine = Fine.objects.filter(transaction=tx, paid=False).first()
+
+            # Update fine amount (accumulated daily)
+            existing_fine = Fine.objects.filter(transaction=tx).first()
             if existing_fine:
-                existing_fine.amount = total_fine
-                existing_fine.reason = f"Overdue fine for '{tx.copy.book.title}' ({days} days)"
-                existing_fine.save(update_fields=['amount', 'reason'])
+                if not existing_fine.paid:
+                    existing_fine.amount = total_fine
+                    existing_fine.reason = f"Overdue fine for '{tx.copy.book.title}' ({days} days)"
+                    existing_fine.save(update_fields=['amount', 'reason'])
             else:
                 Fine.objects.create(
                     user=tx.user,
@@ -86,7 +96,7 @@ class Command(BaseCommand):
                     reason=f"Overdue fine for '{tx.copy.book.title}' ({days} days)",
                     paid=False,
                 )
-            
+
             return_hint = (
                 "Return online from your dashboard or "
                 if tx.copy.copy_type == 'softcopy'

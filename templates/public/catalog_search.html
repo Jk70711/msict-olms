@@ -3,7 +3,7 @@
 {% block content %}
 <h4 class="fw-bold mb-3"><i class="bi bi-search"></i> Catalog Search</h4>
 <div class="card p-3 mb-3">
-  <form method="get" class="row g-2">
+  <form method="get" class="row g-2" data-no-auto-submit>
     <div class="col-md-4 position-relative">
       <input type="text" name="q" id="searchInput" class="form-control" placeholder="Title, author, ISBN, accession no…" value="{{ query }}" autocomplete="off">
       <!-- Autocomplete Dropdown -->
@@ -268,7 +268,12 @@
   const esc = s => String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   const hi  = (s, q) => esc(s).replace(new RegExp(`(${esc(q)})`, 'gi'), '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 1px">$1</mark>');
 
-  function show(html) { box.innerHTML = html; box.style.display = 'block'; }
+  function show(html) {
+    requestAnimationFrame(function() {
+      box.innerHTML = html;
+      box.style.display = 'block';
+    });
+  }
   function hide() { box.style.display = 'none'; activeIdx = -1; }
 
   function build(results, q) {

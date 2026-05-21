@@ -23,6 +23,15 @@
             <div class="form-text">Prefix + digits only. E.g. MT 134513, PW 456</div>
           </div>
           <div class="col-md-4">
+            <label class="form-label fw-semibold">Rank <span class="text-danger">*</span></label>
+            <select name="rank_id" class="form-select" required>
+              <option value="">-- Select Rank --</option>
+              {% for rank in ranks %}
+              <option value="{{ rank.pk }}">{{ rank.rank_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
             <label class="form-label fw-semibold">Role <span class="text-danger">*</span></label>
             <select name="role" id="roleSelect" class="form-select" onchange="toggleMemberType()" required>
               <option value="member">Member</option>

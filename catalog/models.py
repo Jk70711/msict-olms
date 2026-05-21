@@ -71,6 +71,7 @@ class Book(models.Model):
     cover_image = models.ImageField(upload_to='book_covers/', null=True, blank=True)
     marc_xml = models.TextField(blank=True)
     show_in_carousel = models.BooleanField(default=False)
+    lost_fine = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Fine if copy is lost
     courses = models.ManyToManyField(Course, through='BookCourse', blank=True, related_name='books')
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -101,6 +102,22 @@ class Book(models.Model):
 
     def available_special_softcopy_count(self):
         return self.copies.filter(copy_type='softcopy', access_type='borrow', status='available').count()
+
+    @property
+    def book_type(self):
+        """Derived type from copies: hardcopy / softcopy / both."""
+        has_hard = self.copies.filter(copy_type='hardcopy').exists()
+        has_soft = self.copies.filter(copy_type='softcopy').exists()
+        if has_hard and has_soft:
+            return 'both'
+        if has_soft:
+            return 'softcopy'
+        return 'hardcopy'
+
+    @property
+    def book_type_display(self):
+        t = self.book_type
+        return {'both': 'Both (Hard + Soft)', 'softcopy': 'Softcopy', 'hardcopy': 'Hardcopy'}.get(t, t)
 
 
 class BookCourse(models.Model):
@@ -160,8 +177,23 @@ class BookCopy(models.Model):
             raise ValidationError("Softcopy must have access_type set.")
 
     @classmethod
-    def get_next_accession_number(cls, offset=0):
-        """Return the next accession number. Reuses freed (tombstoned) numbers first."""
+    def get_next_accession_number(cls, offset=0, for_softcopy=False):
+        """Return the next accession number.
+        Hardcopy: MSICT/000001 format (reuses tombstoned numbers).
+        Softcopy: SOFT/000001 format (separate counter, never tombstoned).
+        """
+        if for_softcopy:
+            last_num = 0
+            for acc in cls.objects.filter(copy_type='softcopy').values_list('accession_no', flat=True):
+                if acc and acc.startswith('SOFT/'):
+                    try:
+                        n = int(acc[5:])
+                        if n > last_num:
+                            last_num = n
+                    except ValueError:
+                        pass
+            return f"SOFT/{last_num + 1:06d}"
+        # Hardcopy: reuse freed (tombstoned) numbers first
         if offset == 0:
             freed = DeletedAccessionNumber.objects.order_by('number').first()
             if freed:
@@ -184,6 +216,11 @@ class BookCopy(models.Model):
             except ValueError:
                 pass
         return f"MSICT/{last_num + offset + 1:06d}"
+
+    @property
+    def display_id(self):
+        """Show accession number for hardcopy, 'Link' for softcopy."""
+        return self.accession_no if self.copy_type == 'hardcopy' else 'Link'
 
     def save(self, *args, **kwargs):
         if self.copy_type == 'hardcopy':
@@ -209,9 +246,11 @@ class DeletedAccessionNumber(models.Model):
 
 @receiver(post_delete, sender='catalog.BookCopy')
 def tombstone_accession_on_delete(sender, instance, **kwargs):
-    """When a BookCopy is permanently deleted, record its accession number for reuse."""
+    """When a BookCopy is permanently deleted, record its accession number for reuse.
+    Softcopy SOFT/ numbers are NOT tombstoned — they are cheap and not physical.
+    """
     acc = instance.accession_no
-    if not acc:
+    if not acc or acc.startswith('SOFT/'):
         return
     number = 0
     try:
@@ -401,3 +440,35 @@ class MediaSlide(models.Model):
     def get_active_home_bg(cls):
         """Get the currently active home page background/watermark image"""
         return cls.objects.filter(slide_type='home_bg', is_active=True).first()
+
+
+class Footer(models.Model):
+    """Editable footer content for the website"""
+    school_name = models.CharField(max_length=255, default='MSICT Online Library')
+    address = models.TextField(blank=True, help_text='Physical address')
+    phone = models.CharField(max_length=50, blank=True, help_text='Contact phone number')
+    email = models.EmailField(blank=True, help_text='Contact email')
+    location = models.CharField(max_length=255, blank=True, help_text='Location/city')
+    copyright_text = models.CharField(max_length=255, default='© 2024 MSICT. All rights reserved.')
+    faq_link = models.URLField(max_length=500, blank=True, help_text='FAQ page URL')
+    social_facebook = models.URLField(max_length=500, blank=True)
+    social_twitter = models.URLField(max_length=500, blank=True)
+    social_linkedin = models.URLField(max_length=500, blank=True)
+    social_instagram = models.URLField(max_length=500, blank=True)
+    additional_links = models.TextField(blank=True, help_text='Additional footer links (one per line: Label|URL)')
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = 'footer'
+        verbose_name = 'Footer Configuration'
+        verbose_name_plural = 'Footer Configurations'
+
+    def __str__(self):
+        return f"Footer - {self.school_name}"
+
+    @classmethod
+    def get_active_footer(cls):
+        """Get the currently active footer configuration"""
+        return cls.objects.filter(is_active=True).first()

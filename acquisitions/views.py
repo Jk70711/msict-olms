@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from accounts.views import librarian_required
 from accounts.utils import log_audit, notify_user, create_notification
@@ -89,12 +90,34 @@ def purchase_order_detail_view(request, po_id):
                 unit_price=request.POST.get('unit_price', 0),
             )
             messages.success(request, 'Item added.')
+        elif action == 'edit_item':
+            item_id = request.POST.get('item_id')
+            item = get_object_or_404(PurchaseOrderItem, pk=item_id, order=order)
+            item.title = request.POST.get('title', '')
+            item.isbn = request.POST.get('isbn', '')
+            item.quantity = int(request.POST.get('quantity', 1))
+            item.unit_price = request.POST.get('unit_price', 0)
+            item.save()
+            messages.success(request, 'Item updated.')
         elif action == 'update_status':
             order.status = request.POST.get('status', order.status)
             order.save(update_fields=['status'])
             messages.success(request, f'Status updated to {order.status}.')
         return redirect('purchase_order_detail', po_id=po_id)
     return render(request, 'acquisitions/po_detail.html', {'order': order})
+
+
+@login_required
+@librarian_required
+@require_POST
+def purchase_order_delete_item_view(request, item_id):
+    """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
+    item = get_object_or_404(PurchaseOrderItem, pk=item_id)
+    po_id = item.order.pk
+    log_audit(request.user, f"Deleted purchase order item {item_id} from PO-{po_id}", request)
+    item.delete()
+    messages.success(request, 'Item deleted.')
+    return redirect('purchase_order_detail', po_id=po_id)
 
 
 @login_required
@@ -132,26 +155,25 @@ def ill_request_create_view(request):
 
 @login_required
 @librarian_required
+@require_POST
 def ill_request_update_status_view(request, ill_id):
-    """Update ILL request status and notify member"""
+    """POST-only — protected by CSRF + librarian role decorator. Update ILL request status and notify member."""
     ill = get_object_or_404(ILLRequest, pk=ill_id)
-    if request.method == 'POST':
-        new_status = request.POST.get('status')
-        old_status = ill.status
-        if new_status and new_status != old_status:
-            ill.status = new_status
-            ill.save(update_fields=['status'])
-            # Notify member of status change
-            status_messages = {
-                'sent': f"MSICT OLMS: Your ILL request for '{ill.title}' has been sent to the source library.",
-                'fulfilled': f"MSICT OLMS: Your ILL request for '{ill.title}' has been fulfilled and is being processed.",
-                'received': f"MSICT OLMS: Your ILL book '{ill.title}' has been received and is ready for pickup.",
-                'cancelled': f"MSICT OLMS: Your ILL request for '{ill.title}' has been cancelled. Contact library for details.",
-            }
-            msg = status_messages.get(new_status, f"MSICT OLMS: Your ILL request for '{ill.title}' status changed to: {new_status}")
-            notify_user(ill.user, msg, 'sms')
-            notify_user(ill.user, msg, 'email', subject=f"ILL Request {new_status.title()}")
-            log_audit(request.user, f"Updated ILL request '{ill.title}' status from {old_status} to {new_status}", request)
-            messages.success(request, f'ILL request status updated to {new_status}. Member notified.')
-        return redirect('ill_request_list')
-    return render(request, 'acquisitions/ill_status_form.html', {'ill': ill})
+    new_status = request.POST.get('status')
+    old_status = ill.status
+    if new_status and new_status != old_status:
+        ill.status = new_status
+        ill.save(update_fields=['status'])
+        # Notify member of status change
+        status_messages = {
+            'sent': f"MSICT OLMS: Your ILL request for '{ill.title}' has been sent to the source library.",
+            'fulfilled': f"MSICT OLMS: Your ILL request for '{ill.title}' has been fulfilled and is being processed.",
+            'received': f"MSICT OLMS: Your ILL book '{ill.title}' has been received and is ready for pickup.",
+            'cancelled': f"MSICT OLMS: Your ILL request for '{ill.title}' has been cancelled. Contact library for details.",
+        }
+        msg = status_messages.get(new_status, f"MSICT OLMS: Your ILL request for '{ill.title}' status changed to: {new_status}")
+        notify_user(ill.user, msg, 'sms')
+        notify_user(ill.user, msg, 'email', subject=f"ILL Request {new_status.title()}")
+        log_audit(request.user, f"Updated ILL request '{ill.title}' status from {old_status} to {new_status}", request)
+        messages.success(request, f'ILL request status updated to {new_status}. Member notified.')
+    return redirect('ill_request_list')

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Notification
+from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Notification, LossReport
 
 
 @admin.register(BorrowRequest)
@@ -87,9 +87,9 @@ class FineAdmin(admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ('user', 'channel', 'priority', 'status', 'created_at', 'sent_at')
-    list_filter = ('channel', 'status', 'priority')
-    search_fields = ('user__username', 'message')
+    list_display = ('user', 'get_message_type_display', 'channel', 'priority', 'status', 'created_at', 'sent_at')
+    list_filter = ('message_type', 'channel', 'status', 'priority')
+    search_fields = ('user__username', 'message', 'message_type')
     list_per_page = 50
     date_hierarchy = 'created_at'
     ordering = ('-created_at',)
@@ -97,3 +97,22 @@ class NotificationAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+@admin.register(LossReport)
+class LossReportAdmin(admin.ModelAdmin):
+    list_display = ('pk', 'user', 'get_book_title', 'get_accession', 'status', 'reported_at', 'reviewed_by', 'loss_fine')
+    list_filter = ('status',)
+    search_fields = ('user__username', 'user__army_no', 'transaction__copy__book__title', 'transaction__copy__accession_no')
+    readonly_fields = ('reported_at', 'reviewed_at')
+    list_per_page = 25
+    date_hierarchy = 'reported_at'
+    ordering = ('-reported_at',)
+
+    def get_book_title(self, obj):
+        return obj.transaction.copy.book.title
+    get_book_title.short_description = 'Book'
+
+    def get_accession(self, obj):
+        return obj.transaction.copy.accession_no
+    get_accession.short_description = 'Accession No'

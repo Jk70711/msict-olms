@@ -9,34 +9,74 @@
 <!-- Summary Cards -->
 <div class="row g-3 mb-4">
   <div class="col-md-3">
-    <div class="card stat-card text-center h-100">
+    <div class="card stat-card text-center h-100 border-0 shadow-sm">
       <div class="card-body">
-        <div class="display-6 fw-bold text-primary">{{ active_borrows.count }}</div>
-        <div class="small text-muted">Active Borrows</div>
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(13, 110, 253, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ active_borrows.count }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="small fw-semibold">Active Borrows</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card text-center h-100">
+    <div class="card stat-card text-center h-100 border-0 shadow-sm">
       <div class="card-body">
-        <div class="display-6 fw-bold text-warning">{{ pending_requests.count }}</div>
-        <div class="small text-muted">Pending Requests</div>
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#ffc107 0% 100%, rgba(255, 193, 7, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(255, 193, 7, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-3 fw-bold" style="color: #ffc107;">{{ pending_requests.count }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="small fw-semibold">Pending Requests</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card text-center h-100">
+    <div class="card stat-card text-center h-100 border-0 shadow-sm">
       <div class="card-body">
-        <div class="display-6 fw-bold text-info">{{ reservations.count }}</div>
-        <div class="small text-muted">Active Reservations</div>
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#0dcaf0 0% 100%, rgba(13, 202, 240, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(13, 202, 240, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-3 fw-bold" style="color: #0dcaf0;">{{ reservations.count }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="small fw-semibold">Active Reservations</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card text-center h-100">
+    <div class="card stat-card text-center h-100 border-0 shadow-sm">
       <div class="card-body">
-        <div class="display-6 fw-bold text-danger">{{ unpaid_fines.count }}</div>
-        <div class="small text-muted">Unpaid Fines</div>
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#dc3545 0% 100%, rgba(220, 53, 69, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(220, 53, 69, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-3 fw-bold" style="color: #dc3545;">{{ unpaid_fines.count }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="small fw-semibold">Unpaid Fines</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -58,7 +98,7 @@
           <div class="d-flex justify-content-between align-items-start">
             <div>
               <a href="{% url 'book_detail_public' tx.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ tx.copy.book.title|truncatechars:40 }}</a>
-              <div class="small text-muted">Accession: {{ tx.copy.accession_no }}</div>
+              <div class="small text-muted">{% if tx.copy.copy_type == 'hardcopy' %}Acc: {{ tx.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}</div>
               <div class="small mt-1 d-flex flex-wrap gap-1">
                 {% if tx.copy.copy_type == 'softcopy' %}
                   {% if tx.is_link_active %}
@@ -81,7 +121,15 @@
                   {% endif %}
                   <span class="badge bg-secondary"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
                 {% else %}
-                  <span class="badge {% if tx.status == 'overdue' %}bg-danger{% else %}bg-success{% endif %}">{{ tx.status|title }}</span>
+                  {% if tx.status == 'borrowed' %}
+                    <span class="badge bg-success">Borrowed</span>
+                  {% elif tx.status == 'overdue' %}
+                    <span class="badge bg-danger">Overdue</span>
+                  {% elif tx.status == 'lost' %}
+                    <span class="badge bg-warning">Lost</span>
+                  {% else %}
+                    <span class="badge bg-secondary">{{ tx.status|title }}</span>
+                  {% endif %}
                   <span class="badge bg-secondary"><i class="bi bi-book"></i> Hardcopy</span>
                   {% if tx.status == 'overdue' %}
                   <span class="badge bg-danger"><i class="bi bi-alarm"></i> {{ tx.days_overdue }} day{{ tx.days_overdue|pluralize }} overdue</span>
@@ -93,6 +141,8 @@
                     {% else %}
                     <span class="badge bg-info text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} day{{ tx.days_remaining|pluralize }} left</span>
                     {% endif %}
+                  {% elif tx.status == 'lost' %}
+                  <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Book Lost</span>
                   {% endif %}
                 {% endif %}
               </div>
@@ -111,17 +161,23 @@
                   <span class="btn btn-sm btn-outline-danger disabled"><i class="bi bi-wifi-off"></i> Link Expired</span>
                   {% endif %}
                   {% if tx.is_renewable %}
-                  <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-sm btn-outline-success">
-                    <i class="bi bi-arrow-clockwise"></i> {% if tx.is_link_active %}Renew{% else %}Renew to Restore{% endif %}
-                  </a>
+                  <form method="post" action="{% url 'renew_transaction' tx.pk %}" class="d-inline" onsubmit="return confirm('Renew this borrowing?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success">
+                      <i class="bi bi-arrow-clockwise"></i> {% if tx.is_link_active %}Renew{% else %}Renew to Restore{% endif %}
+                    </button>
+                  </form>
                   <div class="small text-muted">{{ tx.renewals_left }} left</div>
                   {% else %}
                   <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
                   {% endif %}
                   {% if not tx.is_overdue %}
-                  <a href="{% url 'return_early' tx.pk %}" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-arrow-return-left"></i> Return
-                  </a>
+                  <form method="post" action="{% url 'return_early' tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">
+                      <i class="bi bi-arrow-return-left"></i> Return
+                    </button>
+                  </form>
                   {% else %}
                   {# Overdue - check if fines are paid #}
                   {% for tid, fine_info in tx_fines.items %}
@@ -131,9 +187,12 @@
                         <i class="bi bi-exclamation-triangle"></i> Return Blocked
                       </span>
                       {% else %}
-                      <a href="{% url 'return_early' tx.pk %}" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-arrow-return-left"></i> Return
-                      </a>
+                      <form method="post" action="{% url 'return_early' tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-secondary">
+                          <i class="bi bi-arrow-return-left"></i> Return
+                        </button>
+                      </form>
                       {% endif %}
                     {% endif %}
                   {% empty %}
@@ -144,12 +203,27 @@
                   {% endif %}
                 {% else %}
                   {% if tx.is_renewable %}
-                  <a href="{% url 'renew_transaction' tx.pk %}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-arrow-clockwise"></i> Renew
-                  </a>
+                  <form method="post" action="{% url 'renew_transaction' tx.pk %}" class="d-inline" onsubmit="return confirm('Renew this borrowing?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-primary">
+                      <i class="bi bi-arrow-clockwise"></i> Renew
+                    </button>
+                  </form>
                   <div class="small text-muted">{{ tx.renewals_left }} left</div>
                   {% else %}
                   <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
+                  {% endif %}
+                  {% if not tx.loss_report_exists %}
+                  <a href="{% url 'report_loss' tx.pk %}" class="btn btn-sm btn-outline-danger mt-1">
+                    <i class="bi bi-exclamation-triangle"></i> Report Lost
+                  </a>
+                  {% else %}
+                  <span class="btn btn-sm btn-outline-secondary mt-1 disabled"><i class="bi bi-clock"></i> Loss Reported</span>
+                  {% if tx.loss_report.loss_fine and not tx.loss_report.loss_fine.paid %}
+                  <a href="{% url 'pay_loss_fine' tx.loss_report.pk %}" class="btn btn-sm btn-success mt-1">
+                    <i class="bi bi-credit-card"></i> Pay Fine
+                  </a>
+                  {% endif %}
                   {% endif %}
                 {% endif %}
               </div>
@@ -178,10 +252,13 @@
           <div class="d-flex justify-content-between align-items-start">
             <div>
               <a href="{% url 'book_detail_public' req.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ req.copy.book.title|truncatechars:40 }}</a>
-              <div class="small text-muted">Accession: {{ req.copy.accession_no }}</div>
+              <div class="small text-muted">{% if req.copy.copy_type == 'hardcopy' %}Acc: {{ req.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}</div>
               <div class="small text-muted">Requested: {{ req.request_date|date:"M d, Y" }}</div>
             </div>
-            <a href="{% url 'cancel_borrow_request' req.pk %}" class="btn btn-sm btn-outline-danger">Cancel</a>
+            <form method="post" action="{% url 'cancel_borrow_request' req.pk %}" class="d-inline" onsubmit="return confirm('Cancel this request?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger">Cancel</button>
+            </form>
           </div>
         </div>
         {% empty %}
@@ -212,11 +289,19 @@
             <tr>
               <td>
                 <a href="{% url 'book_detail_public' tx.copy.book.pk %}">{{ tx.copy.book.title|truncatechars:30 }}</a>
-                <div class="small text-muted">{{ tx.copy.accession_no }}</div>
+                <div class="small text-muted">{{ tx.copy.display_id }}</div>
               </td>
               <td class="small">{{ tx.borrow_date|date:"M d, Y" }}</td>
               <td class="small">{{ tx.return_date|date:"M d, Y" }}</td>
-              <td><span class="badge bg-success">Returned</span></td>
+              <td>
+                {% if tx.status == 'returned' %}
+                  <span class="badge bg-success">Returned</span>
+                {% elif tx.status == 'lost' %}
+                  <span class="badge bg-danger">Lost</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ tx.status|title }}</span>
+                {% endif %}
+              </td>
             </tr>
             {% empty %}
             <tr><td colspan="4" class="text-center text-muted py-3">No borrow history</td></tr>
@@ -243,7 +328,10 @@
             <a href="{% url 'book_detail_public' res.book.pk %}" class="fw-semibold text-decoration-none">{{ res.book.title|truncatechars:35 }}</a>
             <div class="small text-muted">Expires: {{ res.expires_at|date:"M d, Y" }}</div>
           </div>
-          <a href="{% url 'cancel_reservation' res.pk %}" class="btn btn-sm btn-outline-secondary">Cancel</a>
+          <form method="post" action="{% url 'cancel_reservation' res.pk %}" class="d-inline" onsubmit="return confirm('Cancel reservation for {{ res.book.title }}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
+          </form>
         </div>
         {% empty %}
         <div class="list-group-item text-muted text-center py-3">No active reservations</div>

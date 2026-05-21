@@ -1,7 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import HttpResponse, FileResponse, JsonResponse
+from django.http import HttpResponse, FileResponse, JsonResponse, Http404
+from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.conf import settings
 from django.views.decorators.http import require_POST
@@ -10,7 +11,39 @@ from django.template.loader import render_to_string
 
 from accounts.views import librarian_required
 from accounts.utils import log_audit
-from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, InventoryLog, MediaSlide, Shelf
+from accounts.security_utils import build_content_disposition, validate_upload
+from django.core.exceptions import ValidationError
+from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, InventoryLog, MediaSlide, Shelf, Footer
+
+
+# ──────────────────────────────────────────────────────────────
+# Upload security policy (defence-in-depth)
+# These whitelists mean a librarian can never persist a .exe/.html/.svg
+# file even by accident; magic-byte checks also catch renamed payloads.
+# ──────────────────────────────────────────────────────────────
+ALLOWED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+ALLOWED_PDF_EXTS   = {'.pdf'}
+ALLOWED_DOC_EXTS   = {'.pdf', '.docx', '.xlsx', '.pptx'}
+MAX_IMAGE_BYTES = 5 * 1024 * 1024     # 5  MB
+MAX_PDF_BYTES   = 50 * 1024 * 1024    # 50 MB
+MAX_DOC_BYTES   = 25 * 1024 * 1024    # 25 MB
+
+
+def _check_upload(request, file, *, allowed_extensions, max_size, label):
+    """
+    Validate an uploaded file against the policy. On failure adds a
+    Django ``messages.error`` and returns ``False`` so the caller can
+    abort the save. Returns ``True`` if the file is missing (callers
+    should guard with ``if 'name' in request.FILES`` first).
+    """
+    if file is None:
+        return True
+    try:
+        validate_upload(file, allowed_extensions=allowed_extensions, max_size=max_size)
+    except ValidationError as exc:
+        messages.error(request, f"{label}: {exc.messages[0]}")
+        return False
+    return True
 
 
 @csrf_exempt
@@ -44,6 +77,9 @@ def book_search_ajax(request):
 def librarian_dashboard_view(request):
     from circulation.models import BorrowRequest, BorrowingTransaction, Reservation, Fine
     from accounts.models import OLMSUser
+    from django.db.models import Count, Sum
+    from datetime import datetime, timedelta
+    from collections import defaultdict
 
     pending_requests = BorrowRequest.objects.filter(status='pending').select_related('user__virtual_card', 'copy__book').order_by('-request_date')
     overdue_transactions = BorrowingTransaction.objects.filter(status='overdue').select_related('user__virtual_card', 'copy__book')
@@ -55,6 +91,40 @@ def librarian_dashboard_view(request):
 
     # Calculate total unpaid fines amount
     total_unpaid_fines_amount = sum(fine.remaining_balance for fine in unpaid_fines)
+
+    # Analytics data
+    # Monthly borrowing stats for the last 6 months
+    monthly_borrows = defaultdict(int)
+    for i in range(6):
+        month = datetime.now() - timedelta(days=30*i)
+        month_key = month.strftime('%b %Y')
+        count = BorrowingTransaction.objects.filter(
+            borrow_date__month=month.month,
+            borrow_date__year=month.year
+        ).count()
+        monthly_borrows[month_key] = count
+
+    # Category distribution with percentages
+    category_stats = list(Book.objects.values('category__name').annotate(
+        count=Count('id')
+    ).order_by('-count')[:5])
+    total_category_books = sum(stat['count'] for stat in category_stats) if category_stats else 1
+    for stat in category_stats:
+        stat['percentage'] = int((stat['count'] / total_category_books) * 100)
+
+    # Copy type distribution
+    copy_type_stats = list(BookCopy.objects.values('copy_type').annotate(
+        count=Count('id')
+    ))
+
+    # Calculate max borrows for percentage
+    max_borrows = max(monthly_borrows.values()) if monthly_borrows else 1
+    monthly_borrows_with_pct = {}
+    for month, count in monthly_borrows.items():
+        monthly_borrows_with_pct[month] = {
+            'count': count,
+            'percentage': int((count / max_borrows) * 100) if max_borrows > 0 else 0
+        }
 
     context = {
         'pending_requests': pending_requests[:10],
@@ -68,6 +138,9 @@ def librarian_dashboard_view(request):
         'overdue_count': overdue_transactions.count(),
         'unpaid_fines_count': unpaid_fines.count(),
         'total_unpaid_fines_amount': total_unpaid_fines_amount,
+        'monthly_borrows': monthly_borrows_with_pct,
+        'category_stats': category_stats,
+        'copy_type_stats': copy_type_stats,
     }
     return render(request, 'catalog/librarian_dashboard.html', context)
 
@@ -117,13 +190,17 @@ def book_create_view(request):
             year=request.POST.get('year') or None,
             isbn=request.POST.get('isbn') or None,
             summary=request.POST.get('summary', ''),
+            lost_fine=request.POST.get('lost_fine') or 0,
             show_in_carousel=True,
         )
         cat_id = request.POST.get('category')
         if cat_id:
             book.category_id = cat_id
         if 'cover_image' in request.FILES:
-            book.cover_image = request.FILES['cover_image']
+            f = request.FILES['cover_image']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_IMAGE_EXTS, max_size=MAX_IMAGE_BYTES, label='Cover image'):
+                return render(request, 'catalog/book_form.html', {'categories': categories, 'courses': courses})
+            book.cover_image = f
         book.save()
 
         course_ids = request.POST.getlist('courses')
@@ -171,11 +248,15 @@ def book_create_view(request):
                 book=book,
                 copy_type='softcopy',
                 access_type=access_type,
-                accession_no=BookCopy.get_next_accession_number(),
+                accession_no=BookCopy.get_next_accession_number(for_softcopy=True),
                 status='available',
             )
             if 'softcopy_file' in request.FILES:
-                softcopy.file_path = request.FILES['softcopy_file']
+                f = request.FILES['softcopy_file']
+                if not _check_upload(request, f, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+                    book.delete()  # rollback the just-created book record
+                    return render(request, 'catalog/book_form.html', {'categories': categories, 'courses': courses})
+                softcopy.file_path = f
             softcopy.save()
             InventoryLog.objects.create(copy=softcopy, action='added', performed_by=request.user)
             log_audit(request.user, f"Created softcopy ({access_type}) for '{book.title}'", request)
@@ -216,12 +297,16 @@ def book_edit_view(request, book_id):
         book.year = request.POST.get('year') or book.year
         book.isbn = request.POST.get('isbn') or book.isbn
         book.summary = request.POST.get('summary', book.summary)
+        book.lost_fine = request.POST.get('lost_fine') or book.lost_fine
         book.show_in_carousel = request.POST.get('show_in_carousel') == 'on'
         cat_id = request.POST.get('category')
         if cat_id:
             book.category_id = cat_id
         if 'cover_image' in request.FILES:
-            book.cover_image = request.FILES['cover_image']
+            f = request.FILES['cover_image']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_IMAGE_EXTS, max_size=MAX_IMAGE_BYTES, label='Cover image'):
+                return render(request, 'catalog/book_form.html', {'book': book, 'categories': categories, 'courses': courses})
+            book.cover_image = f
         book.save()
 
         from .models import BookCourse
@@ -272,14 +357,21 @@ def copy_create_view(request, book_id):
             return redirect('book_detail', book_id=book_id)
 
         if not accession_no:
-            accession_no = BookCopy.get_next_accession_number()
+            accession_no = BookCopy.get_next_accession_number(for_softcopy=(copy_type == 'softcopy'))
+
+        # Validate softcopy file BEFORE creating the copy so we don't leave orphans
+        softcopy_file = None
+        if copy_type == 'softcopy' and 'file_path' in request.FILES:
+            softcopy_file = request.FILES['file_path']
+            if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+                return redirect('book_detail', book_id=book_id)
 
         copy = BookCopy(
             book=book, copy_type=copy_type, access_type=access_type,
             accession_no=accession_no, shelf_location=shelf_location, barcode=barcode or accession_no,
         )
-        if copy_type == 'softcopy' and 'file_path' in request.FILES:
-            copy.file_path = request.FILES['file_path']
+        if softcopy_file is not None:
+            copy.file_path = softcopy_file
         copy.save()
 
         InventoryLog.objects.create(copy=copy, action='added', performed_by=request.user)
@@ -313,7 +405,14 @@ def copy_add_standalone_view(request):
             })
 
         if not accession_no:
-            accession_no = BookCopy.get_next_accession_number()
+            accession_no = BookCopy.get_next_accession_number(for_softcopy=(copy_type == 'softcopy'))
+
+        # Validate softcopy file BEFORE creating the copy so we don't leave orphans
+        softcopy_file = None
+        if copy_type == 'softcopy' and 'file_path' in request.FILES:
+            softcopy_file = request.FILES['file_path']
+            if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+                return redirect('copy_list')
 
         copy = BookCopy(
             book=book,
@@ -323,8 +422,8 @@ def copy_add_standalone_view(request):
             shelf_location=shelf_location,
             barcode=barcode or accession_no,
         )
-        if copy_type == 'softcopy' and 'file_path' in request.FILES:
-            copy.file_path = request.FILES['file_path']
+        if softcopy_file is not None:
+            copy.file_path = softcopy_file
         copy.save()
 
         InventoryLog.objects.create(copy=copy, action='added', performed_by=request.user)
@@ -344,7 +443,9 @@ def copy_add_standalone_view(request):
 
 @login_required
 @librarian_required
+@require_POST
 def copy_mark_lost_view(request, copy_id):
+    """POST-only — protected by CSRF + librarian role decorator."""
     copy = get_object_or_404(BookCopy, pk=copy_id)
     copy.status = 'lost'
     copy.save(update_fields=['status'])
@@ -438,14 +539,15 @@ def serve_softcopy_view(request, copy_id):
             messages.error(request, 'File not available.')
             return redirect('book_detail', book_id=copy.book_id)
         response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
-        response['Content-Disposition'] = f'inline; filename="{copy.book.title}.pdf"'
+        response['Content-Disposition'] = build_content_disposition(
+            'inline', f'{copy.book.title}.pdf'
+        )
         return response
 
     if copy.access_type == 'borrow':
         from circulation.models import BorrowingTransaction
         from django.utils import timezone as tz
         now = tz.now()
-        # Only an active, non-expired borrow grants access
         tx = BorrowingTransaction.objects.filter(
             user=request.user, copy=copy
         ).order_by('-borrow_date').first()
@@ -467,15 +569,43 @@ def serve_softcopy_view(request, copy_id):
         if not copy.file_path:
             messages.error(request, 'File not available. Contact the librarian.')
             return redirect('member_msict_borrowings')
-        response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
-        response['Content-Disposition'] = f'inline; filename="{copy.book.title}.pdf"'
-        response['X-Frame-Options'] = 'SAMEORIGIN'
-        response['Cache-Control'] = 'no-store, no-cache, must-revalidate, private'
-        response['Pragma'] = 'no-cache'
-        return response
+        # Render HTML viewer — never serve the raw PDF directly for special copies
+        return render(request, 'catalog/softcopy_viewer.html', {
+            'copy': copy,
+            'tx': tx,
+        })
 
+    # Invalid access type
     messages.error(request, 'Unauthorized access.')
     return redirect('home')
+
+
+@login_required
+def special_pdf_data_view(request, copy_id):
+    """Serve raw PDF bytes for special softcopy — only called by the in-browser viewer.
+    Direct access still requires active borrow; the URL is not guessable without auth.
+    """
+    from circulation.models import BorrowingTransaction
+    from django.utils import timezone as tz
+    from django.http import HttpResponseForbidden
+    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='borrow')
+    tx = BorrowingTransaction.objects.filter(
+        user=request.user, copy=copy
+    ).order_by('-borrow_date').first()
+    if not tx or tx.status == 'returned':
+        return HttpResponseForbidden('Access denied.')
+    if tz.now() > tx.due_date:
+        return HttpResponseForbidden('Access expired.')
+    if not copy.file_path:
+        return HttpResponseForbidden('File not available.')
+    response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
+    response['Content-Disposition'] = 'inline; filename="document.pdf"'
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
+    return response
 
 
 @login_required
@@ -485,7 +615,9 @@ def free_softcopy_download_view(request, copy_id):
         messages.error(request, 'File not available for this copy.')
         return redirect('book_detail_public', book_id=copy.book_id)
     response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{copy.book.title}.pdf"'
+    response['Content-Disposition'] = build_content_disposition(
+        'attachment', f'{copy.book.title}.pdf'
+    )
     return response
 
 
@@ -532,12 +664,23 @@ def copy_list_view(request):
 def copy_edit_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id)
     if request.method == 'POST':
-        copy.accession_no = request.POST.get('accession_no', copy.accession_no)
+        # Softcopy accession numbers (SOFT/xxxxxx) are internal — never allow editing
+        if copy.copy_type == 'hardcopy':
+            copy.accession_no = request.POST.get('accession_no', copy.accession_no)
+            copy.barcode = request.POST.get('barcode', copy.barcode)
         copy.shelf_location = request.POST.get('shelf_location', copy.shelf_location)
-        copy.barcode = request.POST.get('barcode', copy.barcode)
+
+        # Validate status against the model's allowed choices — never trust
+        # arbitrary POST values. Refusing to corrupt copy.status is the
+        # safest behaviour; a librarian who needs a different status must
+        # use the proper inventory transition flow (mark lost, return, etc).
         new_status = request.POST.get('status')
-        if new_status:
+        allowed_statuses = {choice[0] for choice in BookCopy.STATUS_CHOICES}
+        if new_status and new_status in allowed_statuses:
             copy.status = new_status
+        elif new_status:
+            messages.error(request, f"Invalid status '{new_status}' — change ignored.")
+
         copy.save()
         InventoryLog.objects.create(copy=copy, action='updated', performed_by=request.user)
         log_audit(request.user, f"Updated copy '{copy.accession_no}'", request)
@@ -689,6 +832,40 @@ def category_create_view(request):
             return redirect('category_list')
     categories = Category.objects.all()
     return render(request, 'catalog/category_form.html', {'categories': categories})
+
+
+@login_required
+@librarian_required
+def category_edit_view(request, category_id):
+    category = get_object_or_404(Category, pk=category_id)
+    categories = Category.objects.exclude(pk=category_id)
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        parent_id = request.POST.get('parent') or None
+        if parent_id and int(parent_id) == category.pk:
+            messages.error(request, 'A category cannot be its own parent.')
+        elif name:
+            category.name = name
+            category.parent_id = parent_id
+            category.save()
+            log_audit(request.user, f"Updated category '{category.name}'", request)
+            messages.success(request, f"Category '{category.name}' updated.")
+            return redirect('category_list')
+        else:
+            messages.error(request, 'Category name is required.')
+    return render(request, 'catalog/category_form.html', {'category': category, 'categories': categories})
+
+
+@login_required
+@librarian_required
+@require_POST
+def category_delete_view(request, category_id):
+    category = get_object_or_404(Category, pk=category_id)
+    name = category.name
+    category.delete()
+    log_audit(request.user, f"Deleted category '{name}'", request)
+    messages.success(request, f"Category '{name}' deleted.")
+    return redirect('category_list')
 
 
 @login_required
@@ -917,6 +1094,8 @@ def media_slide_create_view(request):
         is_active = request.POST.get('is_active') == 'on'
         expires_at = request.POST.get('expires_at') or None
         image = request.FILES.get('image')
+        if image and not _check_upload(request, image, allowed_extensions=ALLOWED_IMAGE_EXTS, max_size=MAX_IMAGE_BYTES, label='Slide image'):
+            return render(request, 'catalog/media_slide_form.html')
 
         if title and image:
             slide = MediaSlide.objects.create(
@@ -956,7 +1135,10 @@ def media_slide_edit_view(request, slide_id):
         slide.expires_at = request.POST.get('expires_at') or None
 
         if request.FILES.get('image'):
-            slide.image = request.FILES.get('image')
+            f = request.FILES['image']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_IMAGE_EXTS, max_size=MAX_IMAGE_BYTES, label='Slide image'):
+                return render(request, 'catalog/media_slide_form.html', {'slide': slide})
+            slide.image = f
 
         slide.save()
         log_audit(request.user, f"Updated slide: '{slide.title}'", request)
@@ -1050,9 +1232,15 @@ def news_create_view(request):
             news.expires_at = parse_datetime(expires_at + ':00') if len(expires_at) == 16 else parse_datetime(expires_at)
 
         if 'image' in request.FILES:
-            news.image = request.FILES['image']
+            f = request.FILES['image']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_IMAGE_EXTS, max_size=MAX_IMAGE_BYTES, label='News image'):
+                return render(request, 'catalog/news_form.html', {'type_choices': News.TYPE_CHOICES})
+            news.image = f
         if 'attachment' in request.FILES:
-            news.attachment = request.FILES['attachment']
+            f = request.FILES['attachment']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_DOC_EXTS, max_size=MAX_DOC_BYTES, label='News attachment'):
+                return render(request, 'catalog/news_form.html', {'type_choices': News.TYPE_CHOICES})
+            news.attachment = f
 
         news.save()
         log_audit(request.user, f"Created news post: '{news.title}'", request)
@@ -1083,12 +1271,18 @@ def news_edit_view(request, news_id):
             news.expires_at = None
 
         if 'image' in request.FILES:
-            news.image = request.FILES['image']
+            f = request.FILES['image']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_IMAGE_EXTS, max_size=MAX_IMAGE_BYTES, label='News image'):
+                return render(request, 'catalog/news_form.html', {'news': news, 'type_choices': News.TYPE_CHOICES})
+            news.image = f
         elif request.POST.get('clear_image'):
             news.image = None
 
         if 'attachment' in request.FILES:
-            news.attachment = request.FILES['attachment']
+            f = request.FILES['attachment']
+            if not _check_upload(request, f, allowed_extensions=ALLOWED_DOC_EXTS, max_size=MAX_DOC_BYTES, label='News attachment'):
+                return render(request, 'catalog/news_form.html', {'news': news, 'type_choices': News.TYPE_CHOICES})
+            news.attachment = f
         elif request.POST.get('clear_attachment'):
             news.attachment = None
 
@@ -1127,3 +1321,33 @@ def news_toggle_view(request, news_id):
     log_audit(request.user, f"News post '{news.title}' {state}", request)
     messages.success(request, f"'{news.title}' {state}.")
     return redirect('news_list')
+
+
+@login_required
+@librarian_required
+def footer_edit_view(request):
+    """Edit footer configuration - creates or updates the active footer"""
+    footer = Footer.get_active_footer()
+    
+    if request.method == 'POST':
+        from .forms import FooterForm
+        form = FooterForm(request.POST, instance=footer)
+        if form.is_valid():
+            footer_config = form.save(commit=False)
+            footer_config.updated_by = request.user
+            
+            # If this is a new footer, deactivate any existing active footer
+            if not footer:
+                Footer.objects.filter(is_active=True).update(is_active=False)
+                footer_config.is_active = True
+            
+            footer_config.save()
+            log_audit(request.user, f"Updated footer configuration", request)
+            messages.success(request, 'Footer configuration updated successfully.')
+            return redirect('footer_edit')
+    else:
+        from .forms import FooterForm
+        form = FooterForm(instance=footer)
+    
+    return render(request, 'catalog/footer_form.html', {'form': form, 'footer': footer})
+

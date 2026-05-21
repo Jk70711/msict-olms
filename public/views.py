@@ -9,7 +9,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.http import JsonResponse
 
-from catalog.models import Book, BookCopy, ExternalLibrary, News, Category, Course, MediaSlide
+from catalog.models import Book, BookCopy, ExternalLibrary, News, Category, Course, MediaSlide, Footer
 
 
 # API ya utambuzi wa haraka wa vitabu (inaitwa kwa AJAX wakati unaandika kwenye kisanduku cha tafuta)
@@ -103,23 +103,48 @@ def home_view(request):
     # Pata picha ya nyuma (watermark) ya ukurasa wa nyumbani
     home_bg = MediaSlide.get_active_home_bg()
 
+    # Pata maelezo ya footer
+    footer = Footer.get_active_footer()
+    
+    # Parse additional_links if footer exists
+    additional_links_parsed = []
+    if footer and footer.additional_links:
+        for line in footer.additional_links.splitlines():
+            line = line.strip()
+            if '|' in line:
+                parts = line.split('|')
+                if len(parts) >= 2:
+                    additional_links_parsed.append({
+                        'label': parts[0].strip(),
+                        'url': parts[1].strip()
+                    })
+    if footer:
+        footer.additional_links_parsed = additional_links_parsed
+
     # Vitabu 10 vya hivi karibuni — vinaonekana kwenye carousel ya 3D
     latest_books = Book.objects.select_related('category').prefetch_related('copies').order_by('-created_at')[:10]
 
     # Jumla ya vitabu vyote kwenye maktaba (inaonyeshwa kwenye takwimu)
     total_books_count = Book.objects.count()
 
+    # Counts for stat cards
+    softcopy_count = BookCopy.objects.filter(copy_type='softcopy').count()
+    hardcopy_count = BookCopy.objects.filter(copy_type='hardcopy').count()
+
     return render(request, 'public/home.html', {
         'carousel_slides': carousel_slides,
         'carousel_books': carousel_books,
         'latest_books': latest_books,
         'total_books_count': total_books_count,
+        'softcopy_count': softcopy_count,
+        'hardcopy_count': hardcopy_count,
         'advertisements': advertisements,
         'news_banners': news_banners,
         'news_items': news_items,
         'logo': logo,
         'home_bg': home_bg,
         'carousel_bg_color': carousel_bg_color,
+        'footer': footer,
     })
 
 

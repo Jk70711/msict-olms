@@ -3,41 +3,80 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="fw-bold mb-0"><i class="bi bi-inbox"></i> Borrow Requests</h4>
+  <span class="text-muted small" id="rowCount"></span>
 </div>
-<div class="mb-3 d-flex flex-wrap gap-2">
+<div class="mb-2 d-flex flex-wrap gap-2 align-items-center">
   <a href="{% url 'all_requests' %}" class="btn btn-sm {% if not status_filter %}btn-dark{% else %}btn-outline-secondary{% endif %}">All</a>
   <a href="{% url 'all_requests' %}?status=pending" class="btn btn-sm {% if status_filter == 'pending' %}btn-warning text-dark{% else %}btn-outline-warning{% endif %}"><i class="bi bi-hourglass-split"></i> Pending</a>
   <a href="{% url 'all_requests' %}?status=approved" class="btn btn-sm {% if status_filter == 'approved' %}btn-success{% else %}btn-outline-success{% endif %}"><i class="bi bi-check-circle"></i> Approved</a>
   <a href="{% url 'all_requests' %}?status=rejected" class="btn btn-sm {% if status_filter == 'rejected' %}btn-danger{% else %}btn-outline-danger{% endif %}"><i class="bi bi-x-circle"></i> Rejected</a>
   <a href="{% url 'all_requests' %}?status=cancelled" class="btn btn-sm {% if status_filter == 'cancelled' %}btn-secondary{% else %}btn-outline-secondary{% endif %}"><i class="bi bi-slash-circle"></i> Cancelled</a>
+  <div class="input-group input-group-sm ms-auto" style="max-width:280px;">
+    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+    <input type="text" id="reqSearch" class="form-control border-start-0 ps-0"
+           placeholder="Search member, book, accession…"
+           autofocus autocomplete="off">
+    <button class="btn btn-outline-secondary" type="button" id="clearSearch" style="display:none" title="Clear">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
 </div>
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">
       <thead>
-        <tr><th>S/N</th><th>Member</th><th>Army No</th><th>Book</th><th>Copy Type</th><th>Requested</th><th>Status</th><th>Reason / Action</th></tr>
+        <tr><th>S/N</th><th>Member</th><th>Book</th><th>Type</th><th>Requested</th><th>Status</th><th>By</th><th>Action</th></tr>
       </thead>
-      <tbody>
+      <tbody id="reqsTable">
         {% for req in requests %}
-        <tr>
+<tr data-search="{{ req.user.get_full_name|lower }} {{ req.user.army_no|lower }} {% if req.copy %}{{ req.copy.book.title|lower }} {{ req.copy.display_id|lower }}{% elif req.temp_book %}{{ req.temp_book.title|lower }}{% endif %} {{ req.status }}">
           <td>{{ forloop.counter }}</td>
-          <td><small class="fw-semibold">{{ req.user.get_full_name }}</small></td>
-          <td><small class="text-muted">{{ req.user.army_no }}</small></td>
-          <td><small>{{ req.copy.book.title|truncatechars:40 }}<br><code class="text-muted">{{ req.copy.accession_no }}</code></small></td>
-          <td><span class="badge bg-secondary">{{ req.copy.copy_type }}</span></td>
+          <td>
+            <small class="fw-semibold">{{ req.user.get_full_name }}</small><br>
+            <small class="text-muted">{{ req.user.army_no }}</small>
+            {% if req.user.rank %}<small class="badge bg-dark ms-1">{{ req.user.rank.rank_name }}</small>{% endif %}
+          </td>
+          <td>
+            <small>
+              {% if req.copy %}
+                {{ req.copy.book.title|truncatechars:40 }}<br>
+                <code class="text-muted">{{ req.copy.display_id }}</code>
+              {% elif req.temp_book %}
+                {{ req.temp_book.title|truncatechars:40 }}<br>
+                <span class="badge bg-warning text-dark" style="font-size:.65rem">Copy not yet assigned</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </small>
+          </td>
+          <td>
+            {% if req.copy %}
+              <span class="badge bg-secondary">{{ req.copy.copy_type }}</span>
+            {% else %}
+              <span class="badge bg-primary">hardcopy</span>
+            {% endif %}
+          </td>
           <td><small class="text-muted">{{ req.request_date|date:"d M Y H:i" }}</small></td>
           <td>
             {% if req.status == 'pending' %}<span class="badge bg-warning text-dark">Pending</span>
-            {% elif req.status == 'approved' %}<span class="badge bg-success">Approved</span>
+            {% elif req.status == 'approved' %}
+              <span class="badge bg-success">Approved</span>
+              {% if not req.copy_id %}
+                <br><span class="badge bg-primary mt-1" style="font-size:.65rem"><i class="bi bi-box-arrow-in-right"></i> Awaiting Issue</span>
+              {% endif %}
             {% elif req.status == 'rejected' %}<span class="badge bg-danger">Rejected</span>
             {% else %}<span class="badge bg-secondary">{{ req.status|title }}</span>{% endif %}
           </td>
+          <td><small class="text-muted">{{ req.approved_by.get_full_name|default:"—" }}</small></td>
           <td>
             {% if req.status == 'pending' %}
-            <a href="{% url 'approve_borrow_request' req.pk %}" class="btn btn-sm btn-success py-0 px-2">
-              <i class="bi bi-check"></i>
-            </a>
-            <button class="btn btn-sm btn-danger py-0 px-2" data-bs-toggle="modal" data-bs-target="#reject_{{ req.pk }}">
+            <form method="post" action="{% url 'approve_borrow_request' req.pk %}" class="d-inline">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-success py-0 px-2" title="Approve">
+                <i class="bi bi-check"></i> Approve
+              </button>
+            </form>
+            <button class="btn btn-sm btn-danger py-0 px-2 ms-1" data-bs-toggle="modal" data-bs-target="#reject_{{ req.pk }}" title="Reject">
               <i class="bi bi-x"></i>
             </button>
             <div class="modal fade" id="reject_{{ req.pk }}" tabindex="-1">
@@ -51,8 +90,14 @@
                 </div>
               </div>
             </div>
+            {% elif req.status == 'approved' and not req.copy_id %}
+            <a href="{% url 'issue_copy' req.pk %}" class="btn btn-sm btn-primary py-0 px-2">
+              <i class="bi bi-box-arrow-in-right me-1"></i> Issue Copy
+            </a>
             {% elif req.status == 'rejected' %}
             <small class="text-muted">{{ req.rejection_reason|truncatechars:30 }}</small>
+            {% elif req.status == 'approved' and req.copy_id %}
+            <small class="text-success"><i class="bi bi-check2-all"></i> Issued</small>
             {% endif %}
           </td>
         </tr>
@@ -63,4 +108,38 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const input    = document.getElementById('reqSearch');
+  const clearBtn = document.getElementById('clearSearch');
+  const counter  = document.getElementById('rowCount');
+  const tbody    = document.getElementById('reqsTable');
+  const rows     = tbody ? Array.from(tbody.querySelectorAll('tr[data-search]')) : [];
+
+  function updateCount(visible) {
+    counter.textContent = visible === rows.length
+      ? rows.length + ' request' + (rows.length !== 1 ? 's' : '')
+      : visible + ' of ' + rows.length + ' shown';
+  }
+
+  function filter() {
+    const q = input.value.trim().toLowerCase();
+    clearBtn.style.display = q ? '' : 'none';
+    let visible = 0;
+    rows.forEach(function(row) {
+      const match = !q || row.dataset.search.includes(q);
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    updateCount(visible);
+  }
+
+  input.addEventListener('input', filter);
+  clearBtn.addEventListener('click', function() { input.value = ''; input.focus(); filter(); });
+  filter();
+})();
+</script>
 {% endblock %}

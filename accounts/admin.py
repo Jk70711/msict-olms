@@ -33,9 +33,9 @@ admin.site.each_context = each_context_with_olms
 
 @admin.register(OLMSUser)
 class OLMSUserAdmin(UserAdmin):
-    list_display = ('username', 'get_full_name', 'army_no', 'role', 'member_type', 'is_active', 'failed_attempts', 'created_at')
-    list_filter = ('role', 'member_type', 'is_active')
-    search_fields = ('username', 'army_no', 'first_name', 'surname', 'email', 'phone')
+    list_display = ('username', 'get_full_name', 'army_no', 'rank', 'role', 'member_type', 'is_active', 'failed_attempts', 'created_at')
+    list_filter = ('role', 'member_type', 'is_active', 'rank')
+    search_fields = ('username', 'army_no', 'first_name', 'surname', 'email', 'phone', 'rank__rank_name')
     ordering = ('-created_at',)
     list_per_page = 25
     date_hierarchy = 'created_at'
@@ -44,7 +44,7 @@ class OLMSUserAdmin(UserAdmin):
 
     fieldsets = (
         ('Login Info', {'fields': ('username', 'password')}),
-        ('Personal', {'fields': ('first_name', 'middle_name', 'surname', 'army_no', 'registration_no', 'photo')}),
+        ('Personal', {'fields': ('first_name', 'middle_name', 'surname', 'army_no', 'rank', 'registration_no', 'photo')}),
         ('Contact', {'fields': ('email', 'phone')}),
         ('Role', {'fields': ('role', 'member_type')}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
@@ -53,7 +53,7 @@ class OLMSUserAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'army_no', 'first_name', 'surname', 'email', 'phone', 'role', 'password1', 'password2'),
+            'fields': ('username', 'army_no', 'rank', 'first_name', 'surname', 'email', 'phone', 'role', 'password1', 'password2'),
         }),
     )
 

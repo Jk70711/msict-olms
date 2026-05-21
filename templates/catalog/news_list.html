@@ -4,42 +4,104 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="fw-bold mb-0"><i class="bi bi-newspaper"></i> News & Announcements</h4>
+  {% if user.is_authenticated and user.role in 'librarian,admin' %}
   <a href="{% url 'news_create' %}" class="btn btn-msict">
     <i class="bi bi-plus-circle"></i> New Post
   </a>
+  {% endif %}
 </div>
 
 <!-- Summary Stats -->
 <div class="row g-2 mb-3">
   <div class="col-6 col-md-3">
-    <div class="card stat-card text-center p-2">
-      <div class="fw-bold fs-4 text-primary">{{ counts.active }}</div>
-      <div class="small text-muted">Active Posts</div>
+    <div class="card stat-card text-center p-2 border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if counts.all > 0 %}
+          {% widthratio counts.active counts.all 100 as active_pct %}
+        {% else %}
+          {% with active_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+          <div class="rounded-circle position-absolute" style="width: 60px; height: 60px; background: conic-gradient(#0d6efd 0% {{ active_pct|default:0 }}%, rgba(13, 110, 253, 0.1) {{ active_pct|default:0 }}% 100%); box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 48px; height: 48px; background: white; box-shadow: inset 0 2px 6px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-5 fw-bold" style="color: #0d6efd;">{{ counts.active }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-1">
+          <div class="small fw-semibold">Active Posts</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card text-center p-2">
-      <div class="fw-bold fs-4 text-warning">{{ counts.featured }}</div>
-      <div class="small text-muted">Featured</div>
+    <div class="card stat-card text-center p-2 border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if counts.all > 0 %}
+          {% widthratio counts.featured counts.all 100 as featured_pct %}
+        {% else %}
+          {% with featured_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+          <div class="rounded-circle position-absolute" style="width: 60px; height: 60px; background: conic-gradient(#ffc107 0% {{ featured_pct|default:0 }}%, rgba(255, 193, 7, 0.1) {{ featured_pct|default:0 }}% 100%); box-shadow: 0 4px 12px rgba(255, 193, 7, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 48px; height: 48px; background: white; box-shadow: inset 0 2px 6px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-5 fw-bold" style="color: #ffc107;">{{ counts.featured }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-1">
+          <div class="small fw-semibold">Featured</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card text-center p-2">
-      <div class="fw-bold fs-4 text-info">{{ counts.announcement }}</div>
-      <div class="small text-muted">Announcements</div>
+    <div class="card stat-card text-center p-2 border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if counts.all > 0 %}
+          {% widthratio counts.announcement counts.all 100 as announcement_pct %}
+        {% else %}
+          {% with announcement_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+          <div class="rounded-circle position-absolute" style="width: 60px; height: 60px; background: conic-gradient(#0dcaf0 0% {{ announcement_pct|default:0 }}%, rgba(13, 202, 240, 0.1) {{ announcement_pct|default:0 }}% 100%); box-shadow: 0 4px 12px rgba(13, 202, 240, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 48px; height: 48px; background: white; box-shadow: inset 0 2px 6px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-5 fw-bold" style="color: #0dcaf0;">{{ counts.announcement }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-1">
+          <div class="small fw-semibold">Announcements</div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-6 col-md-3">
-    <div class="card stat-card text-center p-2">
-      <div class="fw-bold fs-4 text-success">{{ counts.event }}</div>
-      <div class="small text-muted">Events</div>
+    <div class="card stat-card text-center p-2 border-0 shadow-sm">
+      <div class="d-flex flex-column align-items-center">
+        {% if counts.all > 0 %}
+          {% widthratio counts.event counts.all 100 as event_pct %}
+        {% else %}
+          {% with event_pct=0 %}{% endwith %}
+        {% endif %}
+        <div class="position-relative d-flex align-items-center justify-content-center" style="width: 60px; height: 60px;">
+          <div class="rounded-circle position-absolute" style="width: 60px; height: 60px; background: conic-gradient(#198754 0% {{ event_pct|default:0 }}%, rgba(25, 135, 84, 0.1) {{ event_pct|default:0 }}% 100%); box-shadow: 0 4px 12px rgba(25, 135, 84, 0.3);"></div>
+          <div class="rounded-circle position-absolute" style="width: 48px; height: 48px; background: white; box-shadow: inset 0 2px 6px rgba(0,0,0,0.1);"></div>
+          <div class="text-center position-relative z-1">
+            <div class="fs-5 fw-bold" style="color: #198754;">{{ counts.event }}</div>
+          </div>
+        </div>
+        <div class="text-center mt-1">
+          <div class="small fw-semibold">Events</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <!-- Filters -->
 <div class="card p-3 mb-3">
-  <form method="get" class="row g-2 align-items-end">
+  <form method="get" class="row g-2 align-items-end" data-no-auto-submit data-live-search data-search-target="#liveResults">
     <div class="col-md-3">
       <label class="form-label small fw-semibold mb-1">Type</label>
       <select name="type" class="form-select form-select-sm">
@@ -68,6 +130,7 @@
 </div>
 
 <!-- News Cards Grid -->
+<div id="liveResults">
 {% if news %}
 <div class="row g-3">
   {% for item in news %}
@@ -171,6 +234,7 @@
         {% endif %}
 
         <!-- Actions -->
+        {% if user.is_authenticated and user.role in 'librarian,admin' %}
         <div class="d-flex gap-1 mt-auto">
           <a href="{% url 'news_edit' item.pk %}" class="btn btn-sm btn-outline-primary flex-fill">
             <i class="bi bi-pencil"></i> Edit
@@ -185,6 +249,7 @@
             <i class="bi bi-trash"></i>
           </a>
         </div>
+        {% endif %}        </div>
       </div>
 
     </div>
@@ -198,5 +263,6 @@
   <div><a href="{% url 'news_create' %}" class="btn btn-msict"><i class="bi bi-plus-circle"></i> Create First Post</a></div>
 </div>
 {% endif %}
+</div>
 
 {% endblock %}

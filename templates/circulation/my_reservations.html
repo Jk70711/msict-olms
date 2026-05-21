@@ -120,21 +120,23 @@
              onclick="return confirm('Submit a borrow request for {{ res.book.title }}? You will wait for librarian approval.')">
             <i class="bi bi-bag-plus-fill"></i> Request Borrow
           </a>
-          <a href="{% url 'cancel_reservation' res.pk %}"
-             class="btn btn-outline-danger btn-sm"
-             onclick="return confirm('Cancel your reservation for {{ res.book.title }}?')">
-            <i class="bi bi-x-circle"></i> Cancel
-          </a>
+          <form method="post" action="{% url 'cancel_reservation' res.pk %}" class="d-inline" onsubmit="return confirm('Cancel your reservation for {{ res.book.title }}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+              <i class="bi bi-x-circle"></i> Cancel
+            </button>
+          </form>
         </div>
       </div>
       {% else %}
       <!-- PENDING: Show queue info + cancel -->
       <div class="d-flex justify-content-end gap-2 mt-3">
-        <a href="{% url 'cancel_reservation' res.pk %}"
-           class="btn btn-outline-danger btn-sm"
-           onclick="return confirm('Cancel your reservation for {{ res.book.title }}?')">
-          <i class="bi bi-x-circle"></i> Cancel Reservation
-        </a>
+        <form method="post" action="{% url 'cancel_reservation' res.pk %}" class="d-inline" onsubmit="return confirm('Cancel your reservation for {{ res.book.title }}?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm">
+            <i class="bi bi-x-circle"></i> Cancel Reservation
+          </button>
+        </form>
       </div>
       {% endif %}
     </div>

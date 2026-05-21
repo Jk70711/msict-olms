@@ -1,0 +1,528 @@
+{% extends 'base.html' %}
+{% block title %}Custom Report Builder{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a href="{% url 'reports_home' %}" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+  <h4 class="fw-bold mb-0"><i class="bi bi-sliders text-primary me-1"></i> Custom Report Builder</h4>
+  {% if request.user.role == 'admin' %}
+  <span class="badge bg-warning text-dark ms-2"><i class="bi bi-shield-lock-fill me-1"></i>Admin — full table access</span>
+  {% else %}
+  <span class="badge bg-info text-dark ms-2"><i class="bi bi-person-badge me-1"></i>Librarian access</span>
+  {% endif %}
+</div>
+
+{% if form_errors %}
+<div class="alert alert-danger py-2">
+  {% for e in form_errors %}<div><i class="bi bi-exclamation-triangle me-1"></i>{{ e }}</div>{% endfor %}
+</div>
+{% endif %}
+
+{% if messages %}
+{% for m in messages %}
+<div class="alert alert-{{ m.tags|default:'info' }} py-2 alert-dismissible fade show">
+  {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="row g-3">
+  <!-- ── Builder Panel ── -->
+  <div class="col-lg-8">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-primary text-white py-2">
+        <i class="bi bi-tools me-1"></i> Build Your Report
+      </div>
+      <div class="card-body">
+
+        <form method="post" action="{% url 'custom_report_preview' %}" id="reportForm">
+          {% csrf_token %}
+
+          <!-- ── 1. Table ── -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">1. Select Table</label>
+            <select class="form-select" name="table" id="tableSelect" required>
+              <option value="">— Choose a table —</option>
+              {% for tkey, tcfg in report_tables.items %}
+              <option value="{{ tkey }}" {% if tkey == table_key %}selected{% endif %}>
+                {{ tcfg.label }}
+                {% if tcfg.admin_only %} 🔒{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- ── 2. Columns ── -->
+          <div class="mb-3" id="columnsSection" {% if not table_key %}style="display:none"{% endif %}>
+            <label class="form-label fw-semibold">2. Columns to Display</label>
+            <div class="d-flex gap-2 mb-1">
+              <button type="button" class="btn btn-xs btn-outline-secondary" onclick="selectAllCols(true)">All</button>
+              <button type="button" class="btn btn-xs btn-outline-secondary" onclick="selectAllCols(false)">None</button>
+            </div>
+            <div id="columnCheckboxes" class="border rounded p-2 bg-light d-flex flex-wrap gap-2">
+              {% if available_columns %}
+                {% for col_key, col_label in available_columns.items %}
+                <div class="form-check me-2">
+                  <input class="form-check-input col-check" type="checkbox" name="columns" value="{{ col_key }}"
+                    id="col_{{ col_key }}" {% if col_key in selected_columns %}checked{% endif %}>
+                  <label class="form-check-label small" for="col_{{ col_key }}">{{ col_label }}</label>
+                </div>
+                {% endfor %}
+              {% else %}
+                <span class="text-muted small" id="colPlaceholder">Select a table first.</span>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- ── 3. Filters ── -->
+          <div class="mb-3" id="filtersSection" {% if not table_key %}style="display:none"{% endif %}>
+            <label class="form-label fw-semibold">3. Filter Conditions <span class="text-muted fw-normal small">(optional, up to 3)</span></label>
+            {% for i in "123" %}
+            {% with idx=forloop.counter %}
+            <div class="row g-2 mb-2 filter-row" id="filterRow{{ idx }}">
+              <div class="col-5">
+                <select class="form-select form-select-sm filter-key-select" name="filter_key_{{ idx }}" id="filterKey{{ idx }}"
+                        onchange="onFilterKeyChange({{ idx }})">
+                  <option value="">— No filter —</option>
+                  {% if filter_fields %}
+                    {% for fk, fmeta in filter_fields.items %}
+                    <option value="{{ fk }}">{{ fmeta.label }}</option>
+                    {% endfor %}
+                  {% endif %}
+                </select>
+              </div>
+              <div class="col-2 text-center d-flex align-items-center justify-content-center">
+                <span class="badge bg-secondary">=</span>
+              </div>
+              <div class="col-5" id="filterValContainer{{ idx }}">
+                <input type="text" class="form-control form-control-sm" name="filter_val_{{ idx }}"
+                       id="filterVal{{ idx }}" placeholder="Value" value="">
+              </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+          </div>
+
+          <!-- ── 4. Date Range ── -->
+          <div class="mb-3" id="dateSection">
+            <label class="form-label fw-semibold">4. Date Range</label>
+            <div class="row g-2">
+              <div class="col-md-6">
+                <select class="form-select" name="preset" id="presetSelect" onchange="toggleCustomDuration()">
+                  {% for pkey, plabel in time_presets %}
+                  <option value="{{ pkey }}" {% if pkey == preset %}selected{% endif %}>{{ plabel }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="col-md-6" id="customDurationBox" style="display:none">
+                <div class="input-group">
+                  <input type="text" class="form-control" name="custom_duration" id="customDuration"
+                         placeholder='e.g. "2 days" or "8 months"'
+                         value="{{ custom_duration }}">
+                  <span class="input-group-text"><i class="bi bi-calendar-range"></i></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Action buttons ── -->
+          <div class="d-flex flex-wrap gap-2 align-items-center">
+            <button type="submit" class="btn btn-primary">
+              <i class="bi bi-eye me-1"></i> Preview (first {{ preview.page_obj.paginator.per_page|default:50 }} rows)
+            </button>
+            {% if table_key %}
+            <a href="{% url 'custom_report_export' %}?{{ request.GET.urlencode }}&table={{ table_key }}&format=csv&preset={{ preset }}&custom_duration={{ custom_duration }}{% for c in selected_columns %}&columns={{ c }}{% endfor %}{% for i,f in current_filters.items %}&filter_key_{{ i }}={{ f.key }}&filter_val_{{ i }}={{ f.val }}{% endfor %}"
+               class="btn btn-outline-success"
+               onclick="return confirmExport(this,'csv')">
+              <i class="bi bi-filetype-csv me-1"></i> CSV
+            </a>
+            <a href="{% url 'custom_report_export' %}?table={{ table_key }}&format=xlsx&preset={{ preset }}&custom_duration={{ custom_duration }}{% for c in selected_columns %}&columns={{ c }}{% endfor %}{% for i,f in current_filters.items %}&filter_key_{{ i }}={{ f.key }}&filter_val_{{ i }}={{ f.val }}{% endfor %}"
+               class="btn btn-outline-success"
+               onclick="return confirmExport(this,'xlsx')">
+              <i class="bi bi-file-earmark-excel me-1"></i> Excel
+            </a>
+            <a href="{% url 'custom_report_export' %}?table={{ table_key }}&format=pdf&preset={{ preset }}&custom_duration={{ custom_duration }}{% for c in selected_columns %}&columns={{ c }}{% endfor %}{% for i,f in current_filters.items %}&filter_key_{{ i }}={{ f.key }}&filter_val_{{ i }}={{ f.val }}{% endfor %}"
+               class="btn btn-outline-danger">
+              <i class="bi bi-filetype-pdf me-1"></i> PDF
+            </a>
+            <button type="button" class="btn btn-outline-warning ms-auto" data-bs-toggle="modal" data-bs-target="#saveTemplateModal">
+              <i class="bi bi-bookmark-plus me-1"></i> Save Template
+            </button>
+            {% endif %}
+          </div>
+        </form>
+
+      </div>
+    </div>
+
+    <!-- ── Preview Results ── -->
+    {% if preview and not preview.error %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">
+          <i class="bi bi-table me-1 text-primary"></i>
+          {{ preview.table_label }} &mdash; {{ preview.range_label }}
+          <span class="badge bg-secondary ms-1">{{ preview.total }} row{{ preview.total|pluralize }}</span>
+        </span>
+        {% if preview.page_obj %}
+        <small class="text-muted">Page {{ preview.page_obj.number }} of {{ preview.page_obj.paginator.num_pages }}</small>
+        {% endif %}
+      </div>
+      <div class="card-body p-0">
+        {% if preview.rows %}
+        <div class="table-responsive">
+          <table class="table table-sm table-hover table-striped mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                {% for h in preview.headers %}<th>{{ h }}</th>{% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in preview.rows %}
+              <tr>
+                <td class="text-muted small">
+                  {% if preview.page_obj %}
+                  {{ preview.page_obj.start_index|add:forloop.counter0 }}
+                  {% else %}
+                  {{ forloop.counter }}
+                  {% endif %}
+                </td>
+                {% for cell in row %}
+                <td class="small">{{ cell }}</td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="p-3 text-muted text-center"><i class="bi bi-inbox me-1"></i> No records match the selected criteria.</div>
+        {% endif %}
+      </div>
+      {% if preview.page_obj and preview.page_obj.paginator.num_pages > 1 %}
+      <div class="card-footer py-2">
+        <nav>
+          <ul class="pagination pagination-sm mb-0 justify-content-center">
+            {% if preview.page_obj.has_previous %}
+            <li class="page-item">
+              <button class="page-link" onclick="goToPage({{ preview.page_obj.previous_page_number }})">‹ Prev</button>
+            </li>
+            {% endif %}
+            <li class="page-item disabled"><span class="page-link">{{ preview.page_obj.number }} / {{ preview.page_obj.paginator.num_pages }}</span></li>
+            {% if preview.page_obj.has_next %}
+            <li class="page-item">
+              <button class="page-link" onclick="goToPage({{ preview.page_obj.next_page_number }})">Next ›</button>
+            </li>
+            {% endif %}
+          </ul>
+        </nav>
+      </div>
+      {% endif %}
+    </div>
+    {% elif preview and preview.error %}
+    <div class="alert alert-danger mt-3"><i class="bi bi-exclamation-triangle me-1"></i> {{ preview.error }}</div>
+    {% endif %}
+  </div>
+
+  <!-- ── Saved Templates Panel ── -->
+  <div class="col-lg-4">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-light py-2">
+        <i class="bi bi-bookmark-star text-warning me-1"></i>
+        <span class="fw-semibold">Saved Templates</span>
+        <span class="badge bg-secondary ms-1">{{ saved_templates|length }}</span>
+      </div>
+      <div class="card-body p-0">
+        {% if saved_templates %}
+        <ul class="list-group list-group-flush">
+          {% for tmpl in saved_templates %}
+          <li class="list-group-item px-3 py-2">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <div class="fw-semibold small">{{ tmpl.name }}</div>
+                <div class="text-muted" style="font-size:.75rem">
+                  Table: <b>{{ tmpl.table_key }}</b> &bull; {{ tmpl.preset }}
+                  &bull; {{ tmpl.created_at|date:"d M Y" }}
+                </div>
+              </div>
+              <div class="d-flex gap-1">
+                <button type="button" class="btn btn-xs btn-outline-primary"
+                        onclick="loadTemplate('{{ tmpl.table_key }}','{{ tmpl.columns_json|escapejs }}','{{ tmpl.preset }}','{{ tmpl.custom_duration|escapejs }}','{{ tmpl.filters_json|escapejs }}')"
+                        title="Load template">
+                  <i class="bi bi-play-fill"></i>
+                </button>
+                <form method="post" action="{% url 'delete_report_template' tmpl.pk %}" class="d-inline"
+                      onsubmit="return confirm('Delete template \'{{ tmpl.name }}\'?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-xs btn-outline-danger" title="Delete">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="p-3 text-center text-muted small">
+          <i class="bi bi-bookmark fs-3 d-block mb-1 opacity-25"></i>
+          No saved templates yet.<br>Build a report and click <strong>Save Template</strong>.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Table info card -->
+    {% if table_cfg %}
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-light py-2">
+        <i class="bi bi-info-circle text-info me-1"></i>
+        <span class="fw-semibold small">Table Info: {{ table_cfg.label }}</span>
+      </div>
+      <div class="card-body p-2">
+        <table class="table table-sm table-borderless mb-0 small">
+          <tr><td class="text-muted">Date field</td><td>{{ table_cfg.date_field|default:"—" }}</td></tr>
+          <tr><td class="text-muted">Filterable</td>
+            <td>
+              {% if filter_fields %}
+                {% for fk, fm in filter_fields.items %}<span class="badge bg-light text-dark border me-1">{{ fm.label }}</span>{% endfor %}
+              {% else %}—{% endif %}
+            </td>
+          </tr>
+          <tr><td class="text-muted">Access</td>
+            <td>
+              {% if table_cfg.admin_only %}<span class="badge bg-warning text-dark">Admin only</span>
+              {% else %}<span class="badge bg-success">Librarian + Admin</span>{% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── Save Template Modal ── -->
+<div class="modal fade" id="saveTemplateModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <form method="post" action="{% url 'save_report_template' %}">
+        {% csrf_token %}
+        <!-- hidden fields replicated from main form -->
+        <div class="modal-header">
+          <h6 class="modal-title"><i class="bi bi-bookmark-plus me-1"></i> Save Report Template</h6>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label small fw-semibold">Template Name</label>
+          <input type="text" class="form-control form-control-sm" name="template_name"
+                 placeholder="e.g. Monthly Overdue Report" required maxlength="200">
+          <div id="saveHiddenFields" class="mt-2">
+            <!-- injected by JS before modal opens -->
+          </div>
+        </div>
+        <div class="modal-footer py-2">
+          <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ── hidden page input (pagination) ── -->
+<input type="hidden" id="pageField" value="1">
+
+<!-- ── JS data from backend ── -->
+<script>
+const ALL_COLUMNS   = {{ all_columns_js|safe }};
+const ALL_FILTERS   = {{ all_filter_fields_js|safe }};
+const currentTable  = "{{ table_key|escapejs }}";
+const currentCols   = {{ selected_columns|default:"[]"|safe }};
+const currentPreset = "{{ preset|escapejs }}";
+
+/* ── Restore current filter values after page reload ── */
+const CURRENT_FILTERS = {
+  {% for i, f in current_filters.items %}
+  {{ i }}: { key: "{{ f.key|escapejs }}", val: "{{ f.val|escapejs }}" },
+  {% endfor %}
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+  toggleCustomDuration();
+  if (currentTable) {
+    renderColumns(currentTable, currentCols);
+    renderFilters(currentTable);
+    /* restore saved filter values */
+    [1,2,3].forEach(function(i) {
+      if (CURRENT_FILTERS[i]) {
+        const sel = document.getElementById('filterKey' + i);
+        if (sel) sel.value = CURRENT_FILTERS[i].key;
+        onFilterKeyChange(i, CURRENT_FILTERS[i].val);
+      }
+    });
+    document.getElementById('columnsSection').style.display = '';
+    document.getElementById('filtersSection').style.display = '';
+  }
+});
+
+document.getElementById('tableSelect').addEventListener('change', function () {
+  const tbl = this.value;
+  if (!tbl) {
+    document.getElementById('columnsSection').style.display = 'none';
+    document.getElementById('filtersSection').style.display = 'none';
+    return;
+  }
+  renderColumns(tbl, ALL_COLUMNS[tbl] ? ALL_COLUMNS[tbl].map(c => c[0]) : []);
+  renderFilters(tbl);
+  document.getElementById('columnsSection').style.display = '';
+  document.getElementById('filtersSection').style.display = '';
+});
+
+function renderColumns(tbl, selected) {
+  const box = document.getElementById('columnCheckboxes');
+  const cols = ALL_COLUMNS[tbl] || [];
+  if (!cols.length) { box.innerHTML = '<span class="text-muted small">No columns available.</span>'; return; }
+  box.innerHTML = cols.map(function([key, label]) {
+    const chk = selected.includes(key) ? 'checked' : '';
+    return `<div class="form-check me-2">
+      <input class="form-check-input col-check" type="checkbox" name="columns" value="${key}" id="col_${key}" ${chk}>
+      <label class="form-check-label small" for="col_${key}">${label}</label>
+    </div>`;
+  }).join('');
+}
+
+function renderFilters(tbl) {
+  const fields = ALL_FILTERS[tbl] || {};
+  [1,2,3].forEach(function(i) {
+    const sel = document.getElementById('filterKey' + i);
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">— No filter —</option>';
+    Object.entries(fields).forEach(function([fk, fm]) {
+      const opt = document.createElement('option');
+      opt.value = fk; opt.textContent = fm.label;
+      if (fk === prev) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    onFilterKeyChange(i);
+  });
+}
+
+function onFilterKeyChange(idx, presetVal) {
+  const tbl   = document.getElementById('tableSelect').value;
+  const key   = document.getElementById('filterKey' + idx).value;
+  const cont  = document.getElementById('filterValContainer' + idx);
+  const fields = ALL_FILTERS[tbl] || {};
+  const fm    = fields[key];
+  if (!key || !fm) {
+    cont.innerHTML = `<input type="text" class="form-control form-control-sm" name="filter_val_${idx}" placeholder="Value" value="">`;
+    return;
+  }
+  const val = presetVal || '';
+  if (fm.type === 'bool') {
+    cont.innerHTML = `<select class="form-select form-select-sm" name="filter_val_${idx}">
+      <option value="">— Any —</option>
+      <option value="true" ${val==='true'?'selected':''}>Yes</option>
+      <option value="false" ${val==='false'?'selected':''}>No</option>
+    </select>`;
+  } else if (fm.choices && fm.choices.length) {
+    const opts = fm.choices.map(function([v,l]) {
+      return `<option value="${v}" ${val===v?'selected':''}>${l}</option>`;
+    }).join('');
+    cont.innerHTML = `<select class="form-select form-select-sm" name="filter_val_${idx}">
+      <option value="">— Any —</option>${opts}</select>`;
+  } else {
+    cont.innerHTML = `<input type="text" class="form-control form-control-sm" name="filter_val_${idx}" placeholder="Value" value="${val}">`;
+  }
+}
+
+function toggleCustomDuration() {
+  const v = document.getElementById('presetSelect').value;
+  document.getElementById('customDurationBox').style.display = (v === 'custom') ? '' : 'none';
+}
+
+function selectAllCols(check) {
+  document.querySelectorAll('.col-check').forEach(function(cb) { cb.checked = check; });
+}
+
+function goToPage(p) {
+  const form = document.getElementById('reportForm');
+  let pg = document.getElementById('pageField');
+  if (!pg) { pg = document.createElement('input'); pg.type='hidden'; pg.name='page'; pg.id='pageField'; form.appendChild(pg); }
+  pg.value = p;
+  form.submit();
+}
+
+function confirmExport(el, fmt) {
+  const tbl = document.getElementById('tableSelect').value;
+  if (!tbl) { alert('Please select a table first.'); return false; }
+  /* Build export URL dynamically from current form state */
+  const form = document.getElementById('reportForm');
+  const fd   = new FormData(form);
+  const params = new URLSearchParams();
+  params.set('table',   fd.get('table') || '');
+  params.set('format',  fmt);
+  params.set('preset',  fd.get('preset') || '7d');
+  params.set('custom_duration', fd.get('custom_duration') || '');
+  fd.getAll('columns').forEach(function(c) { params.append('columns', c); });
+  [1,2,3].forEach(function(i) {
+    const k = fd.get('filter_key_'+i); const v = fd.get('filter_val_'+i);
+    if (k && v) { params.set('filter_key_'+i, k); params.set('filter_val_'+i, v); }
+  });
+  el.href = "{% url 'custom_report_export' %}?" + params.toString();
+  return true;
+}
+
+/* Inject hidden fields into save-template modal before it opens */
+document.getElementById('saveTemplateModal').addEventListener('show.bs.modal', function () {
+  const form = document.getElementById('reportForm');
+  const fd   = new FormData(form);
+  const cont = document.getElementById('saveHiddenFields');
+  cont.innerHTML = '';
+  function addHidden(name, val) {
+    const i = document.createElement('input'); i.type='hidden'; i.name=name; i.value=val;
+    cont.appendChild(i);
+  }
+  addHidden('table',           fd.get('table') || '');
+  addHidden('preset',          fd.get('preset') || '7d');
+  addHidden('custom_duration', fd.get('custom_duration') || '');
+  fd.getAll('columns').forEach(function(c) { addHidden('columns', c); });
+  [1,2,3].forEach(function(i) {
+    addHidden('filter_key_'+i, fd.get('filter_key_'+i) || '');
+    addHidden('filter_val_'+i, fd.get('filter_val_'+i) || '');
+  });
+});
+
+/* Load a saved template into the form */
+function loadTemplate(tblKey, colsJson, preset, customDur, filtersJson) {
+  const sel = document.getElementById('tableSelect');
+  sel.value = tblKey;
+  sel.dispatchEvent(new Event('change'));
+
+  const cols    = JSON.parse(colsJson  || '[]');
+  const filters = JSON.parse(filtersJson || '[]');
+
+  /* tick columns after renderColumns runs (next tick) */
+  setTimeout(function () {
+    document.querySelectorAll('.col-check').forEach(function(cb) {
+      cb.checked = cols.includes(cb.value);
+    });
+    document.getElementById('presetSelect').value = preset || '7d';
+    document.getElementById('customDuration').value = customDur || '';
+    toggleCustomDuration();
+
+    filters.forEach(function([fk, fv], idx) {
+      const i = idx + 1;
+      if (i > 3) return;
+      const keySel = document.getElementById('filterKey' + i);
+      if (keySel) { keySel.value = fk; onFilterKeyChange(i, fv); }
+    });
+  }, 50);
+}
+</script>
+
+<style>
+.btn-xs { padding: .15rem .4rem; font-size: .75rem; }
+</style>
+{% endblock %}

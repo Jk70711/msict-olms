@@ -38,10 +38,12 @@
             </a>
             {% endif %}
             {% if not user_active_softcopy_tx.is_overdue %}
-            <a href="{% url 'return_early' user_active_softcopy_tx.pk %}"
-               class="btn btn-outline-secondary btn-sm">
-              <i class="bi bi-arrow-return-left"></i> Return Soft Copy
-            </a>
+            <form method="post" action="{% url 'return_early' user_active_softcopy_tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-return-left"></i> Return Soft Copy
+              </button>
+            </form>
             {% else %}
             {# Overdue - block return until fines paid #}
             <button class="btn btn-outline-danger btn-sm" disabled title="Pay fines before returning">
@@ -80,13 +82,9 @@
         {# ── Hardcopy borrow / reserve ──────────────── #}
         {% if book.available_hardcopy_count > 0 %}
           {% if user_can_borrow %}
-            {% for copy in hardcopies %}
-              {% if copy.status == 'available' %}
-                <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-msict">
-                  <i class="bi bi-plus-circle"></i> Request Hardcopy
-                </a>
-              {% endif %}
-            {% endfor %}
+            <a href="{% url 'request_borrow_book' book.pk %}" class="btn btn-msict">
+              <i class="bi bi-plus-circle"></i> Request Hardcopy
+            </a>
           {% endif %}
         {% elif book.total_hardcopies > 0 %}
           <a href="{% url 'reserve_book' book.pk %}" class="btn btn-outline-warning">
@@ -109,11 +107,17 @@
       {% if book.isbn %}<span class="badge bg-light text-dark border">ISBN: {{ book.isbn }}</span>{% endif %}
       {% if book.year %}<span class="badge bg-light text-dark border">{{ book.year }}</span>{% endif %}
       {% if book.publisher %}<span class="badge bg-light text-dark border"><i class="bi bi-building"></i> {{ book.publisher }}</span>{% endif %}
+      {% if book.book_type == 'both' %}<span class="badge bg-info text-dark border"><i class="bi bi-layers"></i> Both Formats</span>
+      {% elif book.book_type == 'softcopy' %}<span class="badge bg-success border"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
+      {% else %}<span class="badge bg-primary border"><i class="bi bi-book"></i> Hardcopy</span>{% endif %}
     </div>
     {% if book.summary %}
     <div class="mb-3">
       <h6 class="fw-bold">Summary</h6>
-      <p>{{ book.summary }}</p>
+      <p class="rounded p-3 mb-0"
+         style="background:#fff !important; color:#000 !important; text-align:justify; line-height:1.6;">
+        {{ book.summary }}
+      </p>
     </div>
     {% endif %}
     {% if book.courses.all %}
@@ -148,16 +152,24 @@
           <div class="small text-muted">Reservations</div>
         </div>
       </div>
+      <div class="col-6 col-md-3">
+        <div class="card p-2 text-center border-danger">
+          <div class="fs-5 fw-bold text-danger">
+            {% if book.lost_fine %}TZS {{ book.lost_fine|floatformat:0 }}{% else %}—{% endif %}
+          </div>
+          <div class="small text-muted">Loss Fine</div>
+        </div>
+      </div>
     </div>
     {% if copies %}
     <h6 class="fw-bold">Copies</h6>
     <div class="table-responsive">
       <table class="table table-sm table-hover">
-        <thead><tr><th>Accession No</th><th>Type</th><th>Access</th><th>Status</th><th>Location</th><th>Action</th></tr></thead>
+        <thead><tr><th>ID</th><th>Type</th><th>Access</th><th>Status</th><th>Location</th><th>Action</th></tr></thead>
         <tbody>
           {% for copy in copies %}
           <tr>
-            <td><code>{{ copy.accession_no }}</code></td>
+            <td><code>{{ copy.display_id }}</code></td>
             <td>
               {% if copy.copy_type == 'hardcopy' %}
                 <span class="badge bg-primary"><i class="bi bi-book"></i> Hardcopy</span>

@@ -1021,19 +1021,6 @@
     </div>
   </a>
 
-  <!-- User chip -->
-  <div class="sidebar-user">
-    {% if user.photo %}
-    <img src="{{ user.photo.url }}" alt="" class="avatar">
-    {% else %}
-    <div class="avatar">{{ user.first_name.0|default:user.username.0|upper }}{{ user.surname.0|default:''|upper }}</div>
-    {% endif %}
-    <div>
-      <div class="u-name">{{ user.get_short_name|default:user.username }}</div>
-      <div class="u-role">{{ user.role }}</div>
-    </div>
-  </div>
-
   <nav class="flex-grow-1 px-1 pb-3">
     {% include 'partials/sidebar_nav.html' %}
   </nav>
@@ -1064,17 +1051,6 @@
     </a>
     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="offcanvas"></button>
   </div>
-  <div class="sidebar-user mx-2 my-2">
-    {% if user.photo %}
-    <img src="{{ user.photo.url }}" alt="" class="avatar">
-    {% else %}
-    <div class="avatar">{{ user.first_name.0|default:user.username.0|upper }}</div>
-    {% endif %}
-    <div>
-      <div class="u-name">{{ user.get_short_name|default:user.username }}</div>
-      <div class="u-role">{{ user.role }}</div>
-    </div>
-  </div>
   <div class="offcanvas-body p-1 overflow-auto">
     {% include 'partials/sidebar_nav.html' %}
   </div>
@@ -1099,7 +1075,7 @@
     <div class="topbar-actions ms-auto">
       <!-- Global search — visible on md+ screens -->
       <div class="position-relative d-none d-md-flex align-items-center" id="topbarSearchWrap">
-        <form action="{% url 'catalog_search' %}" method="get" class="d-flex align-items-center gap-1" autocomplete="off" data-no-loader>
+        <form action="{% url 'catalog_search' %}" method="get" class="d-flex align-items-center gap-1" autocomplete="off" data-no-loader data-no-auto-submit>
           <input type="text" name="q" id="topbarSearch" class="topbar-search"
                  placeholder="Search title, author, ISBN, accession…"
                  autocomplete="off" spellcheck="false">
@@ -1107,7 +1083,7 @@
             <i class="bi bi-search"></i>
           </button>
         </form>
-        <div id="topbarSearchDrop"
+        <div id="topbarSearchDrop" tabindex="-1"
              style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:360px;max-width:480px;
                     max-height:320px;overflow-y:auto;z-index:3000;
                     background:var(--card-bg);border:1px solid var(--border);
@@ -1132,13 +1108,9 @@
       {% if user.is_authenticated %}
       <div class="dropdown">
         <div class="topbar-avatar dropdown-toggle d-flex align-items-center justify-content-center" data-bs-toggle="dropdown" style="padding-right: 2px;">
-          {% if user.photo %}
-            <img src="{{ user.photo.url }}" alt="">
-          {% else %}
-            <span style="display: flex; align-items: center; justify-content: center; height: 100%; width: 100%;">
-              {{ user.first_name.0|default:user.username.0|upper }}{{ user.surname.0|default:''|upper }}
-            </span>
-          {% endif %}
+          <span style="display: flex; align-items: center; justify-content: center; height: 100%; width: 100%;">
+            {{ user.get_full_name|slice:":1"|upper }}
+          </span>
         </div>
         <ul class="dropdown-menu dropdown-menu-end" style="min-width:200px;">
           <li>
@@ -1281,7 +1253,7 @@
   <!-- Content -->
   <main class="main-content">
     {% for message in messages %}
-      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-3" role="alert">
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show mb-3" role="alert" {% if message.tags == 'danger' or message.tags == 'error' %}style="color:rgb(0, 0, 0); font-weight:500;"{% endif %}>
         <i class="bi {% if message.tags == 'success' %}bi-check-circle{% elif message.tags == 'danger' or message.tags == 'error' %}bi-x-circle{% elif message.tags == 'warning' %}bi-exclamation-triangle{% else %}bi-info-circle{% endif %} me-2"></i>
         {{ message }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -1662,7 +1634,12 @@
     '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 1px">$1</mark>'
   );
 
-  function showBox(html) { box.innerHTML = html; box.style.display = 'block'; }
+  function showBox(html) {
+    requestAnimationFrame(function() {
+      box.innerHTML = html;
+      box.style.display = 'block';
+    });
+  }
   function hideBox() { box.style.display = 'none'; }
 
   inp.addEventListener('input', function () {
@@ -1685,7 +1662,7 @@
             if (b.accession_no) sub += (sub ? ' &nbsp;·&nbsp; ' : '') +
               '<code style="font-size:.68rem;background:rgba(99,102,241,.12);color:#6366f1;border-radius:3px;padding:0 3px">' + esc(b.accession_no) + '</code>';
             if (b.isbn && !b.accession_no) sub += (sub ? ' &nbsp;·&nbsp; ' : '') + esc(b.isbn);
-            return '<a href="/books/' + b.id + '/" data-no-loader' +
+            return '<a href="/books/' + b.id + '/" data-no-loader tabindex="-1"' +
               ' style="display:flex;align-items:center;gap:.65rem;padding:.55rem .9rem;' +
               'text-decoration:none;color:var(--text-primary);border-bottom:1px solid var(--border);' +
               'font-size:.82rem;transition:background .1s" ' +
@@ -1724,6 +1701,44 @@
 <script>
 (function () {
   var DEBOUNCE_MS = 380;
+  var FOCUS_KEY = '__olms_search_focus__';
+
+  /* Build a stable selector for an element so we can refocus it after reload */
+  function buildSelector(el) {
+    if (!el) return '';
+    if (el.id) return '#' + CSS.escape(el.id);
+    var name = el.getAttribute('name');
+    var form = el.closest('form');
+    if (form && form.id && name) {
+      return '#' + CSS.escape(form.id) + ' [name="' + name + '"]';
+    }
+    if (name) {
+      /* Fall back to first input with this name on the page */
+      return 'input[name="' + name + '"]';
+    }
+    return '';
+  }
+
+  /* === Restore focus & cursor position after a search-triggered reload === */
+  try {
+    var saved = sessionStorage.getItem(FOCUS_KEY);
+    if (saved) {
+      sessionStorage.removeItem(FOCUS_KEY);
+      var info = JSON.parse(saved);
+      /* Only restore if user is still on the same page (path) */
+      if (info && info.path === location.pathname) {
+        var target = document.querySelector(info.selector);
+        if (target) {
+          target.focus();
+          /* Place cursor at end of value */
+          try {
+            var len = target.value.length;
+            target.setSelectionRange(len, len);
+          } catch (e) { /* some input types don't support setSelectionRange */ }
+        }
+      }
+    }
+  } catch (e) { /* ignore */ }
 
   /* Find every GET form that has a search text input named "q" */
   var forms = Array.prototype.filter.call(
@@ -1736,25 +1751,173 @@
   forms.forEach(function (form) {
     var timer;
 
-    /* Text / search inputs — submit after user stops typing */
-    form.querySelectorAll('input[type="text"], input[type="search"]').forEach(function (inp) {
-      inp.addEventListener('input', function () {
-        clearTimeout(timer);
-        /* Show a subtle spinner on the search button while waiting */
-        var btn = form.querySelector('button[type="submit"]');
-        if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-        timer = setTimeout(function () { form.submit(); }, DEBOUNCE_MS);
-      });
-    });
+    /* Only target input with name="q" specifically */
+    var searchInput = form.querySelector('input[name="q"]');
+    if (!searchInput) return;
+
+    function scheduleSubmit() {
+      clearTimeout(timer);
+      var btn = form.querySelector('button[type="submit"]');
+      if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      timer = setTimeout(function () {
+        /* Remember which input had focus so we can restore it after reload */
+        try {
+          sessionStorage.setItem(FOCUS_KEY, JSON.stringify({
+            selector: buildSelector(searchInput),
+            path: location.pathname
+          }));
+        } catch (e) { /* ignore */ }
+        form.submit();
+      }, DEBOUNCE_MS);
+    }
+
+    searchInput.addEventListener('input', scheduleSubmit);
 
     /* Select dropdowns — submit immediately on change */
     form.querySelectorAll('select').forEach(function (sel) {
       sel.addEventListener('change', function () {
         clearTimeout(timer);
+        try {
+          sessionStorage.setItem(FOCUS_KEY, JSON.stringify({
+            selector: buildSelector(searchInput),
+            path: location.pathname
+          }));
+        } catch (e) { /* ignore */ }
         form.submit();
       });
     });
   });
+})();
+</script>
+
+<!-- ── True live AJAX search (no reload) for forms tagged data-live-search ── -->
+<script>
+(function () {
+  var DEBOUNCE_MS = 280;
+
+  function getActiveRequest(form) { return form.__liveSearchReq; }
+  function setActiveRequest(form, ctrl) { form.__liveSearchReq = ctrl; }
+
+  function buildUrl(form) {
+    var params = new URLSearchParams();
+    /* Iterate form fields to support inputs and selects */
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name || el.disabled) return;
+      if (el.type === 'submit' || el.type === 'button' || el.type === 'reset') return;
+      if ((el.type === 'checkbox' || el.type === 'radio') && !el.checked) return;
+      params.append(el.name, el.value);
+    });
+    var action = form.getAttribute('action') || location.pathname;
+    var qs = params.toString();
+    return qs ? (action + '?' + qs) : action;
+  }
+
+  function performLiveSearch(form, opts) {
+    opts = opts || {};
+    var targetSel = form.getAttribute('data-search-target');
+    if (!targetSel) return;
+    var target = document.querySelector(targetSel);
+    if (!target) return;
+
+    var url = buildUrl(form);
+
+    /* Cancel any in-flight request for this form */
+    var prev = getActiveRequest(form);
+    if (prev) try { prev.abort(); } catch (e) {}
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    setActiveRequest(form, ctrl);
+
+    /* Visual loading state */
+    target.style.transition = 'opacity .12s';
+    target.style.opacity = '0.55';
+    var btn = form.querySelector('button[type="submit"]');
+    var btnHtml = btn ? btn.innerHTML : null;
+    if (btn) btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    fetch(url, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin',
+      signal: ctrl ? ctrl.signal : undefined
+    })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var newTarget = doc.querySelector(targetSel);
+        if (newTarget) {
+          target.innerHTML = newTarget.innerHTML;
+          /* Notify any listeners that content has been swapped */
+          try {
+            target.dispatchEvent(new CustomEvent('live-search:updated', {
+              bubbles: true, detail: { url: url, form: form }
+            }));
+          } catch (e) {}
+        }
+        target.style.opacity = '';
+        if (btn && btnHtml !== null) btn.innerHTML = btnHtml;
+        /* Update URL without reload so refresh / share works */
+        try { history.replaceState(null, '', url); } catch (e) {}
+      })
+      .catch(function (err) {
+        if (err && err.name === 'AbortError') return;
+        target.style.opacity = '';
+        if (btn && btnHtml !== null) btn.innerHTML = btnHtml;
+      });
+  }
+
+  function attach(form) {
+    if (form.__liveSearchAttached) return;
+    form.__liveSearchAttached = true;
+
+    var timer;
+    var searchInput = form.querySelector('input[name="q"]');
+
+    function schedule() {
+      clearTimeout(timer);
+      timer = setTimeout(function () { performLiveSearch(form); }, DEBOUNCE_MS);
+    }
+
+    /* Text inputs — debounced */
+    Array.prototype.forEach.call(form.querySelectorAll('input[type="text"], input[type="search"], input:not([type])'), function (inp) {
+      inp.addEventListener('input', schedule);
+    });
+
+    /* Selects — instant */
+    Array.prototype.forEach.call(form.querySelectorAll('select'), function (sel) {
+      sel.addEventListener('change', function () {
+        clearTimeout(timer);
+        performLiveSearch(form);
+      });
+    });
+
+    /* Date inputs — instant */
+    Array.prototype.forEach.call(form.querySelectorAll('input[type="date"], input[type="number"]'), function (inp) {
+      inp.addEventListener('change', function () {
+        clearTimeout(timer);
+        performLiveSearch(form);
+      });
+    });
+
+    /* Submit button — also AJAX (no full reload) */
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearTimeout(timer);
+      performLiveSearch(form);
+    });
+  }
+
+  function initAll() {
+    Array.prototype.forEach.call(
+      document.querySelectorAll('form[data-live-search]'),
+      attach
+    );
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initAll);
+  } else {
+    initAll();
+  }
 })();
 </script>
 </body>

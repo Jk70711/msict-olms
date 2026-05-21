@@ -8,12 +8,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.utils import timezone
 from django.db.models import Q
 from django.conf import settings
 from datetime import timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from accounts.views import librarian_required
 from accounts.utils import log_audit, send_sms, send_email_notification, create_notification, notify_user
@@ -34,7 +35,7 @@ def _pref(key, default):
 
 
 from catalog.models import BookCopy, Book, Course
-from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Notification
+from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Notification, LossReport
 
 
 # Dashboard ya mwanachama — inaonyesha:
@@ -47,9 +48,11 @@ from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Noti
 def member_dashboard_view(request):
     user = request.user
     active_transactions = BorrowingTransaction.objects.filter(
-        user=user, status__in=['borrowed', 'overdue']
-    ).select_related('copy__book').order_by('due_date')
+        user=user, status__in=['borrowed', 'overdue', 'lost']
+    ).select_related('copy__book').order_by('-borrow_date')
+
     overdue_transactions = active_transactions.filter(status='overdue')
+    lost_transactions = active_transactions.filter(status='lost')
     pending_requests = BorrowRequest.objects.filter(user=user, status='pending').select_related('copy__book')
     reservations = Reservation.objects.filter(
         user=user, status__in=['pending', 'notified']
@@ -58,17 +61,51 @@ def member_dashboard_view(request):
     unpaid_fines = Fine.objects.filter(user=user, paid=False)
     notifications = Notification.objects.filter(user=user).order_by('-created_at')[:10]
     borrow_history = BorrowingTransaction.objects.filter(
-        user=user, status='returned'
+        user=user, status__in=['returned', 'lost']
     ).select_related('copy__book').order_by('-return_date')[:5]
 
-    # Get fines for overdue transactions
+    # Get fines for overdue transactions (excluding loss report transactions)
+    # If a book is reported lost, we only count overdue fine if it was already overdue before loss report
+    loss_report_tx_ids = LossReport.objects.filter(user=user, status__in=['pending', 'confirmed', 'resolved']).values_list('transaction_id', flat=True)
     overdue_tx_ids = overdue_transactions.values_list('id', flat=True)
-    overdue_fines = Fine.objects.filter(transaction_id__in=overdue_tx_ids)
+
+    # Overdue fines for transactions NOT reported as lost
+    overdue_fines = Fine.objects.filter(
+        transaction_id__in=overdue_tx_ids
+    ).exclude(transaction_id__in=loss_report_tx_ids)
+
+    # Get loss fines (from loss reports)
+    loss_reports_with_fines = LossReport.objects.filter(
+        user=user,
+        loss_fine__isnull=False
+    ).select_related('loss_fine', 'transaction')
+    loss_fines = [r.loss_fine for r in loss_reports_with_fines]
+
+    # For loss reports, check if the transaction was overdue at the time of loss report
+    # If yes, count both overdue fine and loss fine concurrently
+    # If no, only count loss fine (no overdue fine)
+    loss_report_overdue_fines = []
+    for lr in loss_reports_with_fines:
+        if lr.transaction and lr.transaction.status == 'overdue' and lr.reported_at:
+            # Check if it was already overdue when reported
+            if lr.transaction.due_date and lr.reported_at > lr.transaction.due_date:
+                # It was overdue when reported - add to overdue fines
+                overdue_fines_for_tx = Fine.objects.filter(transaction=lr.transaction)
+                overdue_fines = overdue_fines | overdue_fines_for_tx
 
     # Calculate fine totals for overdue books
     total_fine_amount = sum(f.amount for f in overdue_fines)
     total_unpaid = sum(f.remaining_balance for f in overdue_fines)
     total_paid = sum(f.amount_paid for f in overdue_fines)
+
+    # Calculate loss fine totals
+    total_loss_fine_amount = sum(f.amount for f in loss_fines)
+    total_loss_unpaid = sum(f.remaining_balance for f in loss_fines)
+    total_loss_paid = sum(f.amount_paid for f in loss_fines)
+
+    # Combined totals (all unpaid fines)
+    all_unpaid_fines = list(overdue_fines.filter(paid=False)) + [f for f in loss_fines if not f.paid]
+    total_all_unpaid = sum(f.remaining_balance for f in all_unpaid_fines)
 
     # Build fine info dictionary for each transaction (for softcopy return check)
     tx_fines = {}
@@ -81,36 +118,77 @@ def member_dashboard_view(request):
                 'amount_paid': fine.amount_paid,
             }
 
+    my_loss_reports = LossReport.objects.filter(
+        user=user
+    ).select_related('transaction__copy__book', 'loss_fine').order_by('-reported_at')[:5]
+
     context = {
         'active_transactions': active_transactions,
         'overdue_transactions': overdue_transactions,
+        'lost_transactions': lost_transactions,
         'pending_requests': pending_requests,
         'reservations': reservations,
         'notified_reservations': notified_reservations,
         'unpaid_fines': unpaid_fines,
         'overdue_fines': overdue_fines,
+        'loss_fines': loss_fines,
+        'all_unpaid_fines': all_unpaid_fines,
         'tx_fines': tx_fines,
         'total_fines': sum(f.amount for f in unpaid_fines),
         'total_fine_amount': total_fine_amount,
         'total_unpaid': total_unpaid,
         'total_paid': total_paid,
+        'total_loss_fine_amount': total_loss_fine_amount,
+        'total_loss_unpaid': total_loss_unpaid,
+        'total_loss_paid': total_loss_paid,
+        'total_all_unpaid': total_all_unpaid,
         'notifications': notifications,
         'has_overdue': overdue_transactions.exists(),
+        'has_lost': lost_transactions.exists(),
         'borrow_history': borrow_history,
+        'my_loss_reports': my_loss_reports,
     }
     return render(request, 'circulation/member_dashboard.html', context)
 
 
-# ── Book-level borrow helpers (auto-pick a copy; one URL per book) ───────────
+# ── Book-level hardcopy request — copy assigned later by librarian ────────────
 @login_required
 def request_borrow_book_view(request, book_id):
-    """Auto-selects the first available hardcopy and submits a borrow request."""
+    """Member requests a hardcopy book title. No copy is auto-assigned yet.
+    The librarian issues the specific copy via the 'Issue Copy' modal at pickup."""
     book = get_object_or_404(Book, pk=book_id)
-    copy = book.copies.filter(copy_type='hardcopy', status='available').first()
-    if not copy:
-        messages.error(request, f'No hardcopy is available for "{book.title}" right now.')
+
+    if request.user.has_overdue():
+        messages.error(request, 'You have overdue items with unpaid fines. Resolve them before borrowing.')
+        return redirect('member_dashboard')
+    if request.user.has_unpaid_fines():
+        messages.error(request, 'You have unpaid fines. Pay at the circulation desk before borrowing.')
+        return redirect('member_dashboard')
+
+    if not book.copies.filter(copy_type='hardcopy', status='available').exists():
+        messages.error(request, f'No available hardcopy for "{book.title}" right now.')
         return redirect('borrow_catalog')
-    return redirect('submit_borrow_request', copy.pk)
+
+    active_borrows = request.user.active_borrows_count()
+    pending_requests = BorrowRequest.objects.filter(user=request.user, status='pending').count()
+    max_copies = int(_pref('MAX_COPIES_PER_BORROW', 3))
+    if active_borrows + pending_requests >= max_copies:
+        messages.error(request, f'Maximum of {max_copies} books allowed. Return a book before requesting more.')
+        return redirect('member_dashboard')
+
+    # Duplicate check — already has a pending/approved request for this book
+    already = (
+        BorrowRequest.objects.filter(user=request.user, temp_book=book, status__in=['pending', 'approved']).exists() or
+        BorrowRequest.objects.filter(user=request.user, copy__book=book, status__in=['pending', 'approved']).exists()
+    )
+    if already:
+        messages.warning(request, f'You already have an active request for "{book.title}".')
+        return redirect('borrow_catalog')
+
+    BorrowRequest.objects.create(user=request.user, temp_book=book, copy=None)
+    log_audit(request.user, f"Hardcopy borrow request submitted for '{book.title}'", request)
+    messages.success(request, f'Request submitted for "{book.title}". Please come to the library once approved.')
+    return redirect('member_dashboard')
 
 
 @login_required
@@ -239,9 +317,15 @@ def submit_borrow_request_view(request, copy_id):
         return redirect('member_dashboard')
 
     active_borrows = request.user.active_borrows_count()
+    pending_requests = BorrowRequest.objects.filter(user=request.user, status='pending').count()
+    total = active_borrows + pending_requests
     max_copies = int(_pref('MAX_COPIES_PER_BORROW', 3))
-    if active_borrows >= max_copies:
-        messages.error(request, f'Maximum of {max_copies} active borrows allowed. Return or clear overdue items first.')
+    if total >= max_copies:
+        remaining = max_copies - active_borrows
+        if remaining <= 0:
+            messages.error(request, f'Maximum of {max_copies} books allowed. Return a book before requesting more.')
+        else:
+            messages.error(request, f'You have {active_borrows} active borrows. You can only request {remaining} more book(s).')
         return redirect('member_dashboard')
 
     if BorrowRequest.objects.filter(user=request.user, copy=copy, status='pending').exists():
@@ -254,10 +338,40 @@ def submit_borrow_request_view(request, copy_id):
         ).exists():
             messages.warning(request, 'You are already borrowing this soft copy. Check your borrowings to read it.')
             return redirect('member_dashboard')
-    else:
-        if copy.status != 'available':
-            messages.error(request, 'This hardcopy is not available right now.')
-            return redirect('book_detail_public', book_id=copy.book_id)
+
+        # ── Softcopy: no librarian approval needed — create transaction instantly ──
+        tx = BorrowingTransaction.objects.create(
+            user=request.user,
+            copy=copy,
+            borrow_type='softcopy',
+        )
+        fine_per_day = float(_pref('FINE_PER_DAY', 500))
+        softcopy_url = request.build_absolute_uri(reverse('serve_softcopy', args=[copy.pk]))
+        msg_sms = (
+            f"MSICT OLMS: You have been issued digital copy \"{copy.book.title}\" "
+            f"from {tx.borrow_date.strftime('%d %b %Y')} to {tx.due_date.strftime('%d %b %Y')}. "
+            f"Sharing or misuse may lead to disciplinary action. "
+            f"Overdue fine = TZS {fine_per_day:,.0f}/day (access blocked if overdue)."
+        )
+        msg_email = (
+            f"Dear {request.user.get_full_name() or request.user.username},<br><br>"
+            f"You have been issued digital copy <b>\"{copy.book.title}\"</b>.<br>"
+            f"<b>Borrow Date:</b> {tx.borrow_date.strftime('%d %b %Y')}<br>"
+            f"<b>Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br>"
+            f"<b>Read Online:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
+            f"<i>Note: Sharing or misuse of digital content may lead to disciplinary action. "
+            f"Overdue fine: TZS {fine_per_day:,.0f} per day — access will be blocked.</i>"
+        )
+        notify_user(request.user, msg_sms, 'sms')
+        notify_user(request.user, msg_email, 'email', subject=f'Digital Copy Issued — {copy.book.title}')
+        log_audit(request.user, f"Softcopy auto-issued '{copy.book.title}' [{copy.accession_no}]", request)
+        messages.success(request, f'"{copy.book.title}" is ready to read. Access it from My Borrowings.')
+        return redirect('member_msict_borrowings')
+
+    # ── Hardcopy: create BorrowRequest for librarian approval ──────────────
+    if copy.status != 'available':
+        messages.error(request, 'This hardcopy is not available right now.')
+        return redirect('book_detail_public', book_id=copy.book_id)
 
     BorrowRequest.objects.create(user=request.user, copy=copy)
     log_audit(request.user, f"Borrow request submitted for '{copy.book.title}' [{copy.accession_no}]", request)
@@ -267,34 +381,38 @@ def submit_borrow_request_view(request, copy_id):
 
 # Futa ombi la kukopa ambalo bado ni 'pending' (mwanachama anaweza kufuta yake tu)
 @login_required
+@require_POST
 def cancel_borrow_request_view(request, request_id):
+    """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     req = get_object_or_404(BorrowRequest, pk=request_id, user=request.user, status='pending')
     req.status = 'cancelled'
     req.save(update_fields=['status'])
+    log_audit(request.user, f"Cancelled borrow request #{request_id}", request)
     messages.success(request, 'Borrow request cancelled.')
     return redirect('member_dashboard')
 
 
 # Idhinisha ombi la kukopa (kwa mtunzaji au admin)
-# Kwa hardcopy: inabadilisha hali ya nakala kuwa 'borrowed'
-# Kwa softcopy: inatuma kiungo cha PDF kwa SMS na barua pepe
+# Hardcopy: inathibitisha tu (copy inatolewa baadaye na librarian - "Issue Copy")
+# Softcopy: inaunda transaction mara moja na kutuma kiungo
 @login_required
 @librarian_required
+@require_POST
 def approve_borrow_request_view(request, request_id):
+    """POST-only — protected by CSRF + librarian role decorator."""
     req = get_object_or_404(BorrowRequest, pk=request_id)
     if req.status != 'pending':
-        messages.warning(request, f'Request #{request_id} is already {req.status} and cannot be approved again.')
+        messages.warning(request, f'Request #{request_id} is already {req.status}.')
         return redirect('all_requests')
     user = req.user
-    copy = req.copy
 
     if user.has_overdue():
         req.status = 'rejected'
-        req.rejection_reason = 'User has overdue books.'
+        req.rejection_reason = 'User has overdue books with unpaid fines.'
         req.approved_by = request.user
         req.save()
-        messages.error(request, f'Rejected: {user.username} has overdue books.')
-        return redirect('librarian_dashboard')
+        messages.error(request, f'Rejected: {user.username} has overdue items with unpaid fines.')
+        return redirect('all_requests')
 
     if user.has_unpaid_fines():
         req.status = 'rejected'
@@ -302,21 +420,43 @@ def approve_borrow_request_view(request, request_id):
         req.approved_by = request.user
         req.save()
         messages.error(request, f'Rejected: {user.username} has unpaid fines.')
-        return redirect('librarian_dashboard')
+        return redirect('all_requests')
 
-    # Check max borrows limit (softcopy + hardcopy combined)
     max_copies = int(_pref('MAX_COPIES_PER_BORROW', 3))
     if user.active_borrows_count() >= max_copies:
         req.status = 'rejected'
-        req.rejection_reason = f'User already has {max_copies} active borrows (max limit reached).'
+        req.rejection_reason = f'User already has {max_copies} active borrows.'
         req.approved_by = request.user
         req.save()
-        messages.error(request, f'Rejected: {user.username} already has {max_copies} active borrows.')
-        return redirect('librarian_dashboard')
+        messages.error(request, f'Rejected: {user.username} has reached the borrow limit.')
+        return redirect('all_requests')
 
+    # ── Hardcopy: approve-only; copy assigned at physical handover ──────────
+    if req.copy is None:
+        req.status = 'approved'
+        req.approved_by = request.user
+        req.save()
+        book = req.temp_book
+        msg_sms = (
+            f"MSICT OLMS: Your request for \"{book.title}\" has been approved. "
+            f"Please come to the library to collect your book. Bring your library card or Army No."
+        )
+        msg_email = (
+            f"Your hardcopy request for <b>\"{book.title}\"</b> has been approved.<br><br>"
+            f"Please visit the library circulation desk to collect the book.<br>"
+            f"Bring your <b>library card or Army No</b>."
+        )
+        notify_user(user, msg_sms, 'sms')
+        notify_user(user, msg_email, 'email', subject='Borrow Approved — MSICT OLMS')
+        log_audit(request.user, f"Approved hardcopy request for '{user.username}' – '{book.title}'", request)
+        messages.success(request, f'Request approved for {user.username}. Use "Issue Copy" when they arrive.')
+        return redirect('all_requests')
+
+    # ── Softcopy: create transaction immediately ─────────────────────────────
+    copy = req.copy
     if copy.copy_type == 'hardcopy' and copy.status != 'available':
         messages.error(request, 'Hardcopy is no longer available.')
-        return redirect('librarian_dashboard')
+        return redirect('all_requests')
 
     tx = BorrowingTransaction.objects.create(
         user=user,
@@ -324,48 +464,165 @@ def approve_borrow_request_view(request, request_id):
         borrow_type=copy.copy_type,
         approved_by=request.user,
     )
-    if copy.copy_type == 'hardcopy':
-        copy.status = 'borrowed'
-        copy.save(update_fields=['status'])
-        # Nearest due_date changed — recalculate queue expiry dates for this book
-        _recalculate_reservation_expiries(copy.book)
-
     req.status = 'approved'
     req.approved_by = request.user
     req.save()
 
-    if copy.copy_type == 'softcopy':
-        # Build absolute URL for email only (not exposed in SMS)
-        softcopy_url = request.build_absolute_uri(reverse('serve_softcopy', args=[copy.pk]))
+    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    librarian_name = request.user.get_full_name() or request.user.username
+    softcopy_url = request.build_absolute_uri(reverse('serve_softcopy', args=[copy.pk]))
 
-        msg_sms = (f"MSICT OLMS: Your request for '{copy.book.title}' (Softcopy) has been approved. "
-                   f"Due: {tx.due_date.date()}. Sign in to your dashboard to read the book.")
-        msg_email = (f"Your request for '<b>{copy.book.title}</b>' (Softcopy) was approved.<br>"
-                     f"<b>Due Date:</b> {tx.due_date.date()}<br>"
-                     f"<b>Direct Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-                     f"Or visit <b>My Borrowings</b> on your dashboard to access all your softcopies.")
-        msg_dashboard = f"'{copy.book.title}' (Softcopy) approved. Due: {tx.due_date.date()}. Click 'Read Online' below to access."
-    else:
-        msg_sms = (f"MSICT OLMS: Your borrow request for '{copy.book.title}' has been approved. "
-                   f"Due: {tx.due_date.date()}. Go to library with your card or card number to take the book.")
-        msg_email = (f"Your borrow request for '<b>{copy.book.title}</b>' has been approved.<br>"
-                     f"<b>Due Date:</b> {tx.due_date.date()}<br><br>"
-                     f"Please go to the library with your library card or card number to collect the book.")
-        msg_dashboard = (f"'{copy.book.title}' approved. Due: {tx.due_date.date()}. "
-                         f"Go to the library with your card to collect the book.")
-
+    msg_sms = (
+        f"MSICT OLMS: You have borrowed digital copy \"{copy.book.title}\" "
+        f"from {tx.borrow_date.strftime('%d %b %Y')} to {tx.due_date.strftime('%d %b %Y')}. "
+        f"No physical loss, but sharing or misuse may lead to disciplinary action. "
+        f"Overdue fine = TZS {fine_per_day:,.0f}/day (access blocked if overdue). "
+        f"Processed by {librarian_name}."
+    )
+    msg_email = (
+        f"Dear {user.get_full_name() or user.username},<br><br>"
+        f"You have borrowed digital copy <b>\"{copy.book.title}\"</b>.<br>"
+        f"<b>Borrow Date:</b> {tx.borrow_date.strftime('%d %b %Y')}<br>"
+        f"<b>Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br>"
+        f"<b>Direct Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
+        f"<i>Note: Sharing or misuse of digital content may lead to disciplinary action. "
+        f"Overdue fine: TZS {fine_per_day:,.0f} per day — access will be blocked.</i><br><br>"
+        f"Processed by Librarian: <b>{librarian_name}</b>"
+    )
     notify_user(user, msg_sms, 'sms')
-    notify_user(user, msg_email, 'email', subject='MSICT OLMS - Borrow Approved')
-    log_audit(request.user, f"Approved borrow request for '{user.username}' – '{copy.book.title}'", request)
-    messages.success(request, f'Borrow approved for {user.username}.')
-    return redirect('librarian_dashboard')
+    notify_user(user, msg_email, 'email', subject=f'Digital Copy Issued — {copy.book.title}')
+    log_audit(request.user, f"Approved softcopy for '{user.username}' – '{copy.book.title}'", request)
+    messages.success(request, f'Softcopy issued to {user.username}.')
+    return redirect('all_requests')
+
+
+# ── Issue Copy — librarian assigns physical copy to approved hardcopy request ─
+@login_required
+@librarian_required
+def issue_copy_view(request, request_id):
+    """GET: show Issue Copy modal page. POST: validate accession, create transaction."""
+    req = get_object_or_404(
+        BorrowRequest.objects.select_related('user', 'temp_book'),
+        pk=request_id,
+    )
+    if req.status != 'approved' or req.copy_id is not None:
+        messages.error(request, 'This request is not eligible for copy issuance.')
+        return redirect('all_requests')
+
+    book = req.temp_book
+    if not book:
+        messages.error(request, 'No book associated with this request.')
+        return redirect('all_requests')
+
+    available_copies = BookCopy.objects.filter(
+        book=book, copy_type='hardcopy', status='available'
+    ).order_by('accession_no')
+
+    if request.method == 'GET':
+        return render(request, 'circulation/issue_copy.html', {
+            'req': req,
+            'book': book,
+            'available_copies': available_copies,
+        })
+
+    # ── POST: transact ───────────────────────────────────────────────────────
+    accession_no = (request.POST.get('accession_no') or '').strip()
+    if not accession_no:
+        messages.error(request, 'Please enter an accession number.')
+        return render(request, 'circulation/issue_copy.html', {
+            'req': req, 'book': book, 'available_copies': available_copies,
+        })
+
+    try:
+        copy = BookCopy.objects.select_related('book').get(accession_no=accession_no)
+    except BookCopy.DoesNotExist:
+        messages.error(request, f'No copy found with accession number "{accession_no}".')
+        return render(request, 'circulation/issue_copy.html', {
+            'req': req, 'book': book, 'available_copies': available_copies,
+        })
+
+    if copy.book_id != book.pk:
+        messages.error(request, f'"{accession_no}" belongs to "{copy.book.title}", not "{book.title}".')
+        return render(request, 'circulation/issue_copy.html', {
+            'req': req, 'book': book, 'available_copies': available_copies,
+        })
+
+    if copy.status != 'available':
+        messages.error(request, f'Copy "{accession_no}" is not available (status: {copy.status}).')
+        return render(request, 'circulation/issue_copy.html', {
+            'req': req, 'book': book, 'available_copies': available_copies,
+        })
+
+    user = req.user
+    tx = BorrowingTransaction.objects.create(
+        user=user,
+        copy=copy,
+        borrow_type='hardcopy',
+        approved_by=request.user,
+    )
+    copy.status = 'borrowed'
+    copy.save(update_fields=['status'])
+    req.copy = copy
+    req.save(update_fields=['copy'])
+    _recalculate_reservation_expiries(book)
+
+    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    lost_fine = float(getattr(book, 'lost_fine', 0) or 0)
+    librarian_name = request.user.get_full_name() or request.user.username
+
+    msg_sms = (
+        f"MSICT OLMS: You have borrowed \"{book.title}\" "
+        f"(Accession No: {copy.accession_no}) "
+        f"from {tx.borrow_date.strftime('%d %b %Y')} to {tx.due_date.strftime('%d %b %Y')}. "
+        f"If lost, fine = TZS {lost_fine:,.0f}. "
+        f"Overdue fine = TZS {fine_per_day:,.0f} per day. "
+        f"Processed by Librarian: {librarian_name}. Thank you."
+    )
+    msg_email = (
+        f"Dear {user.get_full_name() or user.username},<br><br>"
+        f"You have borrowed <b>\"{book.title}\"</b>.<br>"
+        f"<b>Accession No:</b> {copy.accession_no}<br>"
+        f"<b>Shelf:</b> {copy.shelf_location or '—'}<br>"
+        f"<b>Borrow Date:</b> {tx.borrow_date.strftime('%d %b %Y')}<br>"
+        f"<b>Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br><br>"
+        f"<b>Lost Fine:</b> TZS {lost_fine:,.0f}<br>"
+        f"<b>Overdue Fine:</b> TZS {fine_per_day:,.0f} per day<br><br>"
+        f"Please return the book by the due date.<br>"
+        f"Processed by Librarian: <b>{librarian_name}</b>"
+    )
+    notify_user(user, msg_sms, 'sms')
+    notify_user(user, msg_email, 'email', subject=f'Book Issued — {book.title} — MSICT OLMS')
+    log_audit(request.user,
+              f"Issued '{copy.accession_no}' ({book.title}) to {user.username} — TX#{tx.pk}",
+              request)
+    messages.success(
+        request,
+        f'"{copy.accession_no}" issued to {user.username}. Due: {tx.due_date.strftime("%d %b %Y")}.'
+    )
+    return redirect('all_requests')
+
+
+# ── Copy autocomplete (AJAX) — returns available hardcopies for a book ────────
+@login_required
+@librarian_required
+def copy_lookup_view(request):
+    from django.http import JsonResponse
+    book_id = request.GET.get('book_id', '')
+    q = (request.GET.get('q') or '').strip()
+    qs = BookCopy.objects.filter(book_id=book_id, copy_type='hardcopy', status='available')
+    if q:
+        qs = qs.filter(accession_no__icontains=q)
+    data = [{'accession_no': c.accession_no, 'shelf': c.shelf_location or '—'} for c in qs[:15]]
+    return JsonResponse({'copies': data})
 
 
 # Kataa ombi la kukopa — inahitaji sababu ya kukataa
 # Mwanachama anapata arifa ya SMS na barua pepe
 @login_required
 @librarian_required
+@require_POST
 def reject_borrow_request_view(request, request_id):
+    """POST-only — protected by CSRF + librarian role decorator."""
     req = get_object_or_404(BorrowRequest, pk=request_id, status='pending')
     reason = request.POST.get('rejection_reason', 'Rejected by librarian.')
     req.status = 'rejected'
@@ -385,7 +642,9 @@ def reject_borrow_request_view(request, request_id):
 # Kwa softcopy: inaweza kufanywa wakati wowote ndani ya muda
 # Kwa hardcopy: haiwezekani kama kuna uhifadhi au ni overdue
 @login_required
+@require_POST
 def renew_transaction_view(request, transaction_id):
+    """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     tx = get_object_or_404(BorrowingTransaction, pk=transaction_id, user=request.user)
     success, message = tx.renew()
     if success:
@@ -401,7 +660,9 @@ def renew_transaction_view(request, transaction_id):
 
 # Rudisha softcopy mapema kabla ya muda haujaisha
 @login_required
+@require_POST
 def return_early_view(request, transaction_id):
+    """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     tx = get_object_or_404(
         BorrowingTransaction, pk=transaction_id,
         user=request.user, status__in=['borrowed', 'overdue']
@@ -458,11 +719,12 @@ def _process_desk_return(request, copy_pk_str):
         messages.error(request, f'No active borrowing found for "{copy.accession_no}".')
         return None
 
-    # Check for unpaid fines - block return if user has fines
     from circulation.models import Fine
-    if Fine.objects.filter(user=tx.user, paid=False).exists():
-        messages.error(request, f'Member has unpaid fines. Cannot return until fines are paid.')
-        return None
+
+    # Calculate overdue days BEFORE changing status (days_overdue checks status field)
+    days_late = 0
+    if tx.status in ('borrowed', 'overdue') and timezone.now() > tx.due_date:
+        days_late = max(1, (timezone.now() - tx.due_date).days)
 
     tx.return_date = timezone.now()
     tx.status      = 'returned'
@@ -473,22 +735,20 @@ def _process_desk_return(request, copy_pk_str):
         copy.save(update_fields=['status'])
 
     fine_per_day = float(_pref('FINE_PER_DAY', 500))
-    if tx.days_overdue() > 0:
-        fine_amount = tx.days_overdue() * fine_per_day
-        # Check if Fine record already exists
-        existing_fine = Fine.objects.filter(transaction=tx, paid=False).first()
-        if existing_fine:
-            # Update existing fine record
+    if days_late > 0:
+        fine_amount = days_late * fine_per_day
+        # Upsert fine record (never block the return — just ensure fine exists)
+        existing_fine = Fine.objects.filter(transaction=tx).first()
+        if existing_fine and not existing_fine.paid:
             existing_fine.amount = fine_amount
-            existing_fine.reason = f"Overdue fine for '{copy.book.title}' ({tx.days_overdue()} days)"
+            existing_fine.reason = f"Overdue fine for '{copy.book.title}' ({days_late} days)"
             existing_fine.save(update_fields=['amount', 'reason'])
-        else:
-            # Create new fine record
+        elif not existing_fine:
             Fine.objects.create(
                 user=tx.user, transaction=tx, amount=fine_amount,
-                reason=f"Overdue fine for '{copy.book.title}' ({tx.days_overdue()} days)",
+                reason=f"Overdue fine for '{copy.book.title}' ({days_late} days)",
             )
-        messages.warning(request, f'"{copy.book.title}" returned with overdue fine of TZS {fine_amount:,.0f}.')
+        messages.warning(request, f'"{copy.book.title}" returned — overdue fine of TZS {fine_amount:,.0f} raised. Please collect payment.')
         fine_msg = (
             f"MSICT OLMS: Overdue fine of TZS {fine_amount:,.0f} for '{copy.book.title}'. "
             f"Please pay at the library counter."
@@ -866,7 +1126,9 @@ def reserve_book_view(request, book_id):
 # Queue positions re-numbered automatically
 # ============================================================
 @login_required
+@require_POST
 def cancel_reservation_view(request, reservation_id):
+    """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     res = get_object_or_404(
         Reservation, pk=reservation_id, user=request.user,
         status__in=['pending', 'notified']
@@ -891,11 +1153,10 @@ def cancel_reservation_view(request, reservation_id):
 # ============================================================
 @login_required
 @librarian_required
+@require_POST
 def librarian_cancel_reservation_view(request, reservation_id):
+    """POST-only — protected by CSRF + librarian role decorator."""
     res = get_object_or_404(Reservation, pk=reservation_id, status__in=['pending', 'notified'])
-    if request.method != 'POST':
-        messages.error(request, 'Invalid request.')
-        return redirect('reservation_list')
     reason = request.POST.get('reason', '').strip()
     if not reason:
         messages.error(request, 'A reason is required to cancel a reservation.')
@@ -1064,8 +1325,35 @@ def all_requests_view(request):
 @login_required
 @librarian_required
 def overdue_list_view(request):
-    overdue = BorrowingTransaction.objects.filter(status='overdue').select_related('user', 'copy__book').order_by('due_date')
+    _auto_mark_overdue()  # Catch any borrowed+past-due not yet marked by cron
+    from django.db.models import Exists, OuterRef, F
+    from circulation.models import Fine as _Fine
+    # Only show transactions that still have an unpaid fine (or no fine yet).
+    # Transactions whose fines are fully paid are removed from this list.
+    has_unpaid_fine = Exists(
+        _Fine.objects.filter(transaction=OuterRef('pk'), paid=False, amount__gt=F('amount_paid'))
+    )
+    has_no_fine = ~Exists(_Fine.objects.filter(transaction=OuterRef('pk')))
+    overdue = (
+        BorrowingTransaction.objects
+        .filter(status='overdue')
+        .filter(has_unpaid_fine | has_no_fine)
+        .select_related('user', 'copy__book')
+        .order_by('due_date')
+    )
     return render(request, 'circulation/overdue_list.html', {'overdue': overdue})
+
+
+def _auto_mark_overdue():
+    """Inline guard: mark any 'borrowed' transactions past their due_date as 'overdue'.
+    Called at the top of every librarian page that shows overdue/fine data so the
+    view is always accurate even when the nightly cron hasn't fired yet."""
+    stale = BorrowingTransaction.objects.filter(
+        status='borrowed',
+        due_date__lt=timezone.now(),
+    ).only('id', 'status')
+    if stale.exists():
+        stale.update(status='overdue')
 
 
 def _extract_total_paid_from_log(receipt_no):
@@ -1087,6 +1375,7 @@ def _sync_overdue_fines(fine_per_day):
     """Shared helper: update existing unpaid fines and create missing ones for overdue transactions.
     Also merges any duplicates (paid + unpaid for same transaction) into a single fine record.
     """
+    _auto_mark_overdue()  # Ensure borrowed+past-due are marked overdue before syncing
     overdue_transactions = BorrowingTransaction.objects.filter(
         status='overdue'
     ).select_related('user', 'copy__book')
@@ -1125,9 +1414,10 @@ def _sync_overdue_fines(fine_per_day):
             if fine.reason != reason:
                 fine.reason = reason
                 updates.append('reason')
-            # Fix inconsistency: paid=True but amount_paid < amount
-            if fine.paid and fine.amount_paid < fine.amount:
-                fine.paid = False
+            # Auto-correct stale paid flag in both directions
+            correct_paid = fine.amount_paid >= fine.amount
+            if fine.paid != correct_paid:
+                fine.paid = correct_paid
                 updates.append('paid')
             # Fix inflated amount_paid: if receipt log shows a LOWER total than DB,
             # the DB value was incorrectly set (e.g. by old capping bug). Correct it.
@@ -1172,12 +1462,12 @@ def fine_list_view(request):
     fine_per_day = float(_pref('FINE_PER_DAY', 500))
     _sync_overdue_fines(fine_per_day)
     
-    fines = Fine.objects.select_related('user', 'transaction__copy__book').order_by('-created_at')
+    fines = Fine.objects.select_related('user__rank', 'transaction__copy__book').order_by('-created_at')
     
     # Build per-user summary for the top panel (replaces separate 'Users with Fines' page)
     user_summary_qs = (
         Fine.objects.filter(paid=False)
-        .values('user__pk', 'user__first_name', 'user__surname', 'user__army_no')
+        .values('user__pk', 'user__first_name', 'user__surname', 'user__army_no', 'user__rank__rank_name')
         .annotate(total_amount=Sum('amount'), total_paid=Sum('amount_paid'), fine_count=Count('pk'))
         .order_by('-total_amount')
     )
@@ -1186,6 +1476,7 @@ def fine_list_view(request):
             'user_id': r['user__pk'],
             'name': f"{r['user__first_name']} {r['user__surname']}".strip(),
             'army_no': r['user__army_no'],
+            'rank': r['user__rank__rank_name'] or '—',
             'fine_count': r['fine_count'],
             'remaining': (r['total_amount'] or 0) - (r['total_paid'] or 0),
         }
@@ -1233,23 +1524,365 @@ def user_fines_view(request, user_id):
 
 @login_required
 def my_fines_view(request):
+    # Show only overdue fines (exclude loss fines)
     fines = Fine.objects.filter(
         user=request.user
     ).select_related('transaction__copy__book').order_by('-created_at')
-    unpaid_fines = fines.filter(paid=False)
-    total_unpaid = sum(f.amount for f in unpaid_fines)
+    
+    # Get loss report transaction IDs to exclude loss fines
+    loss_report_tx_ids = LossReport.objects.filter(
+        user=request.user,
+        loss_fine__isnull=False
+    ).values_list('loss_fine_id', flat=True)
+    
+    # Exclude loss fines (those associated with loss reports)
+    overdue_fines = [f for f in fines if f.id not in loss_report_tx_ids]
+    
+    unpaid_fines = [f for f in overdue_fines if not f.paid]
+    total_unpaid = sum(f.remaining_balance for f in unpaid_fines)
     return render(request, 'circulation/my_fines.html', {
-        'fines': fines,
+        'fines': overdue_fines,
         'unpaid_fines': unpaid_fines,
         'total_unpaid': total_unpaid,
     })
 
 
 @login_required
+def my_loss_reports_view(request):
+    """Member views their loss reports and loss fines."""
+    reports = LossReport.objects.filter(
+        user=request.user
+    ).select_related('transaction__copy__book', 'loss_fine').order_by('-reported_at')
+    unpaid_loss_reports = [r for r in reports if r.loss_fine and not r.loss_fine.paid]
+    total_unpaid_loss_fine = sum(r.loss_fine.remaining_balance for r in unpaid_loss_reports)
+    return render(request, 'circulation/my_loss_reports.html', {
+        'reports': reports,
+        'unpaid_loss_reports': unpaid_loss_reports,
+        'total_unpaid_loss_fine': total_unpaid_loss_fine,
+    })
+
+
+@login_required
 def pay_fine_view(request, fine_id):
-    """View for users to pay fines - renders payment page."""
+    """
+    Member-facing self-service fine payment request.
+
+    GET  : show the payment options page.
+    POST : record the member's intent to pay (method, amount, reference)
+           on the fine's audit log, notify the librarian queue, and tell
+           the member to bring proof to the desk so a librarian can
+           finalise via `record_fine_payment_view`.
+
+    The fine is NOT marked paid here — actual money cannot be received
+    over the web without a real payment-gateway integration. Recording
+    the intent gives full audit traceability and replaces the previous
+    JavaScript-only alert.
+    """
     fine = get_object_or_404(Fine, id=fine_id, user=request.user, paid=False)
+
+    if request.method == 'POST':
+        method = (request.POST.get('payment_method') or '').strip().lower()
+        amount_str = (request.POST.get('payment_amount') or '').strip()
+        reference = (request.POST.get('reference') or '').strip()  # phone / txn / acct
+        ALLOWED_METHODS = {
+            'mpesa', 'tigopesa', 'airtel', 'halotel',
+            'card', 'bank',
+        }
+
+        # ── Validate ────────────────────────────────────────────────
+        if method not in ALLOWED_METHODS:
+            messages.error(request, 'Please select a valid payment method.')
+            return redirect('pay_fine', fine_id=fine.pk)
+
+        try:
+            amount = Decimal(amount_str)
+        except (ValueError, TypeError, InvalidOperation):
+            messages.error(request, 'Please enter a valid payment amount.')
+            return redirect('pay_fine', fine_id=fine.pk)
+
+        if amount <= 0:
+            messages.error(request, 'Payment amount must be greater than 0.')
+            return redirect('pay_fine', fine_id=fine.pk)
+
+        if amount > fine.remaining_balance:
+            messages.error(
+                request,
+                f'Amount TZS {amount} exceeds remaining balance '
+                f'TZS {fine.remaining_balance}.'
+            )
+            return redirect('pay_fine', fine_id=fine.pk)
+
+        # ── Record the intent (append-only audit log on the fine) ───
+        ts = timezone.now().strftime('%d %b %Y %H:%M')
+        line = f"[{ts}] REQUEST {method.upper()} TZS {amount} (pending verification)"
+        if reference:
+            line += f" | Ref: {reference}"
+        fine.receipt_no = (fine.receipt_no + "\n" + line).strip()
+        fine.save(update_fields=['receipt_no'])
+
+        # ── Tell the librarians via the existing audit + notify path ──
+        log_audit(
+            request.user,
+            f"Member submitted self-service payment request: "
+            f"fine #{fine.pk}, {method.upper()} TZS {amount}",
+            request,
+        )
+
+        # Notify librarians (in-app notification) so the queue is visible.
+        try:
+            from accounts.models import OLMSUser as _U
+            for lib in _U.objects.filter(role__in=['librarian', 'admin'], is_active=True):
+                Notification.objects.create(
+                    user=lib,
+                    message=(
+                        f"Fine payment request from {request.user.get_full_name() or request.user.username}: "
+                        f"{method.upper()} TZS {amount} for fine #{fine.pk}. "
+                        f"Verify via Circulation > Fines."
+                    ),
+                    channel='email',
+                    priority='normal',
+                    status='pending',
+                )
+        except Exception:
+            # Notifications are best-effort; never block the user's submission.
+            pass
+
+        messages.success(
+            request,
+            f'Payment request recorded: {method.upper()} TZS {amount}. '
+            f'Please bring proof of payment to the librarian to finalise. '
+            f'Your reference: FINE-{fine.pk}-{int(amount)}.'
+        )
+        return redirect('my_fines')
+
     return render(request, 'circulation/pay_fine.html', {'fine': fine})
+
+
+@login_required
+def pay_loss_fine_view(request, report_id):
+    """
+    Member-facing self-service loss fine payment request.
+
+    GET  : show the payment options page.
+    POST : record the member's intent to pay (method, amount, reference)
+           on the fine's audit log, notify the librarian queue, and tell
+           the member to bring proof to the desk so a librarian can
+           finalise via `record_fine_payment_view`.
+
+    The fine is NOT marked paid here — actual money cannot be received
+    over the web without a real payment-gateway integration. Recording
+    the intent gives full audit traceability.
+    """
+    report = get_object_or_404(LossReport, pk=report_id, user=request.user)
+    if not report.loss_fine or report.loss_fine.paid:
+        messages.error(request, 'This loss report has no unpaid fine to pay.')
+        return redirect('member_dashboard')
+
+    fine = report.loss_fine
+
+    if request.method == 'POST':
+        method = (request.POST.get('payment_method') or '').strip().lower()
+        amount_str = (request.POST.get('payment_amount') or '').strip()
+        reference = (request.POST.get('reference') or '').strip()
+        ALLOWED_METHODS = {
+            'mpesa', 'tigopesa', 'airtel', 'halotel',
+            'card', 'bank',
+        }
+
+        # ── Validate ────────────────────────────────────────────────
+        if method not in ALLOWED_METHODS:
+            messages.error(request, 'Please select a valid payment method.')
+            return redirect('pay_loss_fine', report_id=report.pk)
+
+        try:
+            amount = Decimal(amount_str)
+        except (ValueError, TypeError, InvalidOperation):
+            messages.error(request, 'Please enter a valid payment amount.')
+            return redirect('pay_loss_fine', report_id=report.pk)
+
+        if amount <= 0:
+            messages.error(request, 'Payment amount must be greater than 0.')
+            return redirect('pay_loss_fine', report_id=report.pk)
+
+        if amount > fine.remaining_balance:
+            messages.error(
+                request,
+                f'Amount TZS {amount} exceeds remaining balance '
+                f'TZS {fine.remaining_balance}.'
+            )
+            return redirect('pay_loss_fine', report_id=report.pk)
+
+        # ── Record the intent (append-only audit log on the fine) ───
+        ts = timezone.now().strftime('%d %b %Y %H:%M')
+        line = f"[{ts}] REQUEST {method.upper()} TZS {amount} (pending verification)"
+        if reference:
+            line += f" | Ref: {reference}"
+        fine.receipt_no = (fine.receipt_no + "\n" + line).strip()
+        fine.save(update_fields=['receipt_no'])
+
+        # ── Tell the librarians via the existing audit + notify path ──
+        log_audit(
+            request.user,
+            f"Member submitted loss fine payment request: "
+            f"loss report #{report.pk}, {method.upper()} TZS {amount}",
+            request,
+        )
+
+        # Notify librarians (in-app notification) so the queue is visible.
+        try:
+            from accounts.models import OLMSUser as _U
+            for lib in _U.objects.filter(role__in=['librarian', 'admin'], is_active=True):
+                Notification.objects.create(
+                    user=lib,
+                    message=(
+                        f"Loss fine payment request from {request.user.get_full_name() or request.user.username}: "
+                        f"{method.upper()} TZS {amount} for loss report #{report.pk}. "
+                        f"Verify via Circulation > Loss Reports."
+                    ),
+                    channel='email',
+                    priority='normal',
+                    status='pending',
+                )
+        except Exception:
+            # Notifications are best-effort; never block the user's submission.
+            pass
+
+        messages.success(
+            request,
+            f'Loss fine payment request recorded: {method.upper()} TZS {amount}. '
+            f'Please bring proof of payment to the librarian to finalise. '
+            f'Your reference: LOSS-{report.pk}-{int(amount)}.'
+        )
+        return redirect('member_dashboard')
+
+    return render(request, 'circulation/pay_loss_fine.html', {'report': report, 'fine': fine})
+
+
+@login_required
+@librarian_required
+def record_loss_fine_payment_view(request, report_id):
+    """
+    Librarian loss fine payment handler.
+
+    GET  : show the payment form page.
+    POST : validate and record payment.
+    """
+    report = get_object_or_404(LossReport, pk=report_id)
+    if not report.loss_fine:
+        messages.error(request, 'This loss report has no fine to pay.')
+        return redirect('loss_report_list')
+
+    fine = report.loss_fine
+
+    if request.method != 'POST':
+        return render(request, 'circulation/loss_fine_payment.html', {'report': report, 'fine': fine})
+
+    payment_method = request.POST.get('payment_method', 'cash')
+    receipt_no = request.POST.get('receipt_no', '').strip()
+    payment_amount_str = request.POST.get('payment_amount', '')
+    # Extra fields per payment method
+    phone_number    = request.POST.get('phone_number', '').strip()
+    bank_name       = request.POST.get('bank_name', '').strip()
+    bank_account_no = request.POST.get('bank_account_no', '').strip()
+    card_holder     = request.POST.get('card_holder', '').strip()
+    card_last4      = request.POST.get('card_last4', '').strip()
+    card_expiry     = request.POST.get('card_expiry', '').strip()
+    card_cvv        = request.POST.get('card_cvv', '').strip()
+
+    # Validate payment amount
+    try:
+        payment_amount = Decimal(payment_amount_str) if payment_amount_str else Decimal('0')
+    except (ValueError, TypeError):
+        payment_amount = Decimal('0')
+
+    if payment_amount <= 0:
+        messages.error(request, 'Payment amount must be greater than 0')
+        return redirect('record_loss_fine_payment', report_id=report.pk)
+
+    # Validate payment amount does not exceed remaining balance
+    remaining_balance = fine.amount - fine.amount_paid
+    if payment_amount > remaining_balance:
+        messages.error(
+            request,
+            f'Payment amount TZS {payment_amount} exceeds remaining balance TZS {remaining_balance}. '
+            f'Please enter correct amount not exceeding TZS {remaining_balance}.'
+        )
+        return redirect('record_loss_fine_payment', report_id=report.pk)
+
+    # Build payment log entry (appended — never overwritten)
+    MOBILE_METHODS = {'mpesa', 'tigopesa', 'airtel_money', 'halopesa'}
+    CARD_METHODS   = {'visa', 'mastercard'}
+    now_str = timezone.now().strftime('%d %b %Y %H:%M')
+    log_entry = f"[{now_str}] {payment_method.upper()} TZS {payment_amount}"
+
+    if payment_method in MOBILE_METHODS and phone_number:
+        log_entry += f" | Phone: {phone_number}"
+    elif payment_method == 'bank_transfer':
+        if bank_name:
+            log_entry += f" | Bank: {bank_name}"
+        if bank_account_no:
+            log_entry += f" | Acct: {bank_account_no}"
+        if receipt_no:
+            log_entry += f" | Ref: {receipt_no}"
+    elif payment_method in CARD_METHODS:
+        if card_holder:
+            log_entry += f" | Name: {card_holder}"
+        if card_last4:
+            log_entry += f" | Card: ****{card_last4}"
+        if card_expiry:
+            log_entry += f" | Exp: {card_expiry}"
+        # CVV not stored for security
+
+    # Accumulate payment
+    fine.amount_paid += payment_amount
+    fine.payment_method = payment_method
+    fine.paid_at = timezone.now()
+    # Append to log (never overwrite — preserves full payment history)
+    fine.receipt_no = (fine.receipt_no + "\n" + log_entry).strip()
+
+    # Determine paid status based on actual accumulated amount
+    if fine.amount_paid >= fine.amount:
+        fine.paid = True
+    else:
+        fine.paid = False
+
+    fine.save()
+
+    # Determine SMS message based on payment status
+    remaining_balance = fine.remaining_balance
+    book_name = report.transaction.copy.book.title
+    if fine.paid:
+        sms_message = f"Umelipa deni lote la faini ya hasara TZS {fine.amount} kwa kitabu '{book_name}' kwa {payment_method.upper()}. Asante."
+    else:
+        sms_message = f"Umelipa TZS {payment_amount} kwa faini ya hasara TZS {fine.amount} ya kitabu '{book_name}'. Bado unadaiwa TZS {remaining_balance}. karibu tena."
+
+    # Send SMS notification
+    try:
+        notify_user(fine.user, sms_message, 'sms')
+    except Exception as e:
+        # Log error but don't fail the payment process
+        log_audit(request.user, f"SMS failed for loss fine {fine.pk}: {str(e)}", request)
+
+    log_audit(request.user, f"Loss fine {fine.pk} payment of TZS {payment_amount} by {fine.user.username} via {payment_method}", request)
+
+    if fine.paid:
+        # If fully paid, mark loss report as resolved
+        report.status = 'resolved'
+        report.resolved_at = timezone.now()
+        report.save(update_fields=['status', 'resolved_at'])
+        messages.success(
+            request,
+            f'Loss fine fully paid. TZS {payment_amount} recorded. '
+            f'Loss report LR-{report.pk} marked as resolved.'
+        )
+    else:
+        messages.success(
+            request,
+            f'Payment recorded: TZS {payment_amount}. '
+            f'Remaining balance: TZS {remaining_balance}.'
+        )
+
+    return redirect('loss_report_list')
 
 
 @login_required
@@ -1257,7 +1890,9 @@ def pay_fine_view(request, fine_id):
 def users_with_unpaid_fines_view(request):
     from django.db.models import Sum, Count, Q
     from collections import defaultdict
-    
+    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    _sync_overdue_fines(fine_per_day)  # Mark status + sync fine amounts before listing
+
     # Get users with unpaid fines
     users_with_fines = (
         Fine.objects
@@ -1320,103 +1955,111 @@ def users_with_unpaid_fines_view(request):
 @login_required
 @librarian_required
 def record_fine_payment_view(request, fine_id):
+    """
+    Librarian fine payment handler.
+
+    GET  : show the payment form page.
+    POST : validate and record payment.
+    """
     fine = get_object_or_404(Fine, pk=fine_id)
-    if request.method == 'POST':
-        payment_method = request.POST.get('payment_method', 'cash')
-        receipt_no = request.POST.get('receipt_no', '').strip()
-        payment_amount_str = request.POST.get('payment_amount', '')
-        # Extra fields per payment method
-        phone_number    = request.POST.get('phone_number', '').strip()
-        bank_name       = request.POST.get('bank_name', '').strip()
-        bank_account_no = request.POST.get('bank_account_no', '').strip()
-        card_holder     = request.POST.get('card_holder', '').strip()
-        card_last4      = request.POST.get('card_last4', '').strip()
-        card_expiry     = request.POST.get('card_expiry', '').strip()
-        card_cvv        = request.POST.get('card_cvv', '').strip()
 
-        # Validate payment amount
-        try:
-            payment_amount = Decimal(payment_amount_str) if payment_amount_str else Decimal('0')
-        except (ValueError, TypeError):
-            payment_amount = Decimal('0')
+    if request.method != 'POST':
+        return render(request, 'circulation/fine_payment.html', {'fine': fine})
 
-        if payment_amount <= 0:
-            messages.error(request, 'Payment amount must be greater than 0')
-            return render(request, 'circulation/fine_payment.html', {'fine': fine})
+    payment_method = request.POST.get('payment_method', 'cash')
+    receipt_no = request.POST.get('receipt_no', '').strip()
+    payment_amount_str = request.POST.get('payment_amount', '')
+    # Extra fields per payment method
+    phone_number    = request.POST.get('phone_number', '').strip()
+    bank_name       = request.POST.get('bank_name', '').strip()
+    bank_account_no = request.POST.get('bank_account_no', '').strip()
+    card_holder     = request.POST.get('card_holder', '').strip()
+    card_last4      = request.POST.get('card_last4', '').strip()
+    card_expiry     = request.POST.get('card_expiry', '').strip()
+    card_cvv        = request.POST.get('card_cvv', '').strip()
 
-        # Validate payment amount does not exceed remaining balance
-        remaining_balance = fine.amount - fine.amount_paid
-        if payment_amount > remaining_balance:
-            messages.error(
-                request,
-                f'Payment amount TZS {payment_amount} exceeds remaining balance TZS {remaining_balance}. '
-                f'Please enter correct amount not exceeding TZS {remaining_balance}.'
-            )
-            return render(request, 'circulation/fine_payment.html', {'fine': fine})
+    # Validate payment amount
+    try:
+        payment_amount = Decimal(payment_amount_str) if payment_amount_str else Decimal('0')
+    except (ValueError, TypeError):
+        payment_amount = Decimal('0')
 
-        # Build payment log entry (appended — never overwritten)
-        MOBILE_METHODS = {'mpesa', 'tigopesa', 'airtel_money', 'halopesa'}
-        CARD_METHODS   = {'visa', 'mastercard'}
-        now_str = timezone.now().strftime('%d %b %Y %H:%M')
-        log_entry = f"[{now_str}] {payment_method.upper()} TZS {payment_amount}"
-
-        if payment_method in MOBILE_METHODS and phone_number:
-            log_entry += f" | Phone: {phone_number}"
-        elif payment_method == 'bank_transfer':
-            if bank_name:
-                log_entry += f" | Bank: {bank_name}"
-            if bank_account_no:
-                log_entry += f" | Acct: {bank_account_no}"
-            if receipt_no:
-                log_entry += f" | Ref: {receipt_no}"
-        elif payment_method in CARD_METHODS:
-            if card_holder:
-                log_entry += f" | Name: {card_holder}"
-            if card_last4:
-                log_entry += f" | Card: ****{card_last4}"
-            if card_expiry:
-                log_entry += f" | Exp: {card_expiry}"
-            # CVV not stored for security
-        
-        # Accumulate payment
-        fine.amount_paid += payment_amount
-        fine.payment_method = payment_method
-        fine.paid_at = timezone.now()
-        # Append to log (never overwrite — preserves full payment history)
-        fine.receipt_no = (fine.receipt_no + "\n" + log_entry).strip()
-        
-        # Determine paid status based on actual accumulated amount
-        if fine.amount_paid >= fine.amount:
-            fine.paid = True
-        else:
-            fine.paid = False
-        
-        fine.save()
-        
-        # Determine SMS message based on payment status
-        remaining_balance = fine.remaining_balance
-        book_name = fine.transaction.copy.book.title if fine.transaction else "kitabu"
-        if fine.paid:
-            sms_message = f"Umelipa deni lote la faini ya TZS {fine.amount} kwa kitabu '{book_name}' kwa {payment_method.upper()}. Asante."
-        else:
-            sms_message = f"Umelipa TZS {payment_amount} kwa faini ya TZS {fine.amount} ya kitabu '{book_name}'. Bado unadaiwa TZS {remaining_balance}. karibu tena."
-        
-        # Send SMS notification
-        try:
-            notify_user(fine.user, sms_message, 'sms')
-        except Exception as e:
-            # Log error but don't fail the payment process
-            log_audit(request.user, f"SMS failed for fine {fine.pk}: {str(e)}", request)
-        
-        log_audit(request.user, f"Fine {fine.pk} payment of TZS {payment_amount} by {fine.user.username} via {payment_method}", request)
-        
-        if fine.paid:
-            messages.success(request, f'Full payment recorded: {payment_method.upper()} — TZS {payment_amount}. Fine fully paid!')
-        else:
-            messages.success(request, f'Partial payment: {payment_method.upper()} — TZS {payment_amount} paid. Remaining: TZS {remaining_balance}')
-        
+    if payment_amount <= 0:
+        messages.error(request, 'Payment amount must be greater than 0')
         return redirect('user_fines', user_id=fine.user.pk)
-    return render(request, 'circulation/fine_payment.html', {'fine': fine})
+
+    # Validate payment amount does not exceed remaining balance
+    remaining_balance = fine.amount - fine.amount_paid
+    if payment_amount > remaining_balance:
+        messages.error(
+            request,
+            f'Payment amount TZS {payment_amount} exceeds remaining balance TZS {remaining_balance}. '
+            f'Please enter correct amount not exceeding TZS {remaining_balance}.'
+        )
+        return redirect('user_fines', user_id=fine.user.pk)
+
+    # Build payment log entry (appended — never overwritten)
+    MOBILE_METHODS = {'mpesa', 'tigopesa', 'airtel_money', 'halopesa'}
+    CARD_METHODS   = {'visa', 'mastercard'}
+    now_str = timezone.now().strftime('%d %b %Y %H:%M')
+    log_entry = f"[{now_str}] {payment_method.upper()} TZS {payment_amount}"
+
+    if payment_method in MOBILE_METHODS and phone_number:
+        log_entry += f" | Phone: {phone_number}"
+    elif payment_method == 'bank_transfer':
+        if bank_name:
+            log_entry += f" | Bank: {bank_name}"
+        if bank_account_no:
+            log_entry += f" | Acct: {bank_account_no}"
+        if receipt_no:
+            log_entry += f" | Ref: {receipt_no}"
+    elif payment_method in CARD_METHODS:
+        if card_holder:
+            log_entry += f" | Name: {card_holder}"
+        if card_last4:
+            log_entry += f" | Card: ****{card_last4}"
+        if card_expiry:
+            log_entry += f" | Exp: {card_expiry}"
+        # CVV not stored for security
+
+    # Accumulate payment
+    fine.amount_paid += payment_amount
+    fine.payment_method = payment_method
+    fine.paid_at = timezone.now()
+    # Append to log (never overwrite — preserves full payment history)
+    fine.receipt_no = (fine.receipt_no + "\n" + log_entry).strip()
+
+    # Determine paid status based on actual accumulated amount
+    if fine.amount_paid >= fine.amount:
+        fine.paid = True
+    else:
+        fine.paid = False
+
+    fine.save()
+
+    # Determine SMS message based on payment status
+    remaining_balance = fine.remaining_balance
+    book_name = fine.transaction.copy.book.title if fine.transaction else "kitabu"
+    if fine.paid:
+        sms_message = f"Umelipa deni lote la faini ya TZS {fine.amount} kwa kitabu '{book_name}' kwa {payment_method.upper()}. Asante."
+    else:
+        sms_message = f"Umelipa TZS {payment_amount} kwa faini ya TZS {fine.amount} ya kitabu '{book_name}'. Bado unadaiwa TZS {remaining_balance}. karibu tena."
+
+    # Send SMS notification
+    try:
+        notify_user(fine.user, sms_message, 'sms')
+    except Exception as e:
+        # Log error but don't fail the payment process
+        log_audit(request.user, f"SMS failed for fine {fine.pk}: {str(e)}", request)
+
+    log_audit(request.user, f"Fine {fine.pk} payment of TZS {payment_amount} by {fine.user.username} via {payment_method}", request)
+
+    if fine.paid:
+        messages.success(request, f'Full payment recorded: {payment_method.upper()} — TZS {payment_amount}. Fine fully paid!')
+    else:
+        messages.success(request, f'Partial payment: {payment_method.upper()} — TZS {payment_amount} paid. Remaining: TZS {remaining_balance}')
+
+    return redirect('user_fines', user_id=fine.user.pk)
 
 
 @login_required
@@ -1512,7 +2155,9 @@ def bulk_fine_payment_view(request, user_id):
                 fine.paid = False
             
             fine.payment_method = payment_method
-            fine.receipt_no = full_receipt
+            now_str = timezone.now().strftime('%d %b %Y %H:%M')
+            log_line = f"[{now_str}] {payment_method.upper()} TZS {payment_for_fine} | {full_receipt}"
+            fine.receipt_no = (fine.receipt_no + '\n' + log_line).strip()
             fine.paid_at = timezone.now()
             fine.save()
             
@@ -1555,14 +2200,14 @@ def member_msict_borrowings_view(request):
     """Member view for MSICT borrowings - history, pending, active"""
     user = request.user
 
-    # Active borrowings (borrowed or overdue)
+    # Active borrowings (borrowed, overdue, or lost)
     active_borrows = BorrowingTransaction.objects.filter(
-        user=user, status__in=['borrowed', 'overdue']
+        user=user, status__in=['borrowed', 'overdue', 'lost']
     ).select_related('copy__book').order_by('-borrow_date')
 
-    # Borrow history (returned)
+    # Borrow history (returned or lost)
     borrow_history = BorrowingTransaction.objects.filter(
-        user=user, status='returned'
+        user=user, status__in=['returned', 'lost']
     ).select_related('copy__book').order_by('-return_date')[:50]
 
     # Pending borrow requests
@@ -1716,11 +2361,8 @@ def softcopy_library_view(request):
             user=user, status__in=['borrowed', 'overdue'], copy__copy_type='softcopy'
         ).values_list('copy_id', flat=True)
     )
-    pending_copy_ids = set(
-        BorrowRequest.objects.filter(
-            user=user, status='pending', copy__copy_type='softcopy'
-        ).values_list('copy_id', flat=True)
-    )
+    # Softcopies are auto-issued instantly — no pending BorrowRequest state needed
+    pending_copy_ids = set()
 
     from catalog.models import Category
     categories = Category.objects.all()
@@ -1796,24 +2438,24 @@ def reservation_list_view(request):
 # ── Renew Reservation ────────────────────────────────────────────────────────
 @login_required
 @librarian_required
+@require_POST
 def renew_reservation_view(request, reservation_id):
-    """Librarian renews an expired or pending reservation by resetting expires_at to 14 days from now."""
+    """POST-only — protected by CSRF + librarian role decorator."""
     res = get_object_or_404(Reservation, pk=reservation_id)
-    if request.method == 'POST':
-        reservation_days = int(_pref('RESERVATION_EXPIRY_DAYS', 14))
-        new_expires = timezone.now() + timedelta(days=reservation_days)
-        res.expires_at = new_expires
-        res.status = 'pending'
-        res.save(update_fields=['expires_at', 'status'])
-        renew_msg = (
-            f"MSICT OLMS: Your reservation for '{res.book.title}' has been renewed by the librarian. "
-            f"New expiry date: {new_expires.strftime('%d %b %Y')}. "
-            f"You will be notified when it is your turn."
-        )
-        notify_user(res.user, renew_msg, 'sms')
-        notify_user(res.user, renew_msg, 'email', subject=f'Reservation Renewed — {res.book.title}')
-        log_audit(request.user, f"Renewed reservation #{res.pk} for '{res.book.title}' by {res.user.get_full_name()}", request)
-        messages.success(request, f"Reservation for '{res.book.title}' renewed for 14 more days. Member notified.")
+    reservation_days = int(_pref('RESERVATION_EXPIRY_DAYS', 14))
+    new_expires = timezone.now() + timedelta(days=reservation_days)
+    res.expires_at = new_expires
+    res.status = 'pending'
+    res.save(update_fields=['expires_at', 'status'])
+    renew_msg = (
+        f"MSICT OLMS: Your reservation for '{res.book.title}' has been renewed by the librarian. "
+        f"New expiry date: {new_expires.strftime('%d %b %Y')}. "
+        f"You will be notified when it is your turn."
+    )
+    notify_user(res.user, renew_msg, 'sms')
+    notify_user(res.user, renew_msg, 'email', subject=f'Reservation Renewed — {res.book.title}')
+    log_audit(request.user, f"Renewed reservation #{res.pk} for '{res.book.title}' by {res.user.get_full_name()}", request)
+    messages.success(request, f"Reservation for '{res.book.title}' renewed for 14 more days. Member notified.")
     return redirect('reservation_list')
 
 
@@ -1863,6 +2505,7 @@ def return_history_view(request):
 def all_borrowings_view(request):
     """All borrowing transactions across all statuses with filtering and day calculations."""
     from django.utils import timezone as tz
+    _auto_mark_overdue()  # Catch any borrowed+past-due not yet marked by cron
 
     qs = (
         BorrowingTransaction.objects.all()
@@ -1917,3 +2560,239 @@ def all_borrowings_view(request):
         'tx_fines':          tx_fines,
         'now':               tz.now(),
     })
+
+
+# ── Loss Report Views ─────────────────────────────────────────────────────────
+
+@login_required
+def report_loss_view(request, transaction_id):
+    """Member submits a loss report for one of their active/overdue borrowed books."""
+    tx = get_object_or_404(
+        BorrowingTransaction,
+        pk=transaction_id,
+        user=request.user,
+        status__in=['borrowed', 'overdue'],
+        borrow_type='hardcopy',
+    )
+
+    # Prevent duplicate reports
+    if LossReport.objects.filter(transaction=tx).exists():
+        messages.warning(request, 'A loss report has already been submitted for this book.')
+        return redirect('member_msict_borrowings')
+
+    if request.method == 'POST':
+        description = request.POST.get('description', '').strip()
+        circumstances = request.POST.get('circumstances', '').strip()
+        date_noticed_raw = request.POST.get('date_noticed', '').strip()
+        last_known_location = request.POST.get('last_known_location', '').strip()
+        authority_reported = request.POST.get('authority_reported') == 'on'
+        authority_reference = request.POST.get('authority_reference', '').strip()
+
+        if not description:
+            messages.error(request, 'Please provide a description of how the book was lost.')
+        else:
+            from datetime import date as _date
+            date_noticed = None
+            if date_noticed_raw:
+                try:
+                    date_noticed = _date.fromisoformat(date_noticed_raw)
+                except ValueError:
+                    pass
+            report = LossReport.objects.create(
+                transaction=tx,
+                user=request.user,
+                description=description,
+                circumstances=circumstances,
+                date_noticed=date_noticed,
+                last_known_location=last_known_location,
+                authority_reported=authority_reported,
+                authority_reference=authority_reference,
+            )
+            # Notify librarians
+            from accounts.models import OLMSUser as _User
+            librarians = _User.objects.filter(role__in=['librarian', 'admin'], is_active=True)
+            for lib in librarians:
+                notify_user(
+                    lib,
+                    f"Loss report submitted by {request.user.get_full_name()} ({request.user.army_no}) "
+                    f"for book: '{tx.copy.book.title}' (Acc: {tx.copy.accession_no}). "
+                    f"Please review and confirm.",
+                    'email',
+                    subject='Loss Report – MSICT OLMS',
+                    is_security_alert=False,
+                    message_type='loss_report',
+                )
+            # Notify the member
+            notify_user(
+                request.user,
+                f"MSICT OLMS: Your loss report for '{tx.copy.book.title}' has been submitted. "
+                f"Ref: LR-{report.pk}. A librarian will review it shortly.",
+                'sms',
+                message_type='loss_report',
+            )
+            log_audit(
+                request.user,
+                f"Loss report submitted for '{tx.copy.book.title}' (Acc: {tx.copy.accession_no})",
+                request,
+            )
+            messages.success(request, f'Loss report submitted successfully. Reference: LR-{report.pk}.')
+            return redirect('member_msict_borrowings')
+
+    return render(request, 'circulation/report_loss.html', {'tx': tx})
+
+
+@login_required
+@librarian_required
+def loss_report_list_view(request):
+    """Librarian views all loss reports."""
+    status_filter = request.GET.get('status', '')
+    qs = LossReport.objects.select_related(
+        'user__rank', 'transaction__copy__book', 'reviewed_by', 'loss_fine'
+    )
+    if status_filter:
+        qs = qs.filter(status=status_filter)
+    return render(request, 'circulation/loss_report_list.html', {
+        'reports': qs,
+        'status_filter': status_filter,
+    })
+
+
+@login_required
+@librarian_required
+@require_POST
+def confirm_loss_view(request, report_id):
+    """Librarian confirms loss: marks copy lost, creates a loss fine, updates report status."""
+    report = get_object_or_404(LossReport, pk=report_id, status='pending')
+    action = request.POST.get('action', 'confirm')
+    notes = request.POST.get('librarian_notes', '').strip()
+    copy = report.transaction.copy
+    book = copy.book
+
+    # Use book's lost_fine as default if not provided
+    loss_fine_amount = request.POST.get('loss_fine_amount', '').strip()
+    if loss_fine_amount == '':
+        loss_fine_amount = str(book.lost_fine or 0)
+    loss_fine_amount = Decimal(loss_fine_amount or '0')
+
+    report.reviewed_by = request.user
+    report.reviewed_at = timezone.now()
+    report.librarian_notes = notes
+
+    if action == 'dismiss':
+        report.status = 'dismissed'
+        report.save()
+        notify_user(
+            report.user,
+            f"MSICT OLMS: Your loss report (LR-{report.pk}) for '{report.transaction.copy.book.title}' "
+            f"has been dismissed. Contact the library for more information.",
+            'sms',
+            message_type='loss_report',
+        )
+        messages.info(request, f'Loss report LR-{report.pk} dismissed.')
+        log_audit(request.user, f"Dismissed loss report LR-{report.pk}", request)
+    else:
+        # Mark copy as lost
+        copy.status = 'lost'
+        copy.save(update_fields=['status'])
+
+        # Mark transaction as lost (override overdue status if present)
+        tx = report.transaction
+        if tx.status != 'returned':
+            tx.status = 'lost'
+            tx.save(update_fields=['status'])
+
+        # Create loss fine if amount provided
+        if loss_fine_amount > 0:
+            fine = Fine.objects.create(
+                user=report.user,
+                transaction=tx,
+                amount=loss_fine_amount,
+                reason=f"Lost book fine – '{copy.book.title}' (Acc: {copy.accession_no})",
+                paid=False,
+            )
+            report.loss_fine = fine
+        else:
+            # Check if there's already a loss fine for this transaction (e.g., manually created)
+            existing_loss_fine = Fine.objects.filter(
+                transaction=tx,
+                reason__icontains='loss'
+            ).first()
+            if existing_loss_fine:
+                report.loss_fine = existing_loss_fine
+
+        report.status = 'confirmed'
+        report.save()
+
+        notify_user(
+            report.user,
+            f"MSICT OLMS: LOSS FINE - Loss of '{copy.book.title}' confirmed (LR-{report.pk}). "
+            + (f"A LOSS FINE of TZS {loss_fine_amount} has been raised. Please pay at the library." if loss_fine_amount > 0 else "No fine has been raised."),
+            'sms',
+            message_type='loss_fine' if loss_fine_amount > 0 else 'loss_report',
+        )
+        notify_user(
+            report.user,
+            f"MSICT OLMS: LOSS FINE - Loss confirmed for '{copy.book.title}'. Ref: LR-{report.pk}. "
+            + (f"A LOSS FINE of TZS {loss_fine_amount} has been raised." if loss_fine_amount > 0 else ""),
+            'email',
+            subject='LOSS FINE – Loss Report Confirmed – MSICT OLMS',
+            message_type='loss_fine' if loss_fine_amount > 0 else 'loss_report',
+        )
+        messages.success(
+            request,
+            f'Loss confirmed for LR-{report.pk}. Copy marked lost.'
+            + (f' Fine of TZS {loss_fine_amount} created.' if loss_fine_amount > 0 else ''),
+        )
+        log_audit(request.user, f"Confirmed loss report LR-{report.pk} for '{copy.book.title}'", request)
+
+    return redirect('loss_report_list')
+
+
+@login_required
+@librarian_required
+@require_POST
+def recover_book_view(request, report_id):
+    """Librarian marks a lost book as physically recovered (returned at desk)."""
+    report = get_object_or_404(LossReport, pk=report_id)
+    if report.status not in ('pending', 'confirmed'):
+        messages.warning(request, f'LR-{report.pk} cannot be recovered from status "{report.get_status_display()}".')
+        return redirect('loss_report_list')
+
+    copy = report.transaction.copy
+    tx = report.transaction
+    notes = request.POST.get('recovery_notes', '').strip()
+
+    # Restore copy to available
+    copy.status = 'available'
+    copy.save(update_fields=['status'])
+
+    # Mark transaction returned
+    tx.status = 'returned'
+    tx.return_date = timezone.now()
+    tx.save(update_fields=['status', 'return_date'])
+
+    # If there was a loss fine and it's unpaid, cancel it (waive) unless partially paid
+    if report.loss_fine and not report.loss_fine.paid:
+        if report.loss_fine.amount_paid == 0:
+            report.loss_fine.delete()
+            report.loss_fine = None
+
+    report.status = 'resolved'
+    report.reviewed_by = request.user
+    report.reviewed_at = timezone.now()
+    if notes:
+        report.librarian_notes = (report.librarian_notes + '\n[RECOVERED] ' + notes).strip()
+    else:
+        report.librarian_notes = (report.librarian_notes + '\n[RECOVERED] Book physically returned at desk.').strip()
+    report.save()
+
+    notify_user(
+        report.user,
+        f"MSICT OLMS: Recovery confirmed for '{copy.book.title}' (LR-{report.pk}). "
+        f"Thank you for returning the book. Any applicable fines have been reviewed.",
+        'sms',
+        message_type='loss_report',
+    )
+    log_audit(request.user, f"Book recovered for LR-{report.pk}: '{copy.book.title}'  by {report.user.username}", request)
+    messages.success(request, f"Book '{copy.book.title}' marked as recovered. Copy restored to available.")
+    return redirect('loss_report_list')

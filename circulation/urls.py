@@ -10,7 +10,9 @@ urlpatterns = [
     # ── Dashboard na Orodha ya Mwanachama ────────────────────
     path('member-dashboard/', views.member_dashboard_view, name='member_dashboard'),             # Dashboard ya mwanachama
     path('my-fines/', views.my_fines_view, name='my_fines'),                                    # Faini zangu
+    path('my-loss-reports/', views.my_loss_reports_view, name='my_loss_reports'),                # Ripoti za hasara zangu
     path('my-fines/pay/<int:fine_id>/', views.pay_fine_view, name='pay_fine'),                 # Lipa faini
+    path('loss-report/pay/<int:report_id>/', views.pay_loss_fine_view, name='pay_loss_fine'), # Lipa faini ya hasara
     path('my-borrowings/msict/', views.member_msict_borrowings_view, name='member_msict_borrowings'),  # Mikopo yangu
     path('my-borrowings/ill/', views.member_ill_borrowings_view, name='member_ill_borrowings'),  # Mikopo ya ILL
     path('softcopy-library/', views.softcopy_library_view, name='softcopy_library'),             # Vitabu vya kidijitali nilivyokopa
@@ -22,9 +24,11 @@ urlpatterns = [
     path('borrow/request-softcopy/<int:book_id>/', views.request_borrow_softcopy_view, name='request_borrow_softcopy'), # Auto-pick borrowable softcopy
     path('borrow/download-free/<int:book_id>/', views.download_free_book_view, name='download_free_book'),          # Auto-pick free softcopy
     path('borrow/cancel/<int:request_id>/', views.cancel_borrow_request_view, name='cancel_borrow_request'), # Futa ombi
-    path('borrow/approve/<int:request_id>/', views.approve_borrow_request_view, name='approve_borrow_request'), # Idhinisha ombi
-    path('borrow/reject/<int:request_id>/', views.reject_borrow_request_view, name='reject_borrow_request'),    # Kataa ombi
-    path('requests/', views.all_requests_view, name='all_requests'),                             # Maombi yote (kwa mtunzaji)
+    path('borrow/approve/<int:request_id>/', views.approve_borrow_request_view, name='approve_borrow_request'),
+    path('borrow/reject/<int:request_id>/', views.reject_borrow_request_view, name='reject_borrow_request'),
+    path('borrow/issue/<int:request_id>/', views.issue_copy_view, name='issue_copy'),
+    path('borrow/copy-lookup/', views.copy_lookup_view, name='copy_lookup'),
+    path('requests/', views.all_requests_view, name='all_requests'),
 
     # ── Kurudisha na Kuongeza Muda ──────────────────────────
     path('renew/<int:transaction_id>/', views.renew_transaction_view, name='renew_transaction'), # Ongeza muda wa mkopo
@@ -45,6 +49,7 @@ urlpatterns = [
     path('overdue/', views.overdue_list_view, name='overdue_list'),                              # Vitabu vilivyopita tarehe
     path('fines/', views.fine_list_view, name='fine_list'),                                      # Orodha ya faini
     path('fines/<int:fine_id>/pay/', views.record_fine_payment_view, name='record_fine_payment'), # Rekodi malipo ya faini
+    path('loss-reports/<int:report_id>/pay/', views.record_loss_fine_payment_view, name='record_loss_fine_payment'), # Rekodi malipo ya faini ya hasara
     path('fines/users/', views.users_with_unpaid_fines_view, name='users_with_fines'),           # Watumiaji wanaodaiwa
     path('fines/user/<int:user_id>/', views.user_fines_view, name='user_fines'),                 # Faini za mtumiaji mahususi
     path('fines/user/<int:user_id>/bulk-pay/', views.bulk_fine_payment_view, name='bulk_fine_payment'),  # Malipo ya pamoja
@@ -52,4 +57,10 @@ urlpatterns = [
     # ── Historia ya Kurudisha na Mikopo Yote ───────────────
     path('return-history/', views.return_history_view, name='return_history'),   # Historia ya vitabu vilivyorudishwa
     path('borrowings/', views.all_borrowings_view, name='all_borrowings'),       # Orodha yote ya mikopo
+
+    # ── Loss Reports ────────────────────────────────────
+    path('loss/report/<int:transaction_id>/', views.report_loss_view, name='report_loss'),        # Member: submit loss report
+    path('loss/reports/', views.loss_report_list_view, name='loss_report_list'),                  # Librarian: view all loss reports
+    path('loss/confirm/<int:report_id>/', views.confirm_loss_view, name='confirm_loss'),          # Librarian: confirm or dismiss
+    path('loss/recover/<int:report_id>/', views.recover_book_view, name='recover_book'),          # Librarian: mark book recovered
 ]

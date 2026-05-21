@@ -46,6 +46,7 @@
             <div class="small text-muted">Member</div>
             <div class="fw-semibold">{{ fine.user.get_full_name }}</div>
             <div class="small text-muted">{{ fine.user.army_no }}</div>
+            {% if fine.user.rank %}<div class="small badge bg-dark">{{ fine.user.rank.rank_name }}</div>{% endif %}
           </div>
           <div class="col-4">
             <div class="small text-muted">Total Fine</div>

@@ -595,7 +595,7 @@
 <!-- Quick Search -->
 <div class="card p-4 mb-4" style="border-top:4px solid var(--accent)">
   <h5 class="fw-bold mb-3"><i class="bi bi-search"></i> Search the Catalog</h5>
-  <form action="{% url 'catalog_search' %}" method="get" class="row g-2" id="homeSearchForm" autocomplete="off">
+  <form action="{% url 'catalog_search' %}" method="get" class="row g-2" id="homeSearchForm" autocomplete="off" data-no-auto-submit>
     <div class="col-md-9 position-relative">
       <input type="text" name="q" id="homeSearchInput"
              class="form-control form-control-lg"
@@ -626,41 +626,85 @@
 </div>
 {% endif %}
 
-<!-- Stats Banner -->
-<div class="row g-3 mb-4">
-  <div class="col-6 col-md-3">
+<!-- Stats Banner - Circular Style -->
+<div class="row g-1 mb-4">
+  <div class="col-md-3">
     <a href="{% url 'catalog_search' %}" class="text-decoration-none">
-    <div class="stat-card blue p-3 text-center" style="cursor:pointer;transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,.12)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-      <div class="stat-icon mx-auto"><i class="bi bi-book-fill"></i></div>
-      <div class="stat-value" style="color:#0f156a;font-weight:700">{{ total_books_count }}</div>
-      <div class="stat-label">Books in Catalog</div>
+    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(13, 110, 253, 0.35);"></div>
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
+        <div class="text-center position-relative z-1">
+          <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ total_books_count }}</div>
+        </div>
+      </div>
+      <div class="text-center mt-2">
+        <div class="fw-semibold small">Books in Catalog</div>
+      </div>
     </div>
     </a>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-2">
     <a href="{% url 'catalog_search' %}?copy_type=softcopy" class="text-decoration-none">
-    <div class="stat-card green p-3 text-center" style="cursor:pointer;transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,.12)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-      <div class="stat-icon mx-auto"><i class="bi bi-file-pdf-fill"></i></div>
-      <div class="stat-value" style="color:#059669">Free</div>
-      <div class="stat-label">Soft Copies</div>
+    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#198754 0% 100%, rgba(25, 135, 84, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(25, 135, 84, 0.35);"></div>
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
+        <div class="text-center position-relative z-1">
+          <div class="fs-3 fw-bold" style="color: #198754;">{{ softcopy_count }}</div>
+        </div>
+      </div>
+      <div class="text-center mt-2">
+        <div class="fw-semibold small">Softcopies</div>
+      </div>
     </div>
     </a>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-2">
+    <a href="{% url 'catalog_search' %}?copy_type=hardcopy" class="text-decoration-none">
+    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#7c3aed 0% 100%, rgba(124, 58, 237, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);"></div>
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
+        <div class="text-center position-relative z-1">
+          <div class="fs-3 fw-bold" style="color: #7c3aed;">{{ hardcopy_count }}</div>
+        </div>
+      </div>
+      <div class="text-center mt-2">
+        <div class="fw-semibold small">Hardcopies</div>
+      </div>
+    </div>
+    </a>
+  </div>
+  <div class="col-2">
     <a href="{% url 'catalog_search' %}?has_course=1" class="text-decoration-none">
-    <div class="stat-card amber p-3 text-center" style="cursor:pointer;transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,.12)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-      <div class="stat-icon mx-auto"><i class="bi bi-mortarboard-fill"></i></div>
-      <div class="stat-value" style="color:#d97706">Course</div>
-      <div class="stat-label">Based Books</div>
+    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#d97706 0% 100%, rgba(217, 119, 6, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(217, 119, 6, 0.35);"></div>
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
+        <div class="text-center position-relative z-1">
+          <div class="fs-3 fw-bold" style="color: #d97706;">Course</div>
+        </div>
+      </div>
+      <div class="text-center mt-2">
+        <div class="fw-semibold small">Related Books</div>
+      </div>
     </div>
     </a>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-2">
     <a href="{% url 'catalog_search' %}#federated-section" class="text-decoration-none">
-    <div class="stat-card teal p-3 text-center" style="cursor:pointer;transition:transform .15s,box-shadow .15s;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 6px 20px rgba(0,0,0,.12)'" onmouseout="this.style.transform='';this.style.boxShadow=''">
-      <div class="stat-icon mx-auto"><i class="bi bi-globe2"></i></div>
-      <div class="stat-value" style="color:#0891b2">Federated</div>
-      <div class="stat-label">Search</div>
+    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#0891b2 0% 100%, rgba(8, 145, 178, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(8, 145, 178, 0.35);"></div>
+        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
+        <div class="text-center position-relative z-1">
+          <div class="fs-3 fw-bold" style="color: #0891b2;">Fed</div>
+        </div>
+      </div>
+      <div class="text-center mt-2">
+        <div class="fw-semibold small">Federated Search</div>
+      </div>
     </div>
     </a>
   </div>
@@ -839,6 +883,71 @@
 </div>
 {% endif %}
 
+<!-- Editable Footer -->
+{% if footer %}
+<footer class="bg-dark text-white mt-5 py-4">
+  <div class="container">
+    <div class="row g-4">
+      <!-- Contact Info -->
+      <div class="col-md-4">
+        <h6 class="fw-bold mb-3">{{ footer.school_name }}</h6>
+        {% if footer.address %}
+        <p class="small mb-2"><i class="bi bi-geo-alt"></i> {{ footer.address }}</p>
+        {% endif %}
+        {% if footer.phone %}
+        <p class="small mb-2"><i class="bi bi-telephone"></i> {{ footer.phone }}</p>
+        {% endif %}
+        {% if footer.email %}
+        <p class="small mb-2"><i class="bi bi-envelope"></i> {{ footer.email }}</p>
+        {% endif %}
+        {% if footer.location %}
+        <p class="small mb-0"><i class="bi bi-geo"></i> {{ footer.location }}</p>
+        {% endif %}
+      </div>
+      
+      <!-- Quick Links -->
+      <div class="col-md-4">
+        <h6 class="fw-bold mb-3">Quick Links</h6>
+        <ul class="list-unstyled small">
+          {% if footer.faq_link %}
+          <li class="mb-2"><a href="{{ footer.faq_link }}" class="text-white text-decoration-none"><i class="bi bi-question-circle"></i> FAQ</a></li>
+          {% endif %}
+          {% for link in footer.additional_links_parsed %}
+          <li class="mb-2"><a href="{{ link.url }}" class="text-white text-decoration-none"><i class="bi bi-link-45deg"></i> {{ link.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      
+      <!-- Social Media -->
+      <div class="col-md-4">
+        <h6 class="fw-bold mb-3">Connect With Us</h6>
+        <div class="d-flex gap-3">
+          {% if footer.social_facebook %}
+          <a href="{{ footer.social_facebook }}" target="_blank" class="text-white fs-5"><i class="bi bi-facebook"></i></a>
+          {% endif %}
+          {% if footer.social_twitter %}
+          <a href="{{ footer.social_twitter }}" target="_blank" class="text-white fs-5"><i class="bi bi-twitter-x"></i></a>
+          {% endif %}
+          {% if footer.social_linkedin %}
+          <a href="{{ footer.social_linkedin }}" target="_blank" class="text-white fs-5"><i class="bi bi-linkedin"></i></a>
+          {% endif %}
+          {% if footer.social_instagram %}
+          <a href="{{ footer.social_instagram }}" target="_blank" class="text-white fs-5"><i class="bi bi-instagram"></i></a>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    
+    <hr class="my-4 border-secondary">
+    
+    <!-- Copyright -->
+    <div class="text-center small text-muted">
+      {{ footer.copyright_text }}
+    </div>
+  </div>
+</footer>
+{% endif %}
+
 </div>{# /home-content-wrapper #}
 {% endblock %}
 
@@ -854,8 +963,10 @@
     if (!input) return;
 
     function show(html) {
-      dropdown.innerHTML = html;
-      dropdown.style.display = 'block';
+      requestAnimationFrame(function() {
+        dropdown.innerHTML = html;
+        dropdown.style.display = 'block';
+      });
     }
     function hide() {
       dropdown.style.display = 'none';

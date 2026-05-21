@@ -1,22 +1,48 @@
 {% extends 'base.html' %}
 {% block title %}Admin Dashboard{% endblock %}
 {% block content %}
-<h4 class="fw-bold mb-4"><i class="bi bi-speedometer2"></i> Admin Dashboard</h4>
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-4">
+      <div class="position-relative">
+        {% if user.photo %}
+        <img src="{{ user.photo.url }}" alt="" class="rounded-circle" style="width: 80px; height: 80px; object-fit: cover; border: 3px solid var(--primary);">
+        {% else %}
+        <div class="bg-danger bg-opacity-10 text-danger rounded-circle d-flex align-items-center justify-content-center" style="width: 80px; height: 80px; font-size: 2rem; font-weight: bold; border: 3px solid var(--primary);">
+          {{ user.get_full_name|slice:":1"|upper }}
+        </div>
+        {% endif %}
+      </div>
+      <div class="flex-grow-1">
+        <h4 class="fw-bold mb-1">Welcome back, {{ user.get_full_name }}</h4>
+        <p class="text-muted small mb-2">{{ user.email }}</p>
+        <div class="d-flex gap-2">
+          <span class="badge bg-danger"><i class="bi bi-shield-lock me-1"></i>Admin</span>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{% url 'user_list' %}" class="btn btn-primary">
+          <i class="bi bi-people me-1"></i> Manage Users
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
 
 {% if security_alerts %}
-<div class="card card-alert border-danger border-2 shadow-sm mb-4">
-  <div class="card-body py-2 px-3">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-      <h6 class="fw-bold mb-0" style="color:#991b1b"><i class="bi bi-shield-exclamation"></i> Recent Security Alerts</h6>
+<div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-bold mb-0 text-danger"><i class="bi bi-shield-exclamation me-2"></i>Recent Security Alerts</h6>
       <div class="d-flex align-items-center gap-2">
-        <small class="fw-semibold" style="color:#7f1d1d">{{ security_alerts|length }} alert(s)</small>
-        <a href="{% url 'security_alerts' %}" class="btn btn-sm btn-outline-danger py-0">View All</a>
+        <span class="badge bg-danger">{{ security_alerts|length }} alert(s)</span>
+        <a href="{% url 'security_alerts' %}" class="btn btn-sm btn-outline-danger">View All</a>
       </div>
     </div>
     <ul class="mb-0 list-unstyled">
       {% for alert in security_alerts %}
-      <li class="d-flex justify-content-between align-items-start py-1 border-bottom" style="border-color:#fca5a5 !important">
-        <span style="color:#7f1d1d; font-size:.82rem"><strong style="color:#991b1b">{{ alert.created_at|date:"M d, H:i" }}:</strong> {{ alert.message }}</span>
+      <li class="d-flex justify-content-between align-items-start py-2 border-bottom">
+        <span class="text-danger small">{{ alert.created_at|date:"M d, H:i" }}: {{ alert.message }}</span>
         <form method="post" action="{% url 'delete_security_alert' alert.pk %}" class="ms-2 flex-shrink-0">
           {% csrf_token %}
           <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Dismiss alert"
@@ -31,139 +57,404 @@
 </div>
 {% endif %}
 
+<!-- Users by Role Stats -->
 <div class="row g-3 mb-4">
   <div class="col-md-3">
-    <div class="card stat-card p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Total Users</span><i class="bi bi-people fs-4 text-primary"></i></div>
-      <div class="fs-2 fw-bold text-body-emphasis">{{ total_users }}</div>
-      <div class="small fw-medium text-success">{{ active_users }} active</div>
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          {% for role_stat in users_by_role %}
+            {% if role_stat.role == 'librarian' %}
+              {% widthratio role_stat.count total_users 100 as librarian_pct %}
+              <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#0dcaf0 0% {{ librarian_pct }}%, rgba(13, 202, 240, 0.1) {{ librarian_pct }}% 100%); box-shadow: 0 8px 20px rgba(13, 202, 240, 0.4);"></div>
+                <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+                <div class="text-center position-relative z-1">
+                  <div class="fs-3 fw-bold" style="color: #0dcaf0;">{{ role_stat.count }}</div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Librarians</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card danger p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Locked Accounts</span><i class="bi bi-lock-fill fs-4 text-danger"></i></div>
-      <div class="fs-2 fw-bold text-danger">{{ locked_users }}</div>
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          {% for role_stat in users_by_role %}
+            {% if role_stat.role == 'member' %}
+              {% widthratio role_stat.count total_users 100 as member_pct %}
+              <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#198754 0% {{ member_pct }}%, rgba(25, 135, 84, 0.1) {{ member_pct }}% 100%); box-shadow: 0 8px 20px rgba(25, 135, 84, 0.4);"></div>
+                <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+                <div class="text-center position-relative z-1">
+                  <div class="fs-3 fw-bold" style="color: #198754;">{{ role_stat.count }}</div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Members</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card warning p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Active Borrows</span><i class="bi bi-book-fill fs-4 text-warning"></i></div>
-      <div class="fs-2 fw-bold text-body-emphasis">{{ total_borrows }}</div>
-      <div class="small fw-medium text-danger">{{ overdue_count }} overdue</div>
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          {% for role_stat in users_by_role %}
+            {% if role_stat.role == 'admin' %}
+              {% widthratio role_stat.count total_users 100 as admin_pct %}
+              <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+                <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#dc3545 0% {{ admin_pct }}%, rgba(220, 53, 69, 0.1) {{ admin_pct }}% 100%); box-shadow: 0 8px 20px rgba(220, 53, 69, 0.4);"></div>
+                <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+                <div class="text-center position-relative z-1">
+                  <div class="fs-3 fw-bold" style="color: #dc3545;">{{ role_stat.count }}</div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Admins</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-md-3">
-    <div class="card stat-card p-3">
-      <div class="d-flex justify-content-between"><span class="small fw-semibold text-body-secondary">Unpaid Fines</span><i class="bi bi-cash-coin fs-4 text-success"></i></div>
-      <div class="fs-2 fw-bold text-body-emphasis">TZS {{ unpaid_fines|floatformat:2 }}</div>
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+            <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 8px 20px rgba(13, 110, 253, 0.4);"></div>
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ total_users }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Total Users</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          {% widthratio active_users total_users 100 as active_pct %}
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+            <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#0d6efd 0% {{ active_pct }}%, rgba(13, 110, 253, 0.1) {{ active_pct }}% 100%); box-shadow: 0 8px 20px rgba(13, 110, 253, 0.4);"></div>
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-4 fw-bold" style="color: #0d6efd;">{{ active_users }}/{{ total_users }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Active Users</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          {% widthratio locked_users total_users 100 as locked_pct %}
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+            <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#dc3545 0% {{ locked_pct }}%, rgba(220, 53, 69, 0.1) {{ locked_pct }}% 100%); box-shadow: 0 8px 20px rgba(220, 53, 69, 0.4);"></div>
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-4 fw-bold" style="color: #dc3545;">{{ locked_users }}/{{ total_users }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Locked Accounts</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          {% if total_borrows > 0 %}
+            {% widthratio overdue_count total_borrows 100 as overdue_pct %}
+          {% else %}
+            {% with overdue_pct=0 %}{% endwith %}
+          {% endif %}
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+            <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#ffc107 0% {{ overdue_pct|default:0 }}%, rgba(255, 193, 7, 0.1) {{ overdue_pct|default:0 }}% 100%); box-shadow: 0 8px 20px rgba(255, 193, 7, 0.4);"></div>
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-4 fw-bold" style="color: #ffc107;">{{ overdue_count }}/{{ total_borrows }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Overdue Rate</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card stat-card h-100 border-0 shadow-sm">
+      <div class="card-body p-3">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 100px; height: 100px;">
+            <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#7c3aed 0% 100%, rgba(124, 58, 237, 0.1) 100% 100%); box-shadow: 0 8px 20px rgba(124, 58, 237, 0.4);"></div>
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: white; box-shadow: inset 0 2px 10px rgba(0,0,0,0.1);"></div>
+            <div class="text-center position-relative z-1">
+              <div class="fs-4 fw-bold" style="color: #7c3aed;">TZS {{ unpaid_fines|floatformat:0 }}</div>
+            </div>
+          </div>
+          <div class="text-center mt-2">
+            <div class="fw-semibold small">Unpaid Fines</div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="row g-3 mb-4">
   <div class="col-md-6">
-    <div class="card p-3 h-100">
-      <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-pie-chart-fill text-primary"></i> Users by Role</h6>
-      <ul class="list-group list-group-flush">
-        {% for ur in users_by_role %}
-        <li class="list-group-item d-flex justify-content-between align-items-center">
-          {{ ur.role|title }}
-          <span class="badge bg-primary rounded-pill">{{ ur.count }}</span>
-        </li>
-        {% endfor %}
-      </ul>
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill me-2 text-primary"></i>Users by Role</h6>
+        <div class="d-flex flex-wrap gap-2">
+          {% for ur in users_by_role %}
+          <div class="flex-grow-1 text-center p-3 rounded" style="background: #f8fafc; flex-basis: 45%;">
+            <div class="fs-3 fw-bold text-primary">{{ ur.count }}</div>
+            <div class="small text-muted">{{ ur.role|title }}</div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
     </div>
   </div>
   <div class="col-md-6">
-    <div class="card p-3 h-100">
-      <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-bar-chart-fill text-primary"></i> Most Borrowed Books</h6>
-      <ol class="list-group list-group-numbered list-group-flush">
-        {% for b in most_borrowed %}
-        <li class="list-group-item d-flex justify-content-between align-items-start">
-          <div class="ms-2 me-auto">
-            <div class="fw-bold text-truncate" style="max-width:250px;" title="{{ b.copy__book__title }}">{{ b.copy__book__title }}</div>
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Most Borrowed Books</h6>
+        <ol class="list-group list-group-numbered list-group-flush">
+          {% for b in most_borrowed %}
+          <li class="list-group-item d-flex justify-content-between align-items-start">
+            <div class="ms-2 me-auto">
+              <div class="fw-bold text-truncate" style="max-width:250px;" title="{{ b.copy__book__title }}">{{ b.copy__book__title }}</div>
+            </div>
+            <span class="badge bg-primary rounded-pill">{{ b.total }}</span>
+          </li>
+          {% empty %}
+          <p class="text-muted small">No borrowing data yet.</p>
+          {% endfor %}
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Analytics Section -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-bar-chart-fill me-2 text-primary"></i>Library Analytics</h6>
+
+    <!-- Monthly Borrowing Stats -->
+    <div class="mb-4">
+      <h6 class="small fw-semibold mb-2 text-muted">Monthly Borrowing Activity</h6>
+      <div class="progress-stacked" style="height: 30px; background: #f8fafc; border-radius: 8px; overflow: hidden;">
+        {% if monthly_borrows %}
+          {% for month, data in monthly_borrows.items %}
+            <div class="progress" style="width: {{ data.percentage }}%; background: linear-gradient(90deg, #3b82f6, #8b5cf6);" title="{{ month }}: {{ data.count }}">
+              <span class="small text-white" style="font-size: 0.7rem;">{{ data.count }}</span>
+            </div>
+          {% endfor %}
+        {% else %}
+          <div class="progress" style="width: 100%; background: #e2e8f0;">
+            <span class="small text-muted">No data available</span>
           </div>
-          <span class="badge bg-secondary rounded-pill">{{ b.total }}</span>
-        </li>
-        {% empty %}
-        <p class="text-muted small">No borrowing data yet.</p>
+        {% endif %}
+      </div>
+      <div class="d-flex flex-wrap gap-2 mt-2">
+        {% for month, data in monthly_borrows.items %}
+        <span class="badge bg-light text-dark">{{ month }}: {{ data.count }}</span>
         {% endfor %}
-      </ol>
+      </div>
+    </div>
+
+    <!-- Category Distribution -->
+    {% if category_stats %}
+    <div class="mb-4">
+      <h6 class="small fw-semibold mb-2 text-muted">Books by Category</h6>
+      <div class="d-flex flex-wrap gap-2">
+        {% for stat in category_stats %}
+        <div class="flex-grow-1" style="flex-basis: 45%; min-width: 120px;">
+          <div class="d-flex justify-content-between small mb-1">
+            <span>{{ stat.category__name|default:"Uncategorized" }}</span>
+            <span class="fw-bold">{{ stat.count }}</span>
+          </div>
+          <div class="progress" style="height: 8px;">
+            <div class="progress-bar" style="width: {{ stat.percentage }}%; background: linear-gradient(90deg, #10b981, #059669);"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Copy Type Distribution -->
+    {% if copy_type_stats %}
+    <div>
+      <h6 class="small fw-semibold mb-2 text-muted">Copy Type Distribution</h6>
+      <div class="d-flex gap-3">
+        {% for stat in copy_type_stats %}
+        <div class="flex-grow-1 text-center p-2 rounded" style="background: #f8fafc;">
+          <div class="fs-4 fw-bold text-primary">{{ stat.count }}</div>
+          <div class="small text-muted">{{ stat.copy_type|title }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Quick Links Section -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body p-4">
+    <h6 class="fw-bold mb-3"><i class="bi bi-link-45deg me-2 text-primary"></i>Quick Links</h6>
+    <div class="row g-2">
+      <div class="col-6">
+        <a href="{% url 'user_list' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-people me-2"></i> User Management
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'book_list' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-book me-2"></i> Book Catalog
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'security_alerts' %}" class="btn btn-outline-danger w-100 text-start">
+          <i class="bi bi-shield-exclamation me-2"></i> Security Alerts
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'audit_logs' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-journal-text me-2"></i> Audit Logs
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'suspended_members' %}" class="btn btn-outline-warning w-100 text-start">
+          <i class="bi bi-person-slash me-2"></i> Suspended Members
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'suspicious_activity' %}" class="btn btn-outline-danger w-100 text-start">
+          <i class="bi bi-exclamation-triangle me-2"></i> Suspicious Activity
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'copy_list' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-collection me-2"></i> Copy Management
+        </a>
+      </div>
+      <div class="col-6">
+        <a href="{% url 'category_list' %}" class="btn btn-outline-primary w-100 text-start">
+          <i class="bi bi-tags me-2"></i> Categories
+        </a>
+      </div>
     </div>
   </div>
 </div>
 
 {% if recent_suspended %}
-<div class="card mt-3 p-3 border-warning border-2">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="fw-bold mb-0 text-warning"><i class="bi bi-person-slash"></i> Recently Suspended Members</h6>
-    <a href="{% url 'suspended_members' %}" class="btn btn-sm btn-outline-warning py-0">View All</a>
-  </div>
-  <div class="table-responsive">
-    <table class="table table-sm table-hover mb-0 border">
-      <thead class="table-light">
-        <tr><th>Username</th><th>Full Name</th><th>Card No</th><th>Type</th><th>Email</th><th>Action</th></tr>
-      </thead>
-      <tbody>
-        {% for u in recent_suspended %}
-        <tr>
-          <td><a href="{% url 'user_detail' u.pk %}" class="fw-bold text-decoration-none"><code>{{ u.username }}</code></a></td>
-          <td><small>{{ u.get_full_name }}</small></td>
-          <td><code class="text-primary">{{ u.virtual_card.short_card_no|default:"—" }}</code></td>
-          <td>
-            {% if u.member_type == 'student' %}<span class="badge bg-primary"><i class="bi bi-mortarboard"></i> Student</span>
-            {% elif u.member_type == 'lecturer' %}<span class="badge bg-info text-dark"><i class="bi bi-person-workspace"></i> Instructor</span>
-            {% elif u.member_type == 'staff' %}<span class="badge bg-secondary"><i class="bi bi-briefcase"></i> Staff</span>
-            {% else %}<span class="text-muted">—</span>{% endif %}
-          </td>
-          <td><small class="text-muted">{{ u.email }}</small></td>
-          <td>
-            <a href="{% url 'unlock_account' u.pk %}" class="btn btn-sm btn-outline-success py-0 px-2"
-               onclick="return confirm('Unlock {{ u.username }}?')" title="Unlock">
-              <i class="bi bi-unlock-fill"></i>
-            </a>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+<div class="card border-0 shadow-sm mb-4 border-start border-4 border-warning">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-bold mb-0"><i class="bi bi-person-slash me-2 text-warning"></i>Recently Suspended Members</h6>
+      <a href="{% url 'suspended_members' %}" class="btn btn-sm btn-outline-warning">View All</a>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr><th class="small text-muted">Username</th><th class="small text-muted">Full Name</th><th class="small text-muted">Card No</th><th class="small text-muted">Type</th><th class="small text-muted">Email</th><th class="small text-muted text-end">Action</th></tr>
+        </thead>
+        <tbody>
+          {% for u in recent_suspended %}
+          <tr>
+            <td><a href="{% url 'user_detail' u.pk %}" class="fw-bold text-decoration-none"><code>{{ u.username }}</code></a></td>
+            <td><small>{{ u.get_full_name }}</small></td>
+            <td><code class="text-primary">{{ u.virtual_card.short_card_no|default:"—" }}</code></td>
+            <td>
+              {% if u.member_type == 'student' %}<span class="badge bg-primary"><i class="bi bi-mortarboard"></i> Student</span>
+              {% elif u.member_type == 'lecturer' %}<span class="badge bg-info text-dark"><i class="bi bi-person-workspace"></i> Instructor</span>
+              {% elif u.member_type == 'staff' %}<span class="badge bg-secondary"><i class="bi bi-briefcase"></i> Staff</span>
+              {% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
+            <td><small class="text-muted">{{ u.email }}</small></td>
+            <td class="text-end">
+              <a href="{% url 'unlock_account' u.pk %}" class="btn btn-sm btn-success"
+                 onclick="return confirm('Unlock {{ u.username }}?')" title="Unlock">
+                <i class="bi bi-unlock-fill"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endif %}
 
-<div class="card mt-3 p-3">
-  <div class="d-flex justify-content-between align-items-center mb-2">
-    <h6 class="fw-bold mb-0 text-body-emphasis"><i class="bi bi-journal-text"></i> Recent Audit Log</h6>
-    <div class="d-flex gap-2">
-      <a href="{% url 'audit_logs' %}" class="btn btn-sm btn-outline-primary py-0">View All</a>
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-bold mb-0"><i class="bi bi-journal-text me-2 text-primary"></i>Recent Audit Log</h6>
+      <a href="{% url 'audit_logs' %}" class="btn btn-sm btn-outline-primary">View All</a>
     </div>
-  </div>
-  <div class="table-responsive" style="max-height:280px;overflow-y:auto">
-    <table class="table table-sm table-hover mb-0 border">
-      <thead class="table-light"><tr><th>User</th><th>Action</th><th>IP</th><th>Time</th><th></th></tr></thead>
-      <tbody>
-        {% for log in recent_logs %}
-        <tr>
-          <td><span class="badge bg-secondary">{{ log.user.username|default:"system" }}</span></td>
-          <td><small>{{ log.action|truncatechars:80 }}</small></td>
-          <td><small class="text-muted"><code>{{ log.ip_address|default:"-" }}</code></small></td>
-          <td><small class="text-muted">{{ log.timestamp|timesince }} ago</small></td>
-          <td>
-            <form method="post" action="{% url 'delete_audit_log' log.pk %}">
-              {% csrf_token %}
-              <input type="hidden" name="next" value="admin_dashboard">
-              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete"
-                onclick="return confirm('Delete this log entry?')">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5" class="text-muted small text-center">No logs found.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-responsive" style="max-height:280px;overflow-y:auto">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light"><tr><th class="small text-muted">User</th><th class="small text-muted">Action</th><th class="small text-muted">IP</th><th class="small text-muted">Time</th><th class="small text-muted text-end"></th></tr></thead>
+        <tbody>
+          {% for log in recent_logs %}
+          <tr>
+            <td><span class="badge bg-secondary">{{ log.user.username|default:"system" }}</span></td>
+            <td><small>{{ log.action|truncatechars:80 }}</small></td>
+            <td><small class="text-muted"><code>{{ log.ip_address|default:"-" }}</code></small></td>
+            <td><small class="text-muted">{{ log.timestamp|timesince }} ago</small></td>
+            <td class="text-end">
+              <form method="post" action="{% url 'delete_audit_log' log.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="admin_dashboard">
+                <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="Delete"
+                  onclick="return confirm('Delete this log entry?')">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="text-muted small text-center">No logs found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 {% endblock %}

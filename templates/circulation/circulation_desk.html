@@ -4,52 +4,112 @@
 <h4 class="fw-bold mb-4"><i class="bi bi-building"></i> Circulation Desk</h4>
 <div class="row g-3">
   <div class="col-md-4">
-    <div class="card p-3 text-center h-100">
-      <i class="bi bi-plus-circle-fill fs-1 text-primary mb-2"></i>
-      <h6 class="fw-bold">Process Borrow Requests</h6>
-      <p class="text-muted small">Review and approve pending borrow requests from members.</p>
-      <a href="{% url 'all_requests' %}?status=pending" class="btn btn-msict mt-auto">Go to Requests</a>
-    </div>
+    <a href="{% url 'all_requests' %}?status=pending" class="text-decoration-none">
+      <div class="card p-3 text-center h-100 border-0 shadow-sm">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(13, 110, 253, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <i class="bi bi-plus-circle-fill fs-2 text-primary position-relative z-1"></i>
+          </div>
+          <div class="text-center mt-2">
+            <h6 class="fw-bold mb-1">Process Borrow Requests</h6>
+            <p class="text-muted small mb-2">Review and approve pending borrow requests from members.</p>
+            <span class="badge bg-primary">Go to Requests</span>
+          </div>
+        </div>
+      </div>
+    </a>
   </div>
   <div class="col-md-4">
-    <div class="card p-3 text-center h-100">
-      <i class="bi bi-arrow-return-left fs-1 text-success mb-2"></i>
-      <h6 class="fw-bold">Return Desk</h6>
-      <p class="text-muted small">Scan barcode to process hardcopy book returns and calculate fines.</p>
-      <a href="{% url 'return_desk' %}" class="btn btn-success mt-auto">Open Return Desk</a>
-    </div>
+    <a href="{% url 'return_desk' %}" class="text-decoration-none">
+      <div class="card p-3 text-center h-100 border-0 shadow-sm">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#198754 0% 100%, rgba(25, 135, 84, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(25, 135, 84, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <i class="bi bi-arrow-return-left fs-2 text-success position-relative z-1"></i>
+          </div>
+          <div class="text-center mt-2">
+            <h6 class="fw-bold mb-1">Return Desk</h6>
+            <p class="text-muted small mb-2">Scan barcode to process hardcopy book returns and calculate fines.</p>
+            <span class="badge bg-success">Open Return Desk</span>
+          </div>
+        </div>
+      </div>
+    </a>
   </div>
   <div class="col-md-4">
-    <div class="card p-3 text-center h-100">
-      <i class="bi bi-cash-coin fs-1 text-danger mb-2"></i>
-      <h6 class="fw-bold">Fine Collection (POS)</h6>
-      <p class="text-muted small">Record fine payments and print receipts for members.</p>
-      <a href="{% url 'fine_list' %}" class="btn btn-danger mt-auto">Open POS</a>
-    </div>
+    <a href="{% url 'fine_list' %}" class="text-decoration-none">
+      <div class="card p-3 text-center h-100 border-0 shadow-sm">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#dc3545 0% 100%, rgba(220, 53, 69, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(220, 53, 69, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <i class="bi bi-cash-coin fs-2 text-danger position-relative z-1"></i>
+          </div>
+          <div class="text-center mt-2">
+            <h6 class="fw-bold mb-1">Fine Collection (POS)</h6>
+            <p class="text-muted small mb-2">Record fine payments and print receipts for members.</p>
+            <span class="badge bg-danger">Open POS</span>
+          </div>
+        </div>
+      </div>
+    </a>
   </div>
   <div class="col-md-4">
-    <div class="card p-3 text-center h-100">
-      <i class="bi bi-exclamation-triangle-fill fs-1 text-warning mb-2"></i>
-      <h6 class="fw-bold">Overdue Management</h6>
-      <p class="text-muted small">View and manage overdue borrowing transactions.</p>
-      <a href="{% url 'overdue_list' %}" class="btn btn-warning mt-auto">View Overdue</a>
-    </div>
+    <a href="{% url 'overdue_list' %}" class="text-decoration-none">
+      <div class="card p-3 text-center h-100 border-0 shadow-sm">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#ffc107 0% 100%, rgba(255, 193, 7, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(255, 193, 7, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <i class="bi bi-exclamation-triangle-fill fs-2 text-warning position-relative z-1"></i>
+          </div>
+          <div class="text-center mt-2">
+            <h6 class="fw-bold mb-1">Overdue Management</h6>
+            <p class="text-muted small mb-2">View and manage overdue borrowing transactions.</p>
+            <span class="badge bg-warning text-dark">View Overdue</span>
+          </div>
+        </div>
+      </div>
+    </a>
   </div>
   <div class="col-md-4">
-    <div class="card p-3 text-center h-100">
-      <i class="bi bi-people-fill fs-1 text-info mb-2"></i>
-      <h6 class="fw-bold">Member Management</h6>
-      <p class="text-muted small">Add, edit members and reset passwords.</p>
-      <a href="{% url 'user_list' %}" class="btn btn-info text-white mt-auto">Manage Members</a>
-    </div>
+    <a href="{% url 'user_list' %}" class="text-decoration-none">
+      <div class="card p-3 text-center h-100 border-0 shadow-sm">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#0dcaf0 0% 100%, rgba(13, 202, 240, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(13, 202, 240, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <i class="bi bi-people-fill fs-2 text-info position-relative z-1"></i>
+          </div>
+          <div class="text-center mt-2">
+            <h6 class="fw-bold mb-1">Member Management</h6>
+            <p class="text-muted small mb-2">Add, edit members and reset passwords.</p>
+            <span class="badge bg-info text-white">Manage Members</span>
+          </div>
+        </div>
+      </div>
+    </a>
   </div>
   <div class="col-md-4">
-    <div class="card p-3 text-center h-100">
-      <i class="bi bi-bar-chart-fill fs-1 text-secondary mb-2"></i>
-      <h6 class="fw-bold">Reports</h6>
-      <p class="text-muted small">Generate circulation, member, and fine reports.</p>
-      <a href="{% url 'reports_home' %}" class="btn btn-secondary mt-auto">View Reports</a>
-    </div>
+    <a href="{% url 'reports_home' %}" class="text-decoration-none">
+      <div class="card p-3 text-center h-100 border-0 shadow-sm">
+        <div class="d-flex flex-column align-items-center">
+          <div class="position-relative d-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
+            <div class="rounded-circle position-absolute" style="width: 80px; height: 80px; background: conic-gradient(#6c757d 0% 100%, rgba(108, 117, 125, 0.1) 100% 100%); box-shadow: 0 6px 16px rgba(108, 117, 125, 0.3);"></div>
+            <div class="rounded-circle position-absolute" style="width: 64px; height: 64px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.1);"></div>
+            <i class="bi bi-bar-chart-fill fs-2 text-secondary position-relative z-1"></i>
+          </div>
+          <div class="text-center mt-2">
+            <h6 class="fw-bold mb-1">Reports</h6>
+            <p class="text-muted small mb-2">Generate circulation, member, and fine reports.</p>
+            <span class="badge bg-secondary">View Reports</span>
+          </div>
+        </div>
+      </div>
+    </a>
   </div>
 </div>
 {% endblock %}

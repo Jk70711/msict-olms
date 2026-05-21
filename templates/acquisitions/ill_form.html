@@ -10,7 +10,20 @@
         <div class="mb-3"><label class="form-label">Book Title <span class="text-danger">*</span></label><input type="text" name="title" class="form-control" required></div>
         <div class="mb-3"><label class="form-label">Author</label><input type="text" name="author" class="form-control"></div>
         <div class="mb-3"><label class="form-label">ISBN</label><input type="text" name="isbn" class="form-control" maxlength="13"></div>
-        <div class="mb-3"><label class="form-label">Preferred Source Library</label><input type="text" name="source_library" class="form-control" placeholder="e.g. UDSM Library, NML Dar es Salaam"></div>
+        <div class="mb-3"><label class="form-label">Preferred Source Library</label>
+          <select name="source_library" class="form-select">
+            <option value="">-- Select a Library --</option>
+            <option value="UDSM Library">UDSM Library (University of Dar es Salaam)</option>
+            <option value="UDOM Library">UDOM Library (University of Dodoma)</option>
+            <option value="MUST Library">MUST Library (Mwalimu Julius Nyerere University of Science and Technology)</option>
+            <option value="SUA Library">SUA Library (Sokoine University of Agriculture)</option>
+            <option value="NM-AIST Library">NM-AIST Library (Nelson Mandela African Institution of Science and Technology)</option>
+            <option value="ARU Library">ARU Library (Ardhi University)</option>
+            <option value="MZUMBE Library">MZUMBE Library (Mzumbe University)</option>
+            <option value="COAST University Library">COAST University Library</option>
+            <option value="Other">Other (specify in notes)</option>
+          </select>
+        </div>
         <div class="mb-3"><label class="form-label">Additional Notes</label><textarea name="notes" class="form-control" rows="3"></textarea></div>
         <button type="submit" class="btn btn-msict"><i class="bi bi-send"></i> Submit Request</button>
         <a href="{% url 'member_dashboard' %}" class="btn btn-outline-secondary ms-2">Cancel</a>

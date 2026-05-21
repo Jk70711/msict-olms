@@ -19,6 +19,7 @@ urlpatterns = [
     path('orders/', views.purchase_order_list_view, name='purchase_order_list'),                   # Maagizo yote ya kununua
     path('orders/create/', views.purchase_order_create_view, name='purchase_order_create'),        # Unda agizo jipya
     path('orders/<int:po_id>/', views.purchase_order_detail_view, name='purchase_order_detail'),   # Maelezo ya agizo moja
+    path('orders/items/<int:item_id>/delete/', views.purchase_order_delete_item_view, name='purchase_order_delete_item'),  # Futa item
 
     # ── ILL — Kukopa kutoka Maktaba Nyingine ────────────────
     path('ill/', views.ill_request_list_view, name='ill_request_list'),                            # Maombi ya ILL

@@ -19,7 +19,7 @@
     <div class="table-responsive">
       <table class="table table-sm mb-0">
         <thead class="table-light">
-          <tr><th>#</th><th>Member</th><th>Army No</th><th>Fines</th><th>Remaining (TZS)</th><th>Action</th></tr>
+          <tr><th>#</th><th>Member</th><th>Army No</th><th>Rank</th><th>Fines</th><th>Remaining (TZS)</th><th>Action</th></tr>
         </thead>
         <tbody>
           {% for u in user_summary %}
@@ -27,6 +27,7 @@
             <td>{{ forloop.counter }}</td>
             <td class="fw-semibold">{{ u.name }}</td>
             <td><small class="text-muted">{{ u.army_no }}</small></td>
+            <td><small class="badge bg-dark">{{ u.rank|default:"—" }}</small></td>
             <td><span class="badge bg-warning text-dark">{{ u.fine_count }}</span></td>
             <td class="fw-bold text-danger">{{ u.remaining|floatformat:2 }}</td>
             <td><a href="{% url 'user_fines' u.user_id %}" class="btn btn-sm btn-success py-0"><i class="bi bi-cash-stack"></i> Pay</a></td>
@@ -62,6 +63,7 @@
             <a href="{% url 'user_fines' fine.user.pk %}" class="text-decoration-none">
               <small class="fw-semibold">{{ fine.user.get_full_name }}</small><br>
               <span class="text-muted">{{ fine.user.army_no }}</span>
+              {% if fine.user.rank %}<small class="badge bg-dark mb-1">{{ fine.user.rank.rank_name }}</small>{% endif %}
             </a>
           </td>
           <td>

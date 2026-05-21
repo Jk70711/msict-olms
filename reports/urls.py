@@ -19,5 +19,14 @@ urlpatterns = [
     path('export/books/pdf/', views.export_books_pdf_view, name='export_books_pdf'),    # Pakua vitabu (PDF)
     path('export/circulation/pdf/', views.export_circulation_pdf_view, name='export_circulation_pdf'),  # Pakua mikopo (PDF)
     path('export/fines/pdf/', views.export_fines_pdf_view, name='export_fines_pdf'),    # Pakua faini (PDF)
+    path('custom/', views.custom_report_view, name='custom_report'),
+    path('custom/preview/', views.custom_report_preview_view, name='custom_report_preview'),
+    path('custom/export/', views.custom_report_export_view, name='custom_report_export'),
+    path('custom/save-template/', views.save_report_template_view, name='save_report_template'),
+    path('custom/delete-template/<int:template_id>/', views.delete_report_template_view, name='delete_report_template'),
+    path('loss-reports/', views.report_loss_view, name='report_loss'),                   # Ripoti ya vitabu vilivyopotea
+    path('export/loss/pdf/', views.export_loss_pdf_view, name='export_loss_pdf'),      # Pakua ripoti ya upoteaji (PDF)
     path('sql/', views.sql_report_view, name='sql_report'),                              # Ripoti maalum kwa SQL (admin)
+    path('export/sql/pdf/', views.export_sql_pdf_view, name='export_sql_pdf'),          # Pakua SQL (PDF)
+    path('export/sql/csv/', views.export_sql_csv_view, name='export_sql_csv'),          # Pakua SQL (CSV)
 ]

@@ -1,3 +1,15 @@
+def overdue_counter(request):
+    """Pass overdue count to templates for sidebar badge."""
+    count = 0
+    try:
+        if request.user.is_authenticated and request.user.role in ('admin', 'librarian'):
+            from circulation.models import BorrowingTransaction
+            count = BorrowingTransaction.objects.filter(status='overdue').count()
+    except Exception:
+        pass
+    return {'overdue_count': count}
+
+
 def active_logo(request):
     try:
         from .models import MediaSlide

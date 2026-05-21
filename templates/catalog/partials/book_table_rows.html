@@ -17,6 +17,13 @@
     {% if book.has_free_softcopy %}<span class="badge bg-success">Free</span>{% endif %}
     {% if book.has_special_softcopy %}<span class="badge bg-warning text-dark">Special</span>{% endif %}
   </td>
+  <td class="text-end">
+    {% if book.lost_fine %}
+      <span class="text-danger fw-semibold">{{ book.lost_fine|floatformat:0 }}</span>
+    {% else %}
+      <span class="text-muted">—</span>
+    {% endif %}
+  </td>
   <td>
     <div class="btn-group">
       <a href="{% url 'book_detail' book.pk %}" class="btn btn-sm btn-outline-primary" title="View"><i class="bi bi-eye"></i></a>
@@ -31,5 +38,5 @@
   </td>
 </tr>
 {% empty %}
-<tr><td colspan="9" class="text-center py-4 text-muted">No books found.</td></tr>
+<tr><td colspan="10" class="text-center py-4 text-muted">No books found.</td></tr>
 {% endfor %}

@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}Issue Copy — {{ book.title }}{% endblock %}
+{% block content %}
+<div class="d-flex align-items-center gap-2 mb-3">
+  <a href="{% url 'all_requests' %}?status=approved" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i></a>
+  <h4 class="fw-bold mb-0"><i class="bi bi-box-arrow-in-right text-primary me-1"></i> Issue Copy</h4>
+</div>
+
+{% if messages %}
+{% for m in messages %}
+<div class="alert alert-{{ m.tags|default:'info' }} py-2 alert-dismissible fade show">
+  {{ m }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="row g-3">
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-primary text-white py-2">
+        <i class="bi bi-person-badge me-1"></i> Request Details
+      </div>
+      <div class="card-body">
+        <table class="table table-sm table-borderless mb-0">
+          <tr><td class="text-muted w-40">Member</td><td class="fw-semibold">{{ req.user.get_full_name }} <small class="text-muted">({{ req.user.army_no }})</small> {% if req.user.rank %}<small class="badge bg-dark">{{ req.user.rank.rank_name }}</small>{% endif %}</td></tr>
+          <tr><td class="text-muted">Book</td><td class="fw-semibold">{{ book.title }}</td></tr>
+          <tr><td class="text-muted">Author</td><td>{{ book.author }}</td></tr>
+          <tr><td class="text-muted">ISBN</td><td><code>{{ book.isbn|default:"—" }}</code></td></tr>
+          <tr><td class="text-muted">Request #</td><td><code>#{{ req.pk }}</code></td></tr>
+          <tr><td class="text-muted">Status</td><td><span class="badge bg-success">Approved</span></td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mt-3">
+      <div class="card-header bg-success text-white py-2">
+        <i class="bi bi-upc-scan me-1"></i> Assign Physical Copy
+      </div>
+      <div class="card-body">
+        <form method="post" action="{% url 'issue_copy' req.pk %}">
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Accession Number <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <input type="text" class="form-control" name="accession_no" id="accessionInput"
+                     placeholder="e.g. MSICT/000042" autocomplete="off" required
+                     list="copyList">
+              <button class="btn btn-outline-secondary" type="button" onclick="loadSuggestions()">
+                <i class="bi bi-search"></i>
+              </button>
+            </div>
+            <datalist id="copyList">
+              {% for c in available_copies %}
+              <option value="{{ c.accession_no }}" label="Shelf: {{ c.shelf_location|default:'—' }}">
+              {% endfor %}
+            </datalist>
+            <div class="form-text">
+              Type or scan the accession number/barcode of the physical copy being handed out.
+            </div>
+          </div>
+
+          <!-- Available copies quick-pick -->
+          {% if available_copies %}
+          <div class="mb-3">
+            <label class="form-label small text-muted">Available copies of this book:</label>
+            <div class="d-flex flex-wrap gap-1" id="copyBadges">
+              {% for c in available_copies %}
+              <button type="button"
+                      class="btn btn-xs btn-outline-primary"
+                      onclick="document.getElementById('accessionInput').value='{{ c.accession_no }}'"
+                      title="Shelf: {{ c.shelf_location|default:'—' }}">
+                {{ c.accession_no }}
+                {% if c.shelf_location %}<small class="text-muted"> · {{ c.shelf_location }}</small>{% endif %}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+          {% else %}
+          <div class="alert alert-warning py-2 small">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            No available hardcopies found in the database for this book. Verify shelf and update copy status if needed.
+          </div>
+          {% endif %}
+
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success px-4"
+                    onclick="return confirm('Issue this copy to {{ req.user.get_full_name }}?')">
+              <i class="bi bi-check2-circle me-1"></i> Transact
+            </button>
+            <a href="{% url 'all_requests' %}?status=approved" class="btn btn-outline-secondary">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-light py-2">
+        <i class="bi bi-info-circle text-info me-1"></i>
+        <span class="fw-semibold small">What happens when you click Transact?</span>
+      </div>
+      <div class="card-body small text-muted">
+        <ol class="ps-3 mb-0">
+          <li>System validates the accession number belongs to <b>{{ book.title }}</b> and is <b>available</b>.</li>
+          <li>A <b>Borrowing Transaction</b> is created with today's borrow date and the system loan period as the due date.</li>
+          <li>The copy status is changed to <b>Borrowed</b>.</li>
+          <li><b>SMS + Email</b> sent to {{ req.user.get_full_name }} with: book title, accession no, borrow date, due date, lost fine, overdue fine/day, and your name.</li>
+          <li>Reservation queue expiry dates are recalculated.</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>.btn-xs { padding:.15rem .4rem; font-size:.75rem; }</style>
+<script>
+function loadSuggestions() {
+  const q = document.getElementById('accessionInput').value;
+  fetch("{% url 'copy_lookup' %}?book_id={{ book.pk }}&q=" + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(data => {
+      const dl = document.getElementById('copyList');
+      dl.innerHTML = data.copies.map(c =>
+        `<option value="${c.accession_no}" label="Shelf: ${c.shelf}"></option>`
+      ).join('');
+    });
+}
+document.getElementById('accessionInput').addEventListener('input', loadSuggestions);
+</script>
+{% endblock %}

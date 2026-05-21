@@ -12,7 +12,7 @@
         {% for req in ill_requests %}
         <tr>
           <td>{{ forloop.counter }}</td>
-          <td><small>{{ req.user.get_full_name }}<br><span class="text-muted">{{ req.user.army_no }}</span></small></td>
+          <td><small>{{ req.user.get_full_name }}<br><span class="text-muted">{{ req.user.army_no }}</span>{% if req.user.rank %}<span class="badge bg-dark ms-1">{{ req.user.rank.rank_name }}</span>{% endif %}</small></td>
           <td><small class="fw-semibold">{{ req.title|truncatechars:45 }}</small></td>
           <td><small>{{ req.author|default:"-" }}</small></td>
           <td><small>{{ req.source_library|default:"-" }}</small></td>

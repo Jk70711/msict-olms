@@ -76,7 +76,7 @@
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>S/N</th><th>Title</th><th>Author</th><th>ISBN</th><th>Category</th><th>Copies</th><th>Available</th><th>Softcopy</th><th>Actions</th></tr>
+        <tr><th>S/N</th><th>Title</th><th>Author</th><th>ISBN</th><th>Category</th><th>Copies</th><th>Available</th><th>Softcopy</th><th class="text-end">Loss Fine (TZS)</th><th>Actions</th></tr>
       </thead>
       <tbody id="bookTableBody">{% include 'catalog/partials/book_table_rows.html' %}</tbody>
     </table>
@@ -175,9 +175,8 @@
       }
     }, 300);
 
-    tableDebounceTimer = setTimeout(() => {
-      updateBookTable({ preserveTypingFocus: true });
-    }, 250);
+    // Disable live table update on input to prevent cursor loss
+    // Table will only update on form submit
   });
 
   function performSearch(query) {

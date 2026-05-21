@@ -103,7 +103,7 @@
               </tr>
               <tr>
                 <th class="text-muted fw-normal">Army No</th>
-                <td>{{ lookup_tx.user.army_no|default:"—" }}</td>
+                <td>{{ lookup_tx.user.army_no|default:"—" }} {% if lookup_tx.user.rank %}<small class="badge bg-dark">{{ lookup_tx.user.rank.rank_name }}</small>{% endif %}</td>
               </tr>
               <tr>
                 <th class="text-muted fw-normal">Borrow Date</th>
@@ -115,6 +115,8 @@
                   {{ lookup_tx.due_date|date:"d M Y H:i" }}
                   {% if lookup_tx.status == 'overdue' %}
                   <span class="badge bg-danger ms-1">OVERDUE</span>
+                  {% elif lookup_tx.status == 'lost' %}
+                  <span class="badge bg-warning ms-1">LOST</span>
                   {% endif %}
                 </td>
               </tr>
@@ -154,6 +156,7 @@
           <div class="small text-muted d-flex flex-wrap gap-3 mt-1">
             <span><i class="bi bi-person"></i> {{ member.username }}</span>
             <span><i class="bi bi-shield"></i> {{ member.army_no|default:"—" }}</span>
+            {% if member.rank %}<span><i class="bi bi-award"></i> {{ member.rank.rank_name }}</span>{% endif %}
             <span><i class="bi bi-envelope"></i> {{ member.email|default:"—" }}</span>
             <span><i class="bi bi-credit-card"></i>
               <span class="badge bg-warning text-dark ms-1">{{ card_input }}</span>
@@ -233,7 +236,8 @@
                       <form method="post" class="d-inline"
                             onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
                         {% csrf_token %}
-                        <input type="hidden" name="return_tx_id" value="{{ tx.pk }}">
+                        <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                        <input type="hidden" name="return_card_no" value="{{ card_input }}">
                         <button type="submit" class="btn btn-sm btn-success fw-semibold">
                           <i class="bi bi-check-circle"></i> Return
                         </button>
@@ -243,7 +247,8 @@
                     <form method="post" class="d-inline"
                           onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
                       {% csrf_token %}
-                      <input type="hidden" name="return_tx_id" value="{{ tx.pk }}">
+                      <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                      <input type="hidden" name="return_card_no" value="{{ card_input }}">
                       <button type="submit" class="btn btn-sm btn-success fw-semibold">
                         <i class="bi bi-check-circle"></i> Return
                       </button>
@@ -253,7 +258,8 @@
                     <form method="post" class="d-inline"
                           onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
                       {% csrf_token %}
-                      <input type="hidden" name="return_tx_id" value="{{ tx.pk }}">
+                      <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                      <input type="hidden" name="return_card_no" value="{{ card_input }}">
                       <button type="submit" class="btn btn-sm btn-success fw-semibold">
                         <i class="bi bi-check-circle"></i> Return
                       </button>
@@ -300,6 +306,7 @@
             <th>Book Title</th>
             <th>Member</th>
             <th>Army No</th>
+            <th>Rank</th>
             <th>Acc. No</th>
             <th>Type</th>
             <th>Return Date &amp; Time</th>
@@ -314,6 +321,7 @@
             <td><small class="fw-semibold">{{ tx.copy.book.title|truncatechars:40 }}</small></td>
             <td><small>{{ tx.user.get_full_name }}</small></td>
             <td><small class="text-muted">{{ tx.user.army_no|default:"—" }}</small></td>
+            <td><small class="badge bg-dark">{{ tx.user.rank.rank_name|default:"—" }}</small></td>
             <td><code class="small">{{ tx.copy.accession_no }}</code></td>
             <td>
               {% if tx.borrow_type == 'hardcopy' %}

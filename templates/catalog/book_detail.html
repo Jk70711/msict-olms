@@ -21,12 +21,27 @@
       <div class="small"><b>Publisher:</b> {{ book.publisher|default:"N/A" }}</div>
       <div class="small"><b>Year:</b> {{ book.year|default:"N/A" }}</div>
       <div class="small"><b>Category:</b> {{ book.category.name|default:"N/A" }}</div>
+      <div class="small mt-1"><b>Book Type:</b>
+        {% if book.book_type == 'both' %}<span class="badge bg-info text-dark"><i class="bi bi-layers"></i> Both (Hard + Soft)</span>
+        {% elif book.book_type == 'softcopy' %}<span class="badge bg-success"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
+        {% else %}<span class="badge bg-primary"><i class="bi bi-book"></i> Hardcopy</span>{% endif %}
+      </div>
+      <div class="small mt-1">
+        <b>Loss Fine:</b>
+        {% if book.lost_fine %}
+          <span class="text-danger fw-semibold">TZS {{ book.lost_fine|floatformat:0 }}</span>
+        {% else %}
+          <span class="text-muted">Not set</span>
+        {% endif %}
+      </div>
       {% if book.show_in_carousel %}<div class="small text-success mt-1"><i class="bi bi-images"></i> In Carousel</div>{% endif %}
     </div>
+    {% if user.is_authenticated and user.role in 'librarian,admin' %}
     <div class="d-grid gap-2 mt-3">
       <a href="{% url 'book_edit' book.pk %}" class="btn btn-outline-primary"><i class="bi bi-pencil"></i> Edit Book</a>
       <a href="{% url 'copy_create' book.pk %}" class="btn btn-msict" data-bs-toggle="modal" data-bs-target="#addCopyModal"><i class="bi bi-plus-circle"></i> Add Copy</a>
     </div>
+    {% endif %}
   </div>
   <div class="col-md-9">
     <h4 class="fw-bold">{{ book.title }}</h4>
@@ -39,7 +54,7 @@
     {% if book.summary %}
     <h6 class="fw-bold mt-3 mb-2">Summary</h6>
     <p class="rounded p-3"
-       style="background:#fff; color:#000; text-align: justify; font-size:16px; font-weight:400; line-height:1.6;">
+       style="background:var(--card-bg, #f8f9fa); color:var(--text-primary, #212529); text-align: justify; font-size:16px; font-weight:500; line-height:1.6; border:1px solid var(--border, #dee2e6);">
       {{ book.summary }}
     </p>
     {% endif %}
@@ -47,11 +62,11 @@
     <h6 class="fw-bold mt-3">Copies ({{ copies.count }})</h6>
     <div class="table-responsive">
       <table class="table table-sm table-hover">
-        <thead><tr><th>Accession No</th><th>Type</th><th>Access</th><th>Status</th><th>Location</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Accession / ID</th><th>Type</th><th>Access</th><th>Status</th><th>Location</th><th>Actions</th></tr></thead>
         <tbody>
           {% for copy in copies %}
           <tr>
-            <td><code>{{ copy.accession_no }}</code></td>
+            <td><code>{{ copy.display_id }}</code></td>
             <td>
               {% if copy.copy_type == 'hardcopy' %}
                 <span class="badge bg-primary"><i class="bi bi-book"></i> Hardcopy</span>
@@ -95,16 +110,24 @@
               {% endif %}
             </td>
             <td>
+              {% if user.is_authenticated and user.role in 'librarian,admin' %}
               <div class="btn-group">
                 <a href="{% url 'copy_edit' copy.pk %}" class="btn btn-sm btn-outline-primary py-0" title="Edit"><i class="bi bi-pencil"></i></a>
                 {% if copy.copy_type == 'softcopy' and copy.file_path %}
                 <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview PDF"><i class="bi bi-eye"></i></a>
                 {% endif %}
                 {% if copy.status != 'lost' and copy.copy_type == 'hardcopy' %}
-                <a href="{% url 'copy_mark_lost' copy.pk %}" class="btn btn-sm btn-outline-danger py-0" title="Mark Lost"
-                  onclick="return confirm('Mark copy {{ copy.accession_no }} as lost?')"><i class="bi bi-x-circle"></i></a>
+                <form method="post" action="{% url 'copy_mark_lost' copy.pk %}" class="d-inline" onsubmit="return confirm('Mark copy {{ copy.display_id }} as lost?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger py-0" title="Mark Lost"><i class="bi bi-x-circle"></i></button>
+                </form>
                 {% endif %}
               </div>
+              {% else %}
+                {% if copy.copy_type == 'softcopy' and copy.file_path and user.is_authenticated %}
+                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview PDF"><i class="bi bi-eye"></i></a>
+                {% endif %}
+              {% endif %}
             </td>
           </tr>
           {% empty %}
@@ -158,7 +181,7 @@
               <option value="borrow">Special Soft Copy (Borrow Required)</option>
             </select>
           </div>
-          <div class="mb-3">
+          <div class="mb-3" id="accessionGroup">
             <label class="form-label">Accession Number <span class="text-danger">*</span></label>
             <div class="input-group">
               <input type="text" name="accession_no" id="accessionNoInput" class="form-control font-monospace fw-bold" placeholder="Loading..." required>
@@ -167,6 +190,11 @@
               </button>
             </div>
             <div class="form-text text-success"><i class="bi bi-info-circle"></i> Auto-generated. You may edit if needed.</div>
+          </div>
+          <div class="mb-3 d-none" id="linkLabelGroup">
+            <label class="form-label">Copy Identifier</label>
+            <div><span class="badge bg-info text-dark fs-6"><i class="bi bi-link-45deg"></i> Link</span></div>
+            <div class="form-text">Softcopy ID is auto-generated internally (SOFT/xxxxxx). Not shown to users.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Shelf Location</label>
@@ -192,8 +220,14 @@
 <script>
 function toggleAccessType() {
   var t = document.getElementById('copyTypeSelect').value;
-  document.getElementById('accessTypeGroup').style.display = t === 'softcopy' ? 'block' : 'none';
-  document.getElementById('fileGroup').style.display = t === 'softcopy' ? 'block' : 'none';
+  var isSoft = t === 'softcopy';
+  document.getElementById('accessTypeGroup').style.display = isSoft ? 'block' : 'none';
+  document.getElementById('fileGroup').style.display = isSoft ? 'block' : 'none';
+  document.getElementById('accessionGroup').style.display = isSoft ? 'none' : '';
+  document.getElementById('linkLabelGroup').classList.toggle('d-none', !isSoft);
+  var inp = document.getElementById('accessionNoInput');
+  if (isSoft) { inp.removeAttribute('required'); inp.value = ''; }
+  else { inp.setAttribute('required', 'required'); fetchNextAccession(); }
 }
 
 const nextAccessionUrl = "{% url 'next_accession_api' %}";

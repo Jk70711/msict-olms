@@ -60,8 +60,6 @@ def search_library_books(query='', author='', category='', limit=8):
     Search MSICT library for books by title / author / category.
     Returns: { 'count': int, 'books': [book_dict, ...] }
     """
-    qs = Book.objects.all().select_related('category')
-
     q_obj = Q()
     if query:
         q_obj |= Q(title__icontains=query)
@@ -77,7 +75,16 @@ def search_library_books(query='', author='', category='', limit=8):
     if not q_obj:
         return {'count': 0, 'books': [], 'message': 'No search terms supplied.'}
 
-    qs = qs.filter(q_obj).distinct()[:max(1, min(int(limit), 20))]
+    # Oracle cannot apply DISTINCT to queries that select NCLOB columns
+    # (Book.summary / Book.marc_xml). Resolve the dedup on plain integer
+    # IDs first, then fetch the full rows for those IDs.
+    cap = max(1, min(int(limit), 20))
+    ids = list(
+        Book.objects.filter(q_obj)
+        .values_list('id', flat=True)
+        .distinct()[:cap]
+    )
+    qs = Book.objects.filter(id__in=ids).select_related('category')
     books = [_book_to_dict(b) for b in qs]
     return {'count': len(books), 'books': books}
 
@@ -102,12 +109,10 @@ def suggest_similar_books(query='', author='', category='', exclude_id=None, lim
     Suggest similar books when requested book is unavailable or not found.
     Searches by same category, author, or keywords.
     """
-    qs = Book.objects.all().select_related('category')
-    
-    # Exclude the book that was not found (if provided)
+    base = Book.objects.all()
     if exclude_id:
-        qs = qs.exclude(pk=int(exclude_id))
-    
+        base = base.exclude(pk=int(exclude_id))
+
     q_obj = Q()
     if category:
         q_obj |= Q(category__name__icontains=category)
@@ -115,18 +120,29 @@ def suggest_similar_books(query='', author='', category='', exclude_id=None, lim
     if author:
         q_obj |= Q(author__icontains=author)
     if query:
-        # Extract keywords from query
         keywords = [k for k in query.split() if len(k) > 3]
-        for kw in keywords[:3]:  # Use first 3 meaningful keywords
+        for kw in keywords[:3]:
             q_obj |= Q(title__icontains=kw)
             q_obj |= Q(summary__icontains=kw)
-    
+
+    cap = max(1, int(limit or 5))
+
+    # Oracle ORA-22848 workaround: dedup on integer ids first.
     if not q_obj:
-        # Fallback: return recent available books
-        books = qs.filter(copies__status='available').distinct()[:limit]
+        ids = list(
+            base.filter(copies__status='available')
+            .values_list('id', flat=True)
+            .distinct()[:cap]
+        )
     else:
-        books = qs.filter(q_obj).distinct()[:limit]
-    
+        ids = list(
+            base.filter(q_obj)
+            .values_list('id', flat=True)
+            .distinct()[:cap]
+        )
+
+    books = list(Book.objects.filter(id__in=ids).select_related('category'))
+
     return {
         'count': len(books),
         'books': [_book_to_dict(b) for b in books],

@@ -11,6 +11,7 @@
           <th>S/N</th>
           <th>Member</th>
           <th>Army No</th>
+          <th>Rank</th>
           <th>Fines</th>
           <th>Amount</th>
           <th>Overdue</th>
@@ -23,6 +24,7 @@
           <td>{{ forloop.counter }}</td>
           <td><small class="fw-semibold">{{ user.full_name }}</small></td>
           <td><small>{{ user.army_no }}</small></td>
+          <td><small class="badge bg-dark">{{ user.rank|default:"—" }}</small></td>
           <td>
             {% if user.fine_count > 0 %}
               <span class="badge bg-warning">{{ user.fine_count }}</span>

@@ -58,15 +58,50 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # -----------------------------
 # Security hardening (production)
 # -----------------------------
+# HTTPS / HSTS
 SECURE_SSL_REDIRECT = config('SECURE_SSL_REDIRECT', default=not DEBUG, cast=bool)
-SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=not DEBUG, cast=bool)
-CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=not DEBUG, cast=bool)
 SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000 if not DEBUG else 0, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = config('SECURE_HSTS_INCLUDE_SUBDOMAINS', default=not DEBUG, cast=bool)
 SECURE_HSTS_PRELOAD = config('SECURE_HSTS_PRELOAD', default=not DEBUG, cast=bool)
+
+# MIME sniffing / Clickjacking / Referrer
 SECURE_CONTENT_TYPE_NOSNIFF = config('SECURE_CONTENT_TYPE_NOSNIFF', default=True, cast=bool)
 X_FRAME_OPTIONS = config('X_FRAME_OPTIONS', default='DENY')
 SECURE_REFERRER_POLICY = config('SECURE_REFERRER_POLICY', default='same-origin')
+SECURE_CROSS_ORIGIN_OPENER_POLICY = config('SECURE_CROSS_ORIGIN_OPENER_POLICY', default='same-origin')
+
+# Session cookie — anti session-hijacking
+SESSION_COOKIE_SECURE   = config('SESSION_COOKIE_SECURE',   default=not DEBUG, cast=bool)
+SESSION_COOKIE_HTTPONLY = True            # JS cannot read session cookie (XSS mitigation)
+SESSION_COOKIE_SAMESITE = config('SESSION_COOKIE_SAMESITE', default='Lax')   # CSRF mitigation
+# Idle timeout: log users out after N seconds of inactivity. 1 hour by default;
+# the login view extends this to 30 days when "Remember me" is ticked.
+SESSION_COOKIE_AGE = config('SESSION_COOKIE_AGE', default=3600, cast=int)
+SESSION_SAVE_EVERY_REQUEST = True         # rolls expiry on every request
+
+# CSRF cookie — anti cross-site request forgery
+CSRF_COOKIE_SECURE   = config('CSRF_COOKIE_SECURE',   default=not DEBUG, cast=bool)
+CSRF_COOKIE_HTTPONLY = config('CSRF_COOKIE_HTTPONLY', default=False, cast=bool)
+CSRF_COOKIE_SAMESITE = config('CSRF_COOKIE_SAMESITE', default='Lax')
+CSRF_USE_SESSIONS    = False              # token in cookie is fine; SameSite + HTTPS protect it
+CSRF_FAILURE_VIEW    = 'django.views.csrf.csrf_failure'
+
+# Login brute-force throttle (see accounts.middleware.LoginRateLimitMiddleware).
+LOGIN_RATELIMIT_MAX    = config('LOGIN_RATELIMIT_MAX',    default=10, cast=int)
+LOGIN_RATELIMIT_WINDOW = config('LOGIN_RATELIMIT_WINDOW', default=60, cast=int)
+
+# Content-Security-Policy (see accounts.middleware.SecurityHeadersMiddleware).
+# Set OLMS_CSP_REPORT_ONLY=True in .env to roll out without enforcement first.
+OLMS_CSP_REPORT_ONLY = config('OLMS_CSP_REPORT_ONLY', default=False, cast=bool)
+OLMS_CSP_REPORT_URI  = config('OLMS_CSP_REPORT_URI',  default='')
+
+# File upload safety: cap memory upload size to mitigate DoS via huge POSTs.
+DATA_UPLOAD_MAX_MEMORY_SIZE = config('DATA_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024, cast=int)  # 10 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = config('FILE_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024, cast=int)  # 10 MB
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 2000
+# Files written to disk should not be world-readable (protects /media uploads).
+FILE_UPLOAD_PERMISSIONS = 0o640
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o750
 
 INSTALLED_APPS = [
     # 'daphne' MUST be first so its `runserver` overrides Django's default
@@ -98,9 +133,15 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'accounts.middleware.SingleSessionMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    # IP-based brute-force throttle for /login/ POSTs.
+    'accounts.middleware.LoginRateLimitMiddleware',
+    # Single session enforcement (must be after MessageMiddleware since it uses messages).
+    'accounts.middleware.SingleSessionMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Defence-in-depth response headers (CSP, Permissions-Policy, COOP, …).
+    # Must be LAST so it sees the final response and can set headers on it.
+    'accounts.middleware.SecurityHeadersMiddleware',
 ]
 
 ROOT_URLCONF = 'OLMS.urls'
@@ -119,6 +160,7 @@ TEMPLATES = [
                 'catalog.context_processors.active_logo',
                 'catalog.context_processors.system_appearance',
                 'catalog.context_processors.category_menu',
+                'catalog.context_processors.overdue_counter',
             ],
         },
     },
@@ -149,7 +191,9 @@ CHANNEL_LAYERS = {
 # Empty values = chatbot will fall back to a rule-based response.
 # ----------------------------------------------------------------------
 GEMINI_API_KEY       = config('GEMINI_API_KEY',       default='')
-GEMINI_MODEL         = config('GEMINI_MODEL',         default='gemini-1.5-flash')
+# Use the rolling alias so we always point at Google's current free-tier
+# flash model (gemini-1.5-flash and 2.0-flash are no longer free-tier).
+GEMINI_MODEL         = config('GEMINI_MODEL',         default='gemini-flash-latest')
 GOOGLE_BOOKS_API_KEY = config('GOOGLE_BOOKS_API_KEY', default='')
 
 # Muunganisho wa Oracle database — host, jina la DB, mtumiaji, nywila
@@ -175,7 +219,23 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
+
+# Password hashers — PBKDF2-SHA256 (Django default, OWASP-recommended) is
+# primary. If `argon2-cffi` is installed in the environment, prepend the
+# Argon2 hasher (memory-hard, GPU-resistant) for new password hashes;
+# Django will transparently re-hash existing records on next login.
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',
+]
+try:
+    import argon2  # noqa: F401  -- dependency probe for argon2-cffi
+    PASSWORD_HASHERS.insert(0, 'django.contrib.auth.hashers.Argon2PasswordHasher')
+except ImportError:
+    pass
 
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Africa/Dar_es_Salaam'

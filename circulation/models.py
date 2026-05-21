@@ -34,22 +34,37 @@ class BorrowRequest(models.Model):
         ('rejected', 'Rejected'),
         ('cancelled', 'Cancelled'),
     ]
-    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='borrow_requests')  # Mwanachama aliyeomba
-    copy = models.ForeignKey(BookCopy, on_delete=models.CASCADE, related_name='borrow_requests')  # Nakala iliyoombiwa
-    request_date = models.DateTimeField(auto_now_add=True)  # Tarehe ya ombi
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')  # Hali ya sasa
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='borrow_requests')
+    copy = models.ForeignKey(
+        BookCopy, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='borrow_requests'
+    )  # NULL until librarian assigns physical copy (hardcopy flow)
+    temp_book = models.ForeignKey(
+        Book, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='hardcopy_requests'
+    )  # Book title requested before a specific copy is assigned
+    request_date = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     approved_by = models.ForeignKey(
         OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='approved_requests'
-    )  # Mtunzaji aliyeidhinisha au kukataa
-    rejection_reason = models.CharField(max_length=500, blank=True)  # Sababu ya kukataliwa
+    )
+    rejection_reason = models.CharField(max_length=500, blank=True)
 
     class Meta:
         db_table = 'borrow_requests'
         ordering = ['-request_date']
 
     def __str__(self):
-        return f"{self.user.username} → {self.copy.book.title} [{self.status}]"
+        title = self.copy.book.title if self.copy_id else (self.temp_book.title if self.temp_book_id else '?')
+        return f"{self.user.username} → {title} [{self.status}]"
+
+    @property
+    def book(self):
+        """Returns the Book regardless of whether a specific copy has been assigned."""
+        if self.copy_id:
+            return self.copy.book
+        return self.temp_book
 
 
 # Mkopo ulioidhinishwa — unafuatilia vitabu vilivyokopwa
@@ -60,6 +75,7 @@ class BorrowingTransaction(models.Model):
         ('borrowed', 'Borrowed'),
         ('returned', 'Returned'),
         ('overdue', 'Overdue'),
+        ('lost', 'Lost'),
     ]
 
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='transactions')   # Mwanachama aliyekopa
@@ -87,6 +103,11 @@ class BorrowingTransaction(models.Model):
             loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
             self.due_date = timezone.now() + timedelta(days=loan_days)
         super().save(*args, **kwargs)
+
+    @property
+    def loss_report_exists(self):
+        from circulation.models import LossReport as _LR
+        return _LR.objects.filter(transaction=self).exists()
 
     def is_overdue(self):
         return self.status in ('borrowed', 'overdue') and timezone.now() > self.due_date
@@ -216,10 +237,10 @@ class BorrowingTransaction(models.Model):
         # 2. Check for unpaid fines - block renewal if user has fines
         if Fine.objects.filter(user=self.user, paid=False).exists():
             return False, "You have unpaid fines. Please pay all fines before renewing."
-        # 3. Eligible only between days 1-6 (day 7+ is overdue, not eligible)
-        days_borrowed = (timezone.now() - self.borrow_date).days
-        if days_borrowed < 1:
-            return False, "Renewal available after 24 hours from borrow date."
+        # 3. Renewal available only when 2 days or fewer remain before due date
+        days_remaining = (self.due_date - timezone.now()).days
+        if days_remaining > 2:
+            return False, f"Renewal available when 2 days or fewer remain before due date. ({days_remaining} days remaining)"
         if self.is_overdue():
             return False, "Overdue books cannot be renewed. Please return the book."
         # 4. Hardcopy check for reservations
@@ -329,15 +350,72 @@ class Fine(models.Model):
         return self.amount_paid >= self.amount
 
 
+# Ripoti ya kupoteza kitabu — mwanachama anaweza kutuma baada ya kukopa
+# Hali: pending → confirmed (mtunzaji akithibitisha) → resolved (faini imelipwa)
+class LossReport(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('confirmed', 'Confirmed – Awaiting Payment'),
+        ('resolved', 'Resolved – Fine Paid'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    transaction = models.OneToOneField(
+        'BorrowingTransaction', on_delete=models.CASCADE, related_name='loss_report'
+    )
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='loss_reports')
+    description = models.TextField(help_text='Describe how/when the book was lost')
+    circumstances = models.CharField(
+        max_length=200, blank=True,
+        help_text='Brief circumstances (e.g. fire, theft, misplaced)'
+    )
+    date_noticed = models.DateTimeField(null=True, blank=True, help_text='Date/time the book was noticed missing')
+    last_known_location = models.CharField(max_length=200, blank=True, help_text='Where the book was last seen')
+    authority_reported = models.BooleanField(default=False, help_text='Whether loss was reported to police/security')
+    authority_reference = models.CharField(max_length=100, blank=True, help_text='Police/security report reference number')
+    reported_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending')
+    loss_fine = models.OneToOneField(
+        'Fine', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='loss_report'
+    )
+    reviewed_by = models.ForeignKey(
+        OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reviewed_loss_reports'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    librarian_notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'loss_reports'
+        ordering = ['-reported_at']
+
+    def __str__(self):
+        return f"Loss: {self.user.username} – {self.transaction.copy.book.title} [{self.status}]"
+
+
 # Arifa zilizotumwa kwa mwanachama — SMS au barua pepe
 # channel: 'sms' au 'email' | status: pending → sent / failed
 class Notification(models.Model):
     CHANNEL_CHOICES = [('email', 'Email'), ('sms', 'SMS')]
     STATUS_CHOICES = [('pending', 'Pending'), ('sent', 'Sent'), ('failed', 'Failed')]
     PRIORITY_CHOICES = [('low', 'Low'), ('normal', 'Normal'), ('high', 'High')]
+    MESSAGE_TYPE_CHOICES = [
+        ('otp', 'OTP'),
+        ('account_lock', 'Account Lock'),
+        ('suspended', 'Suspended'),
+        ('suspicious', 'Suspicious'),
+        ('borrowing', 'Borrowing'),
+        ('approval', 'Approval'),
+        ('fine', 'Fine'),
+        ('overdue', 'Overdue'),
+        ('loss_report', 'Loss Report'),
+        ('loss_fine', 'Loss Fine'),
+    ]
 
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='notifications')
     message = models.TextField()
+    message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES, default='approval', blank=True, null=True)
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='normal')
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
@@ -351,3 +429,5 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"[{self.channel}] to {self.user.username}: {self.message[:50]}"
+
+
