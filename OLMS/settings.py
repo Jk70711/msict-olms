@@ -24,6 +24,7 @@ SECRET_KEY = config('SECRET_KEY')
 
 # True = maendeleo (inaonyesha makosa kwa undani). Weka False kwenye VPS!
 DEBUG = config('DEBUG', default=True, cast=bool)
+#DEBUG = False
 
 # Enforce a strong SECRET_KEY in production to protect signed cookies/tokens.
 if not DEBUG and (SECRET_KEY.startswith('django-insecure-') or len(set(SECRET_KEY)) < 5 or len(SECRET_KEY) < 50):

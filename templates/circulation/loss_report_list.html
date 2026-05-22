@@ -120,42 +120,48 @@
           </strong>
           {% endwith %}
           <div class="small text-muted mt-1">
-            {% with tx.fines.all as allfines %}
-              {% for f in allfines %}
-                {% if not f.loss_report and not f.paid %}
-                <span class="badge bg-danger">Overdue Unpaid</span>
-                {% elif not f.loss_report and f.paid %}
-                <span class="badge bg-success">Overdue Paid</span>
-                {% endif %}
-              {% endfor %}
-            {% endwith %}
+            {% if report.overdue_count == 0 %}
+              <span class="badge bg-secondary">No Overdue</span>
+            {% else %}
+              {% with tx.fines.all as allfines %}
+                {% for f in allfines %}
+                  {% if not f.loss_report and not f.paid %}
+                  <span class="badge bg-danger">Overdue Unpaid</span>
+                  {% elif not f.loss_report and f.paid %}
+                  <span class="badge bg-success">Overdue Paid</span>
+                  {% endif %}
+                {% endfor %}
+              {% endwith %}
+            {% endif %}
           </div>
         </td>
 
         <!-- Payment Status -->
         <td>
-          {% with has_any_unpaid=False %}
           {% with tx.fines.all as allfines %}
-          {% for f in allfines %}
-            {% if not f.paid and f.remaining_balance > 0 %}
-            <span class="badge bg-danger">Overdue Unpaid</span>
-            {% elif f.paid %}
-            <span class="badge bg-success">Overdue Paid</span>
-            {% endif %}
-          {% endfor %}
-          {% endwith %}
-          {% if report.loss_fine %}
-            {% if report.loss_fine.paid %}
-            <span class="badge bg-success">Loss Fine Paid</span>
-            {% elif report.loss_fine.amount_paid > 0 %}
-            <span class="badge bg-warning text-dark">Loss Fine Partial</span>
+            {% if report.overdue_count > 0 %}
+              {% for f in allfines %}
+                {% if not f.paid and f.remaining_balance > 0 %}
+                <span class="badge bg-danger">Overdue Unpaid</span>
+                {% elif f.paid %}
+                <span class="badge bg-success">Overdue Paid</span>
+                {% endif %}
+              {% endfor %}
             {% else %}
-            <span class="badge bg-danger">Loss Fine Unpaid</span>
+              <span class="badge bg-secondary">No Overdue</span>
             {% endif %}
-          {% endif %}
-          {% if not report.loss_fine and not tx.fines.exists %}
-            <span class="badge bg-secondary">No Fines</span>
-          {% endif %}
+            {% if report.loss_fine %}
+              {% if report.loss_fine.paid %}
+              <span class="badge bg-success">Loss Fine Paid</span>
+              {% elif report.loss_fine.amount_paid > 0 %}
+              <span class="badge bg-warning text-dark">Loss Fine Partial</span>
+              {% else %}
+              <span class="badge bg-danger">Loss Fine Unpaid</span>
+              {% endif %}
+            {% endif %}
+            {% if not report.loss_fine and not tx.fines.exists %}
+              <span class="badge bg-secondary">No Fines</span>
+            {% endif %}
           {% endwith %}
         </td>
 

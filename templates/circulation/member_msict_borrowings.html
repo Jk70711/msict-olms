@@ -97,7 +97,11 @@
         <div class="list-group-item {% if tx.copy.copy_type == 'softcopy' and not tx.is_link_active %}list-group-item-warning{% endif %}">
           <div class="d-flex justify-content-between align-items-start">
             <div>
+              {% if tx.copy.book %}
               <a href="{% url 'book_detail_public' tx.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ tx.copy.book.title|truncatechars:40 }}</a>
+              {% else %}
+              <span class="fw-semibold text-muted">Book not available</span>
+              {% endif %}
               <div class="small text-muted">{% if tx.copy.copy_type == 'hardcopy' %}Acc: {{ tx.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}</div>
               <div class="small mt-1 d-flex flex-wrap gap-1">
                 {% if tx.copy.copy_type == 'softcopy' %}
@@ -251,7 +255,11 @@
         <div class="list-group-item">
           <div class="d-flex justify-content-between align-items-start">
             <div>
+              {% if req.copy.book %}
               <a href="{% url 'book_detail_public' req.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ req.copy.book.title|truncatechars:40 }}</a>
+              {% else %}
+              <span class="fw-semibold text-muted">Book not available</span>
+              {% endif %}
               <div class="small text-muted">{% if req.copy.copy_type == 'hardcopy' %}Acc: {{ req.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}</div>
               <div class="small text-muted">Requested: {{ req.request_date|date:"M d, Y" }}</div>
             </div>
@@ -288,7 +296,11 @@
             {% for tx in borrow_history %}
             <tr>
               <td>
+                {% if tx.copy.book %}
                 <a href="{% url 'book_detail_public' tx.copy.book.pk %}">{{ tx.copy.book.title|truncatechars:30 }}</a>
+                {% else %}
+                <span class="text-muted">Book not available</span>
+                {% endif %}
                 <div class="small text-muted">{{ tx.copy.display_id }}</div>
               </td>
               <td class="small">{{ tx.borrow_date|date:"M d, Y" }}</td>
@@ -325,7 +337,11 @@
         {% for res in reservations %}
         <div class="list-group-item d-flex justify-content-between align-items-center">
           <div>
+            {% if res.book %}
             <a href="{% url 'book_detail_public' res.book.pk %}" class="fw-semibold text-decoration-none">{{ res.book.title|truncatechars:35 }}</a>
+            {% else %}
+            <span class="fw-semibold text-muted">Book not available</span>
+            {% endif %}
             <div class="small text-muted">Expires: {{ res.expires_at|date:"M d, Y" }}</div>
           </div>
           <form method="post" action="{% url 'cancel_reservation' res.pk %}" class="d-inline" onsubmit="return confirm('Cancel reservation for {{ res.book.title }}?')">

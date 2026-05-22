@@ -2200,29 +2200,29 @@ def member_msict_borrowings_view(request):
     """Member view for MSICT borrowings - history, pending, active"""
     user = request.user
 
-    # Active borrowings (borrowed, overdue, or lost)
+    # Active borrowings (borrowed, overdue, or lost) - filter out missing books
     active_borrows = BorrowingTransaction.objects.filter(
-        user=user, status__in=['borrowed', 'overdue', 'lost']
+        user=user, status__in=['borrowed', 'overdue', 'lost'], copy__book__isnull=False
     ).select_related('copy__book').order_by('-borrow_date')
 
-    # Borrow history (returned or lost)
+    # Borrow history (returned or lost) - filter out missing books
     borrow_history = BorrowingTransaction.objects.filter(
-        user=user, status__in=['returned', 'lost']
+        user=user, status__in=['returned', 'lost'], copy__book__isnull=False
     ).select_related('copy__book').order_by('-return_date')[:50]
 
-    # Pending borrow requests
+    # Pending borrow requests - filter out missing books
     pending_requests = BorrowRequest.objects.filter(
-        user=user, status='pending'
+        user=user, status='pending', copy__book__isnull=False
     ).select_related('copy__book').order_by('-request_date')
 
-    # Rejected/Cancelled requests
+    # Rejected/Cancelled requests - filter out missing books
     rejected_requests = BorrowRequest.objects.filter(
-        user=user, status__in=['rejected', 'cancelled']
+        user=user, status__in=['rejected', 'cancelled'], copy__book__isnull=False
     ).select_related('copy__book').order_by('-request_date')[:20]
 
-    # Current reservations
+    # Current reservations - filter out missing books
     reservations = Reservation.objects.filter(
-        user=user, status='pending'
+        user=user, status='pending', book__isnull=False
     ).select_related('book').order_by('-created_at')
 
     # Reservation history
@@ -2648,11 +2648,21 @@ def loss_report_list_view(request):
     status_filter = request.GET.get('status', '')
     qs = LossReport.objects.select_related(
         'user__rank', 'transaction__copy__book', 'reviewed_by', 'loss_fine'
-    )
+    ).prefetch_related('transaction__fines')
     if status_filter:
         qs = qs.filter(status=status_filter)
+    
+    # Calculate overdue fine count for each report
+    reports_with_counts = []
+    for report in qs:
+        overdue_count = 0
+        if report.transaction:
+            overdue_count = report.transaction.fines.filter(loss_report__isnull=True).count()
+        report.overdue_count = overdue_count
+        reports_with_counts.append(report)
+    
     return render(request, 'circulation/loss_report_list.html', {
-        'reports': qs,
+        'reports': reports_with_counts,
         'status_filter': status_filter,
     })
 

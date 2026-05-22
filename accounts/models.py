@@ -22,9 +22,9 @@ class Rank(models.Model):
     rank_name = models.CharField(max_length=50, unique=True)
 
     RANK_LIST = [
-        'GENERAL', 'LIEUTENANT GENERAL', 'MAJOR GENERAL', 'BRIGADIER GENERAL',
-        'COLONEL', 'LIEUTENANT COLONEL', 'MAJOR', 'CAPTAIN',
-        'LIEUTENANT', 'SECOND LIEUTENANT',
+        'GENERAL', 'LT GENERAL', 'MJ GENERAL', 'B GENERAL',
+        'COL', 'LT COL', 'MAJ', 'CAPT',
+        'LT', 'S LT',
         'WI', 'WII', 'SSGT', 'SGT', 'CPL', 'PTE',
     ]
 
