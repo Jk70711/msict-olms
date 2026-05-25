@@ -70,8 +70,6 @@ def book_search_ajax(request):
 
     return JsonResponse({'results': results})
 
-
-
 @login_required
 @librarian_required
 def librarian_dashboard_view(request):
@@ -84,10 +82,11 @@ def librarian_dashboard_view(request):
     pending_requests = BorrowRequest.objects.filter(status='pending').select_related('user__virtual_card', 'copy__book').order_by('-request_date')
     overdue_transactions = BorrowingTransaction.objects.filter(status='overdue').select_related('user__virtual_card', 'copy__book')
     unpaid_fines = Fine.objects.filter(paid=False).select_related('user__virtual_card', 'transaction__copy__book').order_by('-created_at')
+    pending_accounts = OLMSUser.objects.filter(role='member', registration_status='pending').order_by('-created_at')
     total_books = Book.objects.count()
     total_copies = BookCopy.objects.count()
     available_copies = BookCopy.objects.filter(status='available').count()
-    total_members = OLMSUser.objects.filter(role='member').count()
+    total_members = OLMSUser.objects.filter(role='member', registration_status='approved').count()
 
     # Calculate total unpaid fines amount
     total_unpaid_fines_amount = sum(fine.remaining_balance for fine in unpaid_fines)
@@ -130,6 +129,7 @@ def librarian_dashboard_view(request):
         'pending_requests': pending_requests[:10],
         'overdue_transactions': overdue_transactions[:10],
         'unpaid_fines': unpaid_fines[:10],
+        'pending_accounts': pending_accounts[:10],
         'total_books': total_books,
         'total_copies': total_copies,
         'available_copies': available_copies,
@@ -137,6 +137,7 @@ def librarian_dashboard_view(request):
         'pending_count': pending_requests.count(),
         'overdue_count': overdue_transactions.count(),
         'unpaid_fines_count': unpaid_fines.count(),
+        'pending_accounts_count': pending_accounts.count(),
         'total_unpaid_fines_amount': total_unpaid_fines_amount,
         'monthly_borrows': monthly_borrows_with_pct,
         'category_stats': category_stats,

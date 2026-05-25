@@ -1,6 +1,23 @@
 {% extends 'base.html' %}
 {% block title %}My Dashboard{% endblock %}
 {% block content %}
+
+{% if account_pending %}
+<div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+  <div class="card-body p-4">
+    <div class="d-flex align-items-center gap-3">
+      <div class="bg-warning text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 48px; height: 48px;">
+        <i class="bi bi-clock-history fs-4"></i>
+      </div>
+      <div class="flex-grow-1">
+        <strong class="text-warning">Account Pending Approval</strong>
+        <p class="small text-warning mb-0">Your account is awaiting librarian approval. You will receive a notification via email and SMS once your account is approved with your login credentials.</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body p-4">
     <div class="d-flex align-items-center gap-4">

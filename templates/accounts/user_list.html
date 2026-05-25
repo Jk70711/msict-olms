@@ -1,6 +1,99 @@
 {% extends 'base.html' %}
 {% block title %}{% if status == 'locked' %}Locked Accounts{% else %}User Management{% endif %}{% endblock %}
 {% block content %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsHost = window.location.hostname + ':8001';
+  const wsUrl = `${wsProtocol}//${wsHost}/ws/account-status/`;
+  const socket = new WebSocket(wsUrl);
+  
+  socket.onopen = function() {
+    console.log('WebSocket connected to account status updates');
+  };
+  
+  socket.onerror = function(error) {
+    console.error('WebSocket error:', error);
+  };
+  
+  socket.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    if (data.type === 'account_status_update') {
+      handleAccountStatusUpdate(data);
+    }
+  };
+  
+  function handleAccountStatusUpdate(data) {
+    if (data.action === 'approved') {
+      // Add new active member to the table
+      addMemberRow(data);
+      showNotification(`${data.full_name} has been approved and added to Members.`);
+    }
+  }
+  
+  function addMemberRow(data) {
+    const tbody = document.querySelector('#liveResults tbody');
+    if (!tbody) return;
+    
+    const newRow = document.createElement('tr');
+    newRow.dataset.userId = data.user_id;
+    newRow.innerHTML = `
+      <td>-</td>
+      <td><a href="/users/${data.user_id}/detail/" class="fw-bold text-decoration-none"><code>${data.username}</code></a></td>
+      <td>${data.full_name}</td>
+      <td><code class="text-primary">—</code></td>
+      <td><small>—</small></td>
+      <td><small class="badge bg-dark">—</small></td>
+      <td><span class="badge badge-role-member">Member</span></td>
+      <td><span class="text-muted">—</span></td>
+      <td><small>—</small></td>
+      <td><span class="badge bg-success">Active</span></td>
+      <td>
+        <div class="btn-group">
+          <form method="post" action="/users/${data.user_id}/reset-password/" class="d-inline" onsubmit="return confirm('Reset password for ${data.username}?')">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-warning" title="Reset Password"><i class="bi bi-key"></i></button>
+          </form>
+          <a href="/users/${data.user_id}/edit/" class="btn btn-sm btn-outline-primary" title="Edit Member"><i class="bi bi-pencil"></i></a>
+        </div>
+      </td>
+    `;
+    
+    // Insert at top of table
+    tbody.insertBefore(newRow, tbody.firstChild);
+    
+    // Update row numbers
+    updateRowNumbers();
+  }
+  
+  function updateRowNumbers() {
+    const rows = document.querySelectorAll('#liveResults tbody tr');
+    rows.forEach((row, index) => {
+      const snCell = row.querySelector('td:first-child');
+      if (snCell) snCell.textContent = index + 1;
+    });
+  }
+  
+  function showNotification(message) {
+    const toast = document.createElement('div');
+    toast.className = 'toast show position-fixed bottom-0 end-0 m-3 bg-success text-white';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+      <div class="toast-body">
+        ${message}
+      </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+  }
+  
+  socket.onclose = function() {
+    console.log('WebSocket disconnected. Reconnecting in 5s...');
+    setTimeout(() => location.reload(), 5000);
+  };
+});
+</script>
+
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="fw-bold mb-0">
     {% if status == 'locked' %}

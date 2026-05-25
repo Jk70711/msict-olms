@@ -47,6 +47,14 @@ from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Noti
 @login_required
 def member_dashboard_view(request):
     user = request.user
+    
+    # Check account status
+    if user.registration_status == 'pending':
+        return render(request, 'circulation/member_dashboard.html', {
+            'account_pending': True,
+            'registration_status': user.registration_status,
+        })
+    
     active_transactions = BorrowingTransaction.objects.filter(
         user=user, status__in=['borrowed', 'overdue', 'lost']
     ).select_related('copy__book').order_by('-borrow_date')

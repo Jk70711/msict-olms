@@ -202,3 +202,33 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'sender_name': event['sender_name'],
             'preview': event['preview'],
         }))
+
+
+class AccountStatusConsumer(AsyncWebsocketConsumer):
+    """Real-time account status updates for librarians."""
+
+    async def connect(self):
+        self.user = self.scope.get('user')
+        if not self.user or not self.user.is_authenticated:
+            await self.close(code=4001)
+            return
+        if self.user.role not in ('librarian', 'admin'):
+            await self.close(code=4003)
+            return
+        self.group_name = 'librarians'
+        await self.channel_layer.group_add(self.group_name, self.channel_name)
+        await self.accept()
+
+    async def disconnect(self, code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(self.group_name, self.channel_name)
+
+    async def account_status_update(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'account_status_update',
+            'user_id': event['user_id'],
+            'username': event['username'],
+            'full_name': event['full_name'],
+            'status': event['status'],
+            'action': event['action'],
+        }))

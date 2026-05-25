@@ -73,6 +73,11 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         ('lecturer', 'Instructor'),
         ('staff', 'School Staff'),
     ]
+    REGISTRATION_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('cancelled', 'Cancelled'),
+    ]
 
     army_no = models.CharField(max_length=20, unique=True, validators=[army_no_validator])  # Nambari ya jeshi — lazima iwe ya kipekee
     registration_no = models.CharField(max_length=30, null=True, blank=True)  # Nambari ya usajili (kwa wanafunzi tu)
@@ -82,6 +87,7 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
     username = models.CharField(max_length=100, unique=True)  # Jina la kuingia
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='member')  # Jukumu: admin, librarian, member
     member_type = models.CharField(max_length=10, choices=MEMBER_TYPE_CHOICES, null=True, blank=True)  # Aina: student, lecturer, staff
+    registration_status = models.CharField(max_length=10, choices=REGISTRATION_STATUS_CHOICES, default='pending')  # Status: pending, approved, cancelled
     email = models.EmailField()        # Barua pepe
     phone = models.CharField(max_length=20)  # Nambari ya simu (kwa SMS)
     is_active = models.BooleanField(default=True)    # Kama False — mtumiaji amezuiwa
@@ -90,7 +96,12 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
     last_login = models.DateTimeField(null=True, blank=True)  # Mara ya mwisho kuingia
     last_password_change = models.DateTimeField(default=timezone.now)  # Mara ya mwisho kubadilisha nywila
     created_at = models.DateTimeField(auto_now_add=True)  # Tarehe ya kuunda akaunti
+    approved_by = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='approved_users')  # Aliyeidhinisha akaunti
+    approved_at = models.DateTimeField(null=True, blank=True)  # Tarehe ya idhinisho
+    cancelled_reason = models.TextField(blank=True)  # Sababu ya kukataa akaunti
     photo = models.ImageField(upload_to='user_photos/', null=True, blank=True)  # Picha ya wasifu
+    card_no = models.CharField(max_length=25, unique=True, null=True, blank=True, db_index=True,
+                               help_text='Auto-generated card number e.g. MSICT-2026-00001')
     rank = models.ForeignKey(
         'Rank', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='users', db_column='rank_id'
@@ -260,18 +271,29 @@ class VirtualCard(models.Model):
 
     @classmethod
     def generate_card_no(cls):
-        """Return the next sequential card number: MSICT-LIB-{YY}-{NNNNNN}"""
+        """Return the next sequential card number: MSICT-LIB-YY-XXXXXX
+        
+        Format: MSICT-LIB-{2-digit year}-{6-digit sequence}
+        Example: MSICT-LIB-26-000009
+        Scans both VirtualCard and OLMSUser.card_no to find the true last number.
+        """
         import re
         from django.utils import timezone as _tz
-        yy = _tz.now().strftime('%y')
+        from accounts.models import OLMSUser
+        yy = _tz.now().strftime('%y')          # 2-digit year e.g. '26'
+        prefix = f'MSICT-LIB-{yy}-'
+        pattern = re.compile(r'MSICT-LIB-(\d{2})-(\d+)')
         max_num = 0
-        for cn in cls.objects.exclude(card_no__isnull=True).exclude(card_no='').values_list('card_no', flat=True):
-            m = re.search(r'MSICT-LIB-\d+-(\d+)', cn) or re.search(r'MSICT-CARD-(\d+)', cn)
+        # Scan all existing card numbers from both tables
+        vc_cards = list(cls.objects.exclude(card_no__isnull=True).exclude(card_no='').values_list('card_no', flat=True))
+        user_cards = list(OLMSUser.objects.exclude(card_no__isnull=True).exclude(card_no='').values_list('card_no', flat=True))
+        for cn in vc_cards + user_cards:
+            m = pattern.search(cn)
             if m:
-                n = int(m.group(1))
+                n = int(m.group(2))
                 if n > max_num:
                     max_num = n
-        return f'MSICT-LIB-{yy}-{max_num + 1:06d}'
+        return f'{prefix}{max_num + 1:06d}'
 
 
 # Historia ya vitendo vikubwa kwenye mfumo — nani alifanya nini na lini

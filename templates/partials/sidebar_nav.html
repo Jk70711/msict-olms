@@ -126,12 +126,13 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">Members &amp; Media</div>
     <button class="nav-link nav-group" type="button"
-            data-bs-toggle="collapse" data-bs-target="#lib-members" aria-expanded="false">
+            data-bs-toggle="collapse" data-bs-target="#lib-members" aria-expanded="{% if cur == 'public_registrations' %}true{% else %}false{% endif %}">
       <i class="bi bi-people"></i> Members &amp; Media
       <i class="bi bi-chevron-down sidebar-chevron"></i>
     </button>
-    <div class="collapse sidebar-submenu" id="lib-members">
+    <div class="collapse sidebar-submenu{% if cur == 'public_registrations' %} show{% endif %}" id="lib-members">
       <a href="{% url 'user_list' %}" class="nav-link"><i class="bi bi-people"></i> Members</a>
+      <a href="{% url 'public_registrations' %}" class="nav-link{% if cur == 'public_registrations' %} active{% endif %}"><i class="bi bi-person-plus"></i> Public Registrations</a>
       <a href="{% url 'create_user' %}" class="nav-link"><i class="bi bi-person-plus"></i> Add Member</a>
       <a href="{% url 'news_list' %}" class="nav-link"><i class="bi bi-newspaper"></i> News</a>
       <a href="{% url 'media_slide_list' %}" class="nav-link"><i class="bi bi-images"></i> Media &amp; Carousel</a>

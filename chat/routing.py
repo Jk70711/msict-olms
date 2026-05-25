@@ -9,4 +9,5 @@ from . import consumers
 websocket_urlpatterns = [
     re_path(r'^ws/chat/(?P<conv_id>\d+)/$', consumers.ChatConsumer.as_asgi()),
     re_path(r'^ws/notifications/$',          consumers.NotificationConsumer.as_asgi()),
+    re_path(r'^ws/account-status/$',         consumers.AccountStatusConsumer.as_asgi()),
 ]

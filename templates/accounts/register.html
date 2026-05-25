@@ -1,0 +1,286 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Register – MSICT OLMS{% endblock %}
+{% block extra_css %}
+<style>
+  .register-page {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .register-page::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url('{% static "images/login-bg-pattern.png" %}');
+    opacity: 0.03;
+    pointer-events: none;
+  }
+
+  .register-container {
+    position: relative;
+    z-index: 10;
+    width: 100%;
+    max-width: 600px;
+    backdrop-filter: blur(10px);
+  }
+
+  .register-box {
+    background: rgba(4, 38, 118, 0.51);
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 25px 80px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .register-logo {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+
+  .register-logo img {
+    height: 90px;
+    width: auto;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.4));
+  }
+
+  .register-logo h1 {
+    color: #fff;
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-top: 15px;
+    letter-spacing: -0.5px;
+  }
+
+  .register-logo p {
+    color: rgba(255,255,255,0.6);
+    font-size: 0.85rem;
+    margin-top: 5px;
+  }
+
+  .register-form .form-group {
+    margin-bottom: 18px;
+  }
+
+  .register-form label {
+    display: block;
+    color: rgba(255,255,255,0.7);
+    font-size: 0.8rem;
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .register-form input,
+  .register-form select {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+  }
+
+  .register-form input::placeholder {
+    color: rgba(255,255,255,0.4);
+  }
+
+  .register-form input:focus,
+  .register-form select:focus {
+    outline: none;
+    border-color: var(--accent, #2563eb);
+    background: rgba(255,255,255,0.12);
+  }
+
+  .register-form select {
+    cursor: pointer;
+  }
+
+  .register-form select option {
+    background: #1e293b;
+    color: #fff;
+  }
+
+  .row .form-group {
+    margin-bottom: 18px;
+  }
+
+  .register-btn {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 15px rgba(220, 38, 38, 0.4);
+  }
+
+  .register-btn:hover {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.5);
+  }
+
+  .register-footer {
+    text-align: center;
+    margin-top: 25px;
+    color: rgba(255,255,255,0.5);
+    font-size: 0.85rem;
+  }
+
+  .register-footer a {
+    color: #fff;
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .register-footer a:hover {
+    text-decoration: underline;
+  }
+
+  .help-text {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.5);
+    margin-top: 5px;
+  }
+
+  @media (max-width: 576px) {
+    .register-box {
+      padding: 30px 20px;
+    }
+    .register-logo img {
+      height: 70px;
+    }
+    .register-logo h1 {
+      font-size: 1.5rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="register-page">
+  <div class="register-container">
+    <div class="register-box">
+      <div class="register-logo">
+        {% if logo and logo.image %}
+        <img src="{{ logo.image.url }}" alt="{{ logo.title }}">
+        {% else %}
+        <img src="{% static 'images/msict_logo.png' %}" alt="MSICT">
+        {% endif %}
+        <h1>Register</h1>
+        <p>Military School of Information and Technology</p>
+      </div>
+
+      <form method="post" class="register-form">
+        {% csrf_token %}
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="army_no">Army Number *</label>
+              <input type="text" name="army_no" id="army_no" placeholder="e.g. MT 134513" required>
+              <div class="help-text">Must start with MT, MTM, P, or PW</div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="registration_no">Registration Number</label>
+              <input type="text" name="registration_no" id="registration_no" placeholder="e.g. 2024/CS/001">
+              <div class="help-text">Required for students only</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-4">
+            <div class="form-group">
+              <label for="first_name">First Name *</label>
+              <input type="text" name="first_name" id="first_name" placeholder="John" required>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <label for="middle_name">Middle Name</label>
+              <input type="text" name="middle_name" id="middle_name" placeholder="Michael">
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="form-group">
+              <label for="surname">Surname *</label>
+              <input type="text" name="surname" id="surname" placeholder="Doe" required>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="member_type">Member Type *</label>
+              <select name="member_type" id="member_type" required>
+                <option value="">-- Select Type --</option>
+                <option value="student">Student</option>
+                <option value="lecturer">Instructor</option>
+                <option value="staff">School Staff</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="rank">Rank</label>
+              <select name="rank" id="rank">
+                <option value="">-- Select Rank (Optional) --</option>
+                {% for rank_name in rank_list %}
+                <option value="{{ rank_name }}">{{ rank_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="email">Email *</label>
+              <input type="email" name="email" id="email" placeholder="john@example.com" required>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="phone">Phone Number *</label>
+              <input type="text" name="phone" id="phone" placeholder="+255 123 456 789" required>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="register-btn">
+          <i class="bi bi-person-plus"></i> Submit Registration
+        </button>
+      </form>
+
+      <div class="register-footer">
+        Already have an account? <a href="{% url 'login' %}">Sign In</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

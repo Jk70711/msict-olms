@@ -20,11 +20,147 @@ from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Q, Sum, Count
 from django.views.decorators.http import require_POST
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP
 from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user
 from .forms import LoginForm
 from .security_utils import safe_redirect, build_content_disposition
+from .models import Rank
+
+
+# ----------------------------------------------------------------------
+# WebSocket Helper — Send account status updates to librarians
+# ----------------------------------------------------------------------
+def send_account_status_update(user, action):
+    """Send websocket notification to all librarians about account status change."""
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        'librarians',
+        {
+            'type': 'account_status_update',
+            'user_id': user.id,
+            'username': user.username,
+            'full_name': user.get_full_name(),
+            'status': user.registration_status,
+            'action': action,
+        }
+    )
+
+
+# ----------------------------------------------------------------------
+# Public Registration View — Self-registration for members
+# ----------------------------------------------------------------------
+def public_register_view(request):
+    """Public self-registration for library members (students, lecturers, staff)."""
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        # Extract form data
+        army_no = request.POST.get('army_no', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        middle_name = request.POST.get('middle_name', '').strip()
+        surname = request.POST.get('surname', '').strip()
+        email = request.POST.get('email', '').strip()
+        phone = request.POST.get('phone', '').strip()
+        member_type = request.POST.get('member_type', '').strip()
+        registration_no = request.POST.get('registration_no', '').strip() or None
+        rank_name = request.POST.get('rank', '').strip() or None
+
+        # Validation
+        if not re.match(r'^(MTM|MT|PW|P)\s?\d+$', army_no):
+            messages.error(request, 'Army number must start with MT, MTM, P, or PW followed by digits (e.g. MT 134513, MTM 456, P 789, PW 101).')
+            return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
+
+        if OLMSUser.objects.filter(army_no=army_no).exists():
+            messages.error(request, 'Army number already registered.')
+            return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
+
+        if OLMSUser.objects.filter(email=email).exists():
+            messages.error(request, 'Email already registered.')
+            return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
+
+        # Registration number only required for students
+        if member_type == 'student' and not registration_no:
+            messages.error(request, 'Registration number is required for students.')
+            return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
+
+        if member_type != 'student':
+            registration_no = None
+
+        # Generate username and initial password
+        username = OLMSUser.generate_username('member', member_type, surname, registration_no)
+        initial_password = OLMSUser.generate_initial_password(army_no)
+
+        # Handle duplicate username
+        if OLMSUser.objects.filter(username=username).exists():
+            username = f"{username}_{army_no.replace(' ', '').replace('MT', '').lower()}"
+
+        # Get rank object if provided
+        rank_obj = Rank.objects.filter(rank_name=rank_name).first() if rank_name else None
+
+        # Create user with pending status
+        user = OLMSUser.objects.create_user(
+            username=username,
+            password=initial_password,
+            army_no=army_no,
+            first_name=first_name,
+            middle_name=middle_name,
+            surname=surname,
+            email=email,
+            phone=phone,
+            role='member',
+            member_type=member_type,
+            registration_no=registration_no,
+            rank=rank_obj,
+            last_password_change=timezone.now(),
+            registration_status='pending',  # Default to pending
+            is_active=False,  # Cannot login until approved
+        )
+
+        # Log audit (use None for public registration since user is not authenticated yet)
+        log_audit(None, f"Self-registration submitted by {user.get_full_name()} (Army No: {army_no})", request)
+
+        # Send registration notification (email + SMS)
+        login_url = request.build_absolute_uri('/login/')
+        subject = "MSICT OLMS — Registration Request Received"
+        body = (
+            f"Dear {user.get_full_name()},\n\n"
+            f"Thank you for registering with the MSICT Library (OLMS).\n\n"
+            f"Your registration request has been received and is pending librarian approval.\n\n"
+            f"  Full Name    : {user.get_full_name()}\n"
+            f"  Army No      : {army_no}\n"
+            f"  Member Type  : {dict(OLMSUser.MEMBER_TYPE_CHOICES).get(member_type, member_type).title()}\n"
+            f"  Email        : {email}\n"
+            f"  Phone        : {phone}\n\n"
+            f"You will receive another notification once your account is approved with your login credentials.\n\n"
+            f"Login URL: {login_url}\n\n"
+            f"Regards,\nMSICT Library Administration"
+        )
+        sms_body = (
+            f"MSICT OLMS: Registration received.\n"
+            f"Name: {user.get_full_name()}\n"
+            f"ArmyNo: {army_no}\n"
+            f"Status: Pending approval.\n"
+            f"You will be notified once approved."
+        )
+
+        sms_ok = notify_user(user, sms_body, 'sms')
+        email_ok = notify_user(user, body, 'email', subject=subject)
+
+        if sms_ok.status == 'sent' and email_ok.status == 'sent':
+            messages.success(request, 'Registration submitted successfully! A confirmation has been sent to your phone and email. You will be notified once approved.')
+        elif sms_ok.status == 'sent':
+            messages.success(request, 'Registration submitted! SMS confirmation sent. Email delivery failed.')
+        elif email_ok.status == 'sent':
+            messages.success(request, 'Registration submitted! Email confirmation sent. SMS delivery failed.')
+        else:
+            messages.success(request, 'Registration submitted! However, we could not send confirmation via SMS or email. Please check back later.')
+        return redirect('login')
+
+    return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
 
 
 # ----------------------------------------------------------------------
@@ -62,8 +198,19 @@ def login_view(request):
 
             # ── Gate check before attempting authentication ─────────────
             if db_user:
+                # Pending account check - prevent login until approved
+                if db_user.registration_status == 'pending':
+                    messages.error(request, 'Your account is pending librarian approval. You will receive a notification once approved.')
+                    return render(request, 'accounts/login.html', {'form': form})
+
+                # Cancelled account check
+                if db_user.registration_status == 'cancelled':
+                    messages.error(request, f'Your account registration was cancelled. Reason: {db_user.cancelled_reason or "Contact library administration."}')
+                    return render(request, 'accounts/login.html', {'form': form})
+
+                # Locked account check (admin action or 6 failed attempts)
                 if not db_user.is_active:
-                    messages.error(request, 'Account is permanently locked. Contact admin to restore access.')
+                    messages.error(request, 'Account is locked. Contact admin to restore access.')
                     return render(request, 'accounts/login.html', {'form': form})
 
                 # Second login restriction: user must change password via forgot password if they haven't changed after first login
@@ -468,6 +615,166 @@ def librarian_required(func):
     return wrapper
 
 
+# ----------------------------------------------------------------------
+# Account Approval View — Librarian approves pending registration
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+@require_POST
+def approve_account_view(request, user_id):
+    """Approve a pending user account and send credentials."""
+    user = get_object_or_404(OLMSUser, pk=user_id, role='member', registration_status='pending')
+    
+    # Generate initial password from army number
+    initial_password = OLMSUser.generate_initial_password(user.army_no)
+    user.set_password(initial_password)
+    
+    # Update account status
+    user.registration_status = 'approved'
+    user.is_active = True
+    user.approved_by = request.user
+    user.approved_at = timezone.now()
+    
+    # Generate card number if not exists
+    if not user.card_no:
+        user.card_no = VirtualCard.generate_card_no()
+    user.save()
+    
+    # Generate virtual card (QR, barcode)
+    card = generate_virtual_card(user)
+    card_no = user.card_no
+    
+    # Log audit
+    log_audit(request.user, f"Approved account for {user.get_full_name()} (Army No: {user.army_no})", request)
+    
+    # Send websocket notification to librarians (non-blocking)
+    try:
+        send_account_status_update(user, 'approved')
+    except Exception as e:
+        print(f"WebSocket notification error: {e}")
+    
+    # Send approval notification with credentials
+    login_url = request.build_absolute_uri('/login/')
+    subject = "MSICT OLMS — Account Approved"
+    body = (
+        f"Dear {user.get_full_name()},\n\n"
+        f"Your MSICT Library (OLMS) account has been approved. Below are your login credentials:\n\n"
+        f"  Full Name    : {user.get_full_name()}\n"
+        f"  Army No      : {user.army_no}\n"
+        f"  Member Type  : {dict(OLMSUser.MEMBER_TYPE_CHOICES).get(user.member_type, user.member_type).title() if user.member_type else 'Member'}\n"
+        f"  Username     : {user.username}\n"
+        f"  Password     : {initial_password}\n"
+        f"  Library Card : {card_no}\n"
+        f"  Login URL    : {login_url}\n\n"
+        f"IMPORTANT: You must change your password immediately on first login for security.\n"
+        f"  Steps: Login → Dashboard → Change Password\n\n"
+        f"Keep this message confidential. Do not share your credentials.\n\n"
+        f"Regards,\nMSICT Library Administration"
+    )
+    sms_body = (
+        f"MSICT OLMS: Account approved.\n"
+        f"Name: {user.get_full_name()}\n"
+        f"ArmyNo: {user.army_no}\n"
+        f"Username: {user.username}\n"
+        f"Pwd: {initial_password}\n"
+        f"Card: {card_no}\n"
+        f"Login: {login_url}"
+    )
+    
+    sms_ok = notify_user(user, sms_body, 'sms')
+    email_ok = notify_user(user, body, 'email', subject=subject)
+    
+    if sms_ok.status == 'sent' and email_ok.status == 'sent':
+        messages.success(request, f'Account for {user.get_full_name()} approved. Credentials sent via email and SMS.')
+    elif sms_ok.status == 'sent':
+        messages.warning(request, f'Account approved. SMS sent, but email delivery failed.')
+    elif email_ok.status == 'sent':
+        messages.warning(request, f'Account approved. Email sent, but SMS delivery failed.')
+    else:
+        messages.warning(request, f'Account approved, but both SMS and email failed. Inform the user manually.')
+    
+    return redirect('public_registrations')
+
+
+# ----------------------------------------------------------------------
+# Account Rejection View — Librarian rejects pending registration
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+@require_POST
+def reject_account_view(request, user_id):
+    """Reject a pending user account with reason."""
+    user = get_object_or_404(OLMSUser, pk=user_id, role='member', registration_status='pending')
+    
+    cancelled_reason = request.POST.get('cancelled_reason', '').strip()
+    if not cancelled_reason:
+        messages.error(request, 'Cancellation reason is required.')
+        return redirect('public_registrations')
+    
+    # Update account status
+    user.registration_status = 'cancelled'
+    user.cancelled_reason = cancelled_reason
+    user.save()
+    
+    # Log audit
+    log_audit(request.user, f"Cancelled account for {user.get_full_name()} (Army No: {user.army_no}). Reason: {cancelled_reason}", request)
+    
+    # Send websocket notification to librarians (non-blocking)
+    try:
+        send_account_status_update(user, 'cancelled')
+    except Exception as e:
+        print(f"WebSocket notification error: {e}")
+    
+    # Send cancellation notification
+    subject = "MSICT OLMS — Registration Request Cancelled"
+    body = (
+        f"Dear {user.get_full_name()},\n\n"
+        f"Your MSICT Library (OLMS) registration request has been cancelled.\n\n"
+        f"  Army No      : {user.army_no}\n"
+        f"  Cancellation Reason: {cancelled_reason}\n\n"
+        f"If you believe this is an error, please contact the library administration.\n\n"
+        f"Regards,\nMSICT Library Administration"
+    )
+    sms_body = (
+        f"MSICT OLMS: Registration cancelled.\n"
+        f"Name: {user.get_full_name()}\n"
+        f"ArmyNo: {user.army_no}\n"
+        f"Reason: {cancelled_reason}"
+    )
+    
+    sms_ok = notify_user(user, sms_body, 'sms')
+    email_ok = notify_user(user, body, 'email', subject=subject)
+    
+    if sms_ok.status == 'sent' or email_ok.status == 'sent':
+        messages.success(request, f'Account for {user.get_full_name()} has been cancelled. Notification sent.')
+    else:
+        messages.warning(request, f'Account cancelled, but notification delivery failed.')
+    
+    return redirect('public_registrations')
+
+
+# ----------------------------------------------------------------------
+# Public Registrations View — Librarian manages self-registrations
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+def public_registrations_view(request):
+    """View all public self-registrations — only pending users shown. Cancelled/approved disappear."""
+    
+    # Only show pending registrations — cancelled users disappear, approved go to members page
+    qs = OLMSUser.objects.filter(role='member', registration_status='pending').select_related('rank').order_by('-created_at')
+    
+    # Count for stats
+    pending_count = qs.count()
+    approved_count = OLMSUser.objects.filter(role='member', registration_status='approved').count()
+    
+    return render(request, 'accounts/public_registrations.html', {
+        'registrations': qs,
+        'pending_count': pending_count,
+        'approved_count': approved_count,
+    })
+
+
 # Decorator: inazuia ufikiaji kwa watu ambao si admin peke yake
 def admin_required(func):
     from functools import wraps
@@ -489,7 +796,7 @@ def user_list_view(request):
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
     role_filter = request.GET.get('role', '')
-    users = OLMSUser.objects.exclude(role='admin').select_related('virtual_card', 'rank').order_by('surname', 'first_name')
+    users = OLMSUser.objects.exclude(role='admin').filter(registration_status='approved').select_related('virtual_card', 'rank').order_by('surname', 'first_name')
 
     if query:
         users = users.filter(
@@ -626,10 +933,16 @@ def create_user_view(request):
             registration_no=registration_no,
             rank=rank_obj,
             last_password_change=timezone.now(),
+            registration_status='approved',
+            is_active=True,
         )
+        
+        # Generate card number
+        user.card_no = VirtualCard.generate_card_no()
+        user.save()
 
         card = generate_virtual_card(user)
-        card_no = card.card_no or 'N/A'
+        card_no = user.card_no or 'N/A'
 
         role_label = dict(OLMSUser.ROLE_CHOICES).get(role, role).title()
         type_label = dict(OLMSUser.MEMBER_TYPE_CHOICES).get(member_type, '') if member_type else ''

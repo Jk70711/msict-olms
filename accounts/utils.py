@@ -149,9 +149,13 @@ def generate_virtual_card(user):
 
     card, created = VirtualCard.objects.get_or_create(user=user)
 
-    # Assign card_no if not yet set
-    if not card.card_no:
+    # Use user.card_no if set; otherwise generate a new one and sync both
+    if user.card_no:
+        card.card_no = user.card_no
+    elif not card.card_no:
         card.card_no = VirtualCard.generate_card_no()
+        user.card_no = card.card_no
+        user.save(update_fields=['card_no'])
 
     qr_data = f"MSICT-OLMS|{user.army_no}|{user.get_full_name()}|{user.role}|{card.card_no}"
     qr = qrcode.QRCode(version=1, box_size=6, border=2)

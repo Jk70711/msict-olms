@@ -8,6 +8,7 @@ from . import views
 
 urlpatterns = [
     # ── Kuingia na Kutoka ────────────────────────────────────
+    path('register/', views.public_register_view, name='public_register'),                   # /register/ — Usajili wa umma
     path('login/', views.login_view, name='login'),                                          # /login/ — Ukurasa wa kuingia
     path('logout/', views.logout_view, name='logout'),                                       # /logout/ — Kutoka nje
     path('forgot-password/', views.forgot_password_view, name='forgot_password'),            # Omba OTP kwa barua pepe
@@ -27,7 +28,10 @@ urlpatterns = [
     path('users/<int:user_id>/detail/', views.user_detail_view, name='user_detail'),         # Maelezo ya mtumiaji
     path('users/<int:user_id>/edit/', views.edit_user_view, name='edit_user'),               # Hariri mtumiaji
     path('users/<int:user_id>/reset-password/', views.reset_user_password_view, name='reset_user_password'),  # Weka upya nywila
+    path('users/<int:user_id>/approve/', views.approve_account_view, name='approve_account'), # Idhinisha akaunti — LAZIMA iwe kabla ya <str:action>
+    path('users/<int:user_id>/reject/', views.reject_account_view, name='reject_account'),   # Kataa akaunti — LAZIMA iwe kabla ya <str:action>
     path('users/<int:user_id>/<str:action>/', views.user_action_view, name='user_action'),   # Zuia/fungua akaunti
+    path('public-registrations/', views.public_registrations_view, name='public_registrations'),  # Orodha ya usajili wa umma
 
     # ── Dashboard na Mipangilio ya Msimamizi (admin) ────────────
     path('admin-dashboard/', views.admin_dashboard_view, name='admin_dashboard'),            # Dashboard ya msimamizi
