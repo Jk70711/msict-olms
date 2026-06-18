@@ -10,8 +10,11 @@ from django.dispatch import receiver
 from accounts.models import OLMSUser
 
 
-# Aina/Somo la vitabu — inaweza kuwa na kategoria mama (parent)
+# ----------------------------------------------------------------------
+# Model ya Kategoria — Aina/Somo la vitabu
+# Inaweza kuwa na kategoria mama (parent)
 # Kila kategoria inapewa herufi ya rafu (A, B, C...) otomatiki
+# ----------------------------------------------------------------------
 class Category(models.Model):
     name = models.CharField(max_length=100)
     parent = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='subcategories')
@@ -44,8 +47,11 @@ class Category(models.Model):
         return self.shelves.order_by('shelf_number')
 
 
-# Kozi za shule — zinaunganishwa na Category
+# ----------------------------------------------------------------------
+# Model ya Kozi — Kozi za shule
+# Zinaunganishwa na Category
 # Vitabu vinaweza kuwa vya kozi moja au zaidi
+# ----------------------------------------------------------------------
 class Course(models.Model):
     course_name = models.CharField(max_length=200)
     duration = models.CharField(max_length=50, blank=True)
@@ -58,8 +64,11 @@ class Course(models.Model):
         return self.course_name
 
 
-# Taarifa za kitabu — jina, mwandishi, ISBN, picha ya jalada n.k.
+# ----------------------------------------------------------------------
+# Model ya Kitabu — Taarifa za kitabu
+# Jina, mwandishi, ISBN, picha ya jalada n.k.
 # Kitabu kimoja kinaweza kuwa na nakala nyingi (BookCopy)
+# ----------------------------------------------------------------------
 class Book(models.Model):
     isbn = models.CharField(max_length=13, unique=True, null=True, blank=True)
     title = models.CharField(max_length=500)
@@ -120,6 +129,9 @@ class Book(models.Model):
         return {'both': 'Both (Hard + Soft)', 'softcopy': 'Softcopy', 'hardcopy': 'Hardcopy'}.get(t, t)
 
 
+# ----------------------------------------------------------------------
+# Model ya BookCourse — Uhusiano wa vitabu na kozi (many-to-many)
+# ----------------------------------------------------------------------
 class BookCourse(models.Model):
     book = models.ForeignKey(Book, on_delete=models.CASCADE)
     course = models.ForeignKey(Course, on_delete=models.CASCADE)
@@ -129,8 +141,11 @@ class BookCourse(models.Model):
         unique_together = ('book', 'course')
 
 
-# Nakala halisi ya kitabu — inaweza kuwa hardcopy (kimwili) au softcopy (PDF)
+# ----------------------------------------------------------------------
+# Model ya Nakala ya Kitabu — Nakala halisi ya kitabu
+# Inaweza kuwa hardcopy (kimwili) au softcopy (PDF)
 # Kila nakala ina nambari ya accession ya kipekee (e.g. MSICT/000001)
+# ----------------------------------------------------------------------
 class BookCopy(models.Model):
     COPY_TYPE_CHOICES = [('hardcopy', 'Hardcopy'), ('softcopy', 'Softcopy')]
     ACCESS_TYPE_CHOICES = [('borrow', 'Special Soft Copy'), ('free', 'Free Soft Copy')]
@@ -230,6 +245,10 @@ class BookCopy(models.Model):
         super().save(*args, **kwargs)
 
 
+# ----------------------------------------------------------------------
+# Model ya DeletedAccessionNumber — Nambari za accession zilizofutwa
+# Inafuatilia nambari za accession zilizofutwa ili kutumika tena
+# ----------------------------------------------------------------------
 class DeletedAccessionNumber(models.Model):
     """Tombstone table: tracks permanently deleted copy accession numbers for reuse."""
     accession_no = models.CharField(max_length=50, unique=True)
@@ -244,10 +263,13 @@ class DeletedAccessionNumber(models.Model):
         return self.accession_no
 
 
+# ----------------------------------------------------------------------
+# Signal — Rekodi nambari ya accession wakati nakala inafutwa
+# ----------------------------------------------------------------------
 @receiver(post_delete, sender='catalog.BookCopy')
 def tombstone_accession_on_delete(sender, instance, **kwargs):
-    """When a BookCopy is permanently deleted, record its accession number for reuse.
-    Softcopy SOFT/ numbers are NOT tombstoned — they are cheap and not physical.
+    """Wakati nakala inafutwa, rekodi nambari ya accession ili kutumika tena.
+    Nambari za SOFT/ hazirekodiwa — ni za kidijitali na hazihitaji kutumika tena.
     """
     acc = instance.accession_no
     if not acc or acc.startswith('SOFT/'):
@@ -267,8 +289,10 @@ def tombstone_accession_on_delete(sender, instance, **kwargs):
         )
 
 
-# Rafu ya kimwili kwenye maktaba
+# ----------------------------------------------------------------------
+# Model ya Rafu — Rafu ya kimwili kwenye maktaba
 # Kila rafu ina nambari ya kipekee kama SHELF-A1, SHELF-B2 n.k.
+# ----------------------------------------------------------------------
 class Shelf(models.Model):
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='shelves')
     shelf_number = models.PositiveIntegerField(default=1)
@@ -299,7 +323,10 @@ class Shelf(models.Model):
         return BookCopy.objects.filter(shelf_location=self.shelf_code, copy_type='hardcopy').count()
 
 
-# Historia ya harakati za nakala — imongezwa, imepotea, imehaririwa
+# ----------------------------------------------------------------------
+# Model ya InventoryLog — Historia ya harakati za nakala
+# Inarekodi: imongezwa, imepotea, imehaririwa
+# ----------------------------------------------------------------------
 class InventoryLog(models.Model):
     copy = models.ForeignKey(BookCopy, on_delete=models.SET_NULL, null=True, related_name='inventory_logs')
     action = models.CharField(max_length=50)
@@ -315,6 +342,10 @@ class InventoryLog(models.Model):
         return f"{self.action} on {self.copy} by {self.performed_by}"
 
 
+# ----------------------------------------------------------------------
+# Model ya ExternalLibrary — Maktaba za nje (federated search)
+# Inatumika kwa kutafuta vitabu kutoka maktaba nyingine
+# ----------------------------------------------------------------------
 class ExternalLibrary(models.Model):
     LIB_TYPE_CHOICES = [('opac', 'OPAC'), ('z3950', 'Z39.50'), ('api', 'API')]
     name = models.CharField(max_length=200)
@@ -336,7 +367,10 @@ class ExternalLibrary(models.Model):
         return f"{self.base_url}?{urlencode({self.search_param: query})}"
 
 
-# Habari, matangazo, matukio — yanaonekana kwenye ukurasa wa nyumbani
+# ----------------------------------------------------------------------
+# Model ya News — Habari, matangazo, matukio
+# Yanaonekana kwenye ukurasa wa nyumbani
+# ----------------------------------------------------------------------
 class News(models.Model):
     TYPE_CHOICES = [
         ('news',         'News'),
@@ -390,8 +424,10 @@ class News(models.Model):
         return self.video_url
 
 
-# Picha za carousel kwenye ukurasa wa nyumbani
+# ----------------------------------------------------------------------
+# Model ya MediaSlide — Picha za carousel kwenye ukurasa wa nyumbani
 # Pia inatumika kwa logo ya mfumo (slide_type='logo')
+# ----------------------------------------------------------------------
 class MediaSlide(models.Model):
     SLIDE_TYPE_CHOICES = [
         ('carousel', 'Homepage Carousel'),
@@ -442,9 +478,13 @@ class MediaSlide(models.Model):
         return cls.objects.filter(slide_type='home_bg', is_active=True).first()
 
 
+# ----------------------------------------------------------------------
+# Model ya Footer — Maudhui ya footer yanayoweza kuhaririwa
+# Ina: jina la shule, anwani, simu, barua pepe, viungo vya kijamii
+# ----------------------------------------------------------------------
 class Footer(models.Model):
-    """Editable footer content for the website"""
-    school_name = models.CharField(max_length=255, default='MSICT Online Library')
+    """Maudhui ya footer yanayoweza kuhaririwa kwa tovuti"""
+    school_name = models.CharField(max_length=255, default='MSICT Library')
     address = models.TextField(blank=True, help_text='Physical address')
     phone = models.CharField(max_length=50, blank=True, help_text='Contact phone number')
     email = models.EmailField(blank=True, help_text='Contact email')

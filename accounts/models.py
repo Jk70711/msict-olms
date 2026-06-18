@@ -123,6 +123,14 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         verbose_name = 'User'
         verbose_name_plural = 'Users'
 
+    def save(self, *args, **kwargs):
+        # Admin and librarian accounts are created by staff — they must never
+        # sit in the member approval queue regardless of how they were created.
+        if self.role in ('admin', 'librarian'):
+            self.registration_status = 'approved'
+            self.is_active = True
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.get_full_name()} ({self.username})"
 
@@ -309,6 +317,23 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.action} at {self.timestamp}"
+
+
+# Historia ya nywila — inahifadhi nywila 3 za mwisho kwa kila mtumiaji
+# Inazuia mtumiaji kutumia tena nywila zilizotumika hapo awali
+class PasswordHistory(models.Model):
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='password_history')
+    password_hash = models.CharField(max_length=255)  # Django password hash
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'password_history'
+        ordering = ['-created_at']
+        verbose_name = 'Password History'
+        verbose_name_plural = 'Password Histories'
+
+    def __str__(self):
+        return f"{self.user.username} password at {self.created_at.strftime('%Y-%m-%d %H:%M')}"
 
 
 # Mipangilio ya mfumo — inabadilishwa kupitia /admin/preferences/

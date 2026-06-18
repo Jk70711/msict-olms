@@ -51,11 +51,26 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   socket.onclose = function() {
-    console.log('WebSocket disconnected. Reconnecting in 5s...');
-    setTimeout(() => location.reload(), 5000);
+    console.log('WebSocket disconnected.');
   };
 });
 </script>
+
+{% if not user.password_changed_after_first_login %}
+<div class="alert alert-danger border-0 shadow-sm mb-4 d-flex align-items-start gap-3" role="alert" style="border-left: 5px solid #dc3545 !important;">
+  <div class="bg-danger text-white rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width:46px;height:46px;">
+    <i class="bi bi-shield-lock-fill fs-5"></i>
+  </div>
+  <div class="flex-grow-1">
+    <h6 class="fw-bold mb-1 text-danger"><i class="bi bi-exclamation-triangle-fill me-1"></i> Action Required: Change Your Password</h6>
+    <p class="mb-2 small">This is your <strong>first login</strong>. Your account was created with a temporary password. You <strong>must change your password now</strong> — you will be blocked from logging in next time if you don't.</p>
+    <a href="{% url 'forgot_password' %}" class="btn btn-danger btn-sm">
+      <i class="bi bi-key-fill me-1"></i> Change Password Now
+    </a>
+  </div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
 
 <div class="card border-0 shadow-sm mb-4">
   <div class="card-body p-4">

@@ -166,6 +166,16 @@ class SecurityHeadersMiddleware:
         response.setdefault('X-Permitted-Cross-Domain-Policies', 'none')
         # Belt-and-braces clickjacking header in case a view drops X-Frame-Options.
         response.setdefault('X-Frame-Options', 'DENY')
+        # Remove server technology header to prevent fingerprinting
+        response['Server'] = 'MSICT-OLMS'
+        # OWASP A05: Prevent browsers from caching authenticated/sensitive pages.
+        # Only applied to authenticated requests and HTML responses (not static assets).
+        if (
+            request.user.is_authenticated
+            and 'text/html' in response.get('Content-Type', '')
+        ):
+            response.setdefault('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+            response.setdefault('Pragma', 'no-cache')
         return response
 
 
@@ -174,32 +184,41 @@ class SecurityHeadersMiddleware:
 # ----------------------------------------------------------------------
 class LoginRateLimitMiddleware:
     """
-    In-memory sliding-window rate limit for POST requests to the login
-    endpoint, keyed by client IP. This complements the per-account
-    failed-attempts throttle implemented in accounts.views.login_view by
-    blocking distributed brute-force / credential-stuffing attacks that
-    cycle through usernames.
+    Sliding-window rate limit for POST requests to the login endpoint,
+    keyed by client IP.
+
+    Backend priority:
+      1. Redis  — shared across all workers/processes (production-safe).
+      2. In-memory deque — fallback when Redis is unavailable (dev/single-process).
 
     Defaults: max 10 POSTs per 60 seconds per IP. Tunable via settings:
         LOGIN_RATELIMIT_MAX     = 10
         LOGIN_RATELIMIT_WINDOW  = 60   # seconds
-        LOGIN_RATELIMIT_PATHS   = ('/accounts/login/',)
-
-    NB: For a multi-process deployment (Gunicorn workers) this should be
-    backed by Redis to share state. The in-memory implementation still
-    raises the cost of brute force significantly per worker.
+        LOGIN_RATELIMIT_PATHS   = ('/login/',)
     """
 
-    _hits = defaultdict(deque)  # ip -> deque[timestamp]
+    _hits = defaultdict(deque)  # fallback: ip -> deque[timestamp]
 
     def __init__(self, get_response):
         self.get_response = get_response
         self.max_hits = int(getattr(settings, 'LOGIN_RATELIMIT_MAX', 10))
-        self.window = int(getattr(settings, 'LOGIN_RATELIMIT_WINDOW', 60))
-        self.paths = tuple(getattr(
+        self.window   = int(getattr(settings, 'LOGIN_RATELIMIT_WINDOW', 60))
+        self.paths    = tuple(getattr(
             settings, 'LOGIN_RATELIMIT_PATHS',
             ('/accounts/login/', '/login/')
         ))
+        # Try to connect to Redis for shared-state rate limiting
+        self._redis = None
+        try:
+            import redis as _redis_lib
+            host = getattr(settings, 'REDIS_HOST', '127.0.0.1')
+            port = int(getattr(settings, 'REDIS_PORT', 6379))
+            self._redis = _redis_lib.Redis(host=host, port=port, db=1,
+                                           socket_connect_timeout=1,
+                                           decode_responses=True)
+            self._redis.ping()  # fail fast if Redis is down
+        except Exception:
+            self._redis = None  # graceful fallback to in-memory
 
     @staticmethod
     def _client_ip(request):
@@ -208,25 +227,44 @@ class LoginRateLimitMiddleware:
             return xff.split(',')[0].strip()
         return request.META.get('REMOTE_ADDR', '0.0.0.0')
 
+    def _is_rate_limited(self, ip):
+        now = time.time()
+        if self._redis:
+            try:
+                key = f'olms:login_rl:{ip}'
+                pipe = self._redis.pipeline()
+                pipe.zadd(key, {str(now): now})
+                pipe.zremrangebyscore(key, '-inf', now - self.window)
+                pipe.zcard(key)
+                pipe.expire(key, self.window * 2)
+                results = pipe.execute()
+                count = results[2]
+                return count > self.max_hits, max(0, int(self.window - (now % self.window))) + 1
+            except Exception:
+                pass  # Redis error — fall through to in-memory
+        # In-memory fallback
+        bucket = self._hits[ip]
+        cutoff = now - self.window
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= self.max_hits:
+            retry_after = int(self.window - (now - bucket[0])) + 1
+            return True, retry_after
+        bucket.append(now)
+        return False, 0
+
     def __call__(self, request):
         if request.method == 'POST' and any(
             request.path.startswith(p) for p in self.paths
         ):
             ip = self._client_ip(request)
-            now = time.time()
-            bucket = self._hits[ip]
-            # Drop timestamps outside the sliding window
-            cutoff = now - self.window
-            while bucket and bucket[0] < cutoff:
-                bucket.popleft()
-            if len(bucket) >= self.max_hits:
-                retry_after = int(self.window - (now - bucket[0])) + 1
+            limited, retry_after = self._is_rate_limited(ip)
+            if limited:
                 resp = HttpResponseForbidden(
                     "Too many login attempts from your IP. "
                     f"Please wait {retry_after} second(s) and try again."
                 )
                 resp['Retry-After'] = str(retry_after)
                 return resp
-            bucket.append(now)
 
         return self.get_response(request)

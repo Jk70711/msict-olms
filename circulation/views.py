@@ -21,7 +21,9 @@ from accounts.utils import log_audit, send_sms, send_email_notification, create_
 from accounts.models import OLMSUser
 
 
-# Msaidizi wa kusoma mipangilio kutoka DB au settings.py
+# ----------------------------------------------------------------------
+# Msaidizi wa Kusoma Mipangilio — Anasoma mipangilio kutoka DB au settings.py
+# ----------------------------------------------------------------------
 def _pref(key, default):
     """Read from SystemPreference DB, fallback to settings, then default."""
     try:
@@ -45,6 +47,9 @@ from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Noti
 #   - Faini ambazo hazijalipwa
 #   - Arifa 10 za hivi karibuni
 @login_required
+# ----------------------------------------------------------------------
+# View ya Dashboard ya Mwanachama — Dashboard ya mwanachama
+# ----------------------------------------------------------------------
 def member_dashboard_view(request):
     user = request.user
     
@@ -161,6 +166,9 @@ def member_dashboard_view(request):
 
 # ── Book-level hardcopy request — copy assigned later by librarian ────────────
 @login_required
+# ----------------------------------------------------------------------
+# View ya Omba Kukopa Kitabu — Mwanachama anaomba kukopa hardcopy
+# ----------------------------------------------------------------------
 def request_borrow_book_view(request, book_id):
     """Member requests a hardcopy book title. No copy is auto-assigned yet.
     The librarian issues the specific copy via the 'Issue Copy' modal at pickup."""
@@ -200,6 +208,9 @@ def request_borrow_book_view(request, book_id):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Omba Kukopa Softcopy — Mwanachama anaomba kukopa softcopy
+# ----------------------------------------------------------------------
 def request_borrow_softcopy_view(request, book_id):
     """Auto-selects the first available borrowable softcopy and submits a request."""
     book = get_object_or_404(Book, pk=book_id)
@@ -211,6 +222,9 @@ def request_borrow_softcopy_view(request, book_id):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Pakua Kitabu Bure — Mwanachama anapakua softcopy bure
+# ----------------------------------------------------------------------
 def download_free_book_view(request, book_id):
     """Redirects to the free softcopy download for the given book."""
     book = get_object_or_404(Book, pk=book_id)
@@ -224,6 +238,9 @@ def download_free_book_view(request, book_id):
 # Ukurasa wa kutafuta na kuomba kukopa vitabu (kwa mwanachama)
 # Inazuia mwanachama ambaye ana vitabu vilivyochelewa
 @login_required
+# ----------------------------------------------------------------------
+# View ya Katalogi ya Kukopa — Mwanachama anaona vitabu vya kukopa
+# ----------------------------------------------------------------------
 def borrow_catalog_view(request):
     if request.user.has_overdue():
         messages.error(request, 'You have overdue books. Return them before borrowing new ones.')
@@ -309,6 +326,9 @@ def borrow_catalog_view(request):
 # Tuma ombi la kukopa nakala moja
 # Inazuia: mwanachama ambaye ana overdue, faini, au amefika kikomo cha mikopo
 @login_required
+# ----------------------------------------------------------------------
+# View ya Tuma Ombi la Kukopa — Mwanachama anatuma ombi la kukopa
+# ----------------------------------------------------------------------
 def submit_borrow_request_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id)
 
@@ -353,7 +373,7 @@ def submit_borrow_request_view(request, copy_id):
             copy=copy,
             borrow_type='softcopy',
         )
-        fine_per_day = float(_pref('FINE_PER_DAY', 500))
+        fine_per_day = float(_pref('FINE_PER_DAY', 1000))
         softcopy_url = request.build_absolute_uri(reverse('serve_softcopy', args=[copy.pk]))
         msg_sms = (
             f"MSICT OLMS: You have been issued digital copy \"{copy.book.title}\" "
@@ -390,6 +410,9 @@ def submit_borrow_request_view(request, copy_id):
 # Futa ombi la kukopa ambalo bado ni 'pending' (mwanachama anaweza kufuta yake tu)
 @login_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Ombi la Kukopa — Mwanachama anafuta ombi lake
+# ----------------------------------------------------------------------
 def cancel_borrow_request_view(request, request_id):
     """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     req = get_object_or_404(BorrowRequest, pk=request_id, user=request.user, status='pending')
@@ -406,6 +429,9 @@ def cancel_borrow_request_view(request, request_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Idhinisha Ombi la Kukopa — Mtunzaji anaidhinisha ombi
+# ----------------------------------------------------------------------
 def approve_borrow_request_view(request, request_id):
     """POST-only — protected by CSRF + librarian role decorator."""
     req = get_object_or_404(BorrowRequest, pk=request_id)
@@ -476,7 +502,7 @@ def approve_borrow_request_view(request, request_id):
     req.approved_by = request.user
     req.save()
 
-    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     librarian_name = request.user.get_full_name() or request.user.username
     softcopy_url = request.build_absolute_uri(reverse('serve_softcopy', args=[copy.pk]))
 
@@ -507,6 +533,9 @@ def approve_borrow_request_view(request, request_id):
 # ── Issue Copy — librarian assigns physical copy to approved hardcopy request ─
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Toa Nakala — Mtunzaji anatoa nakala kwa mwanachama
+# ----------------------------------------------------------------------
 def issue_copy_view(request, request_id):
     """GET: show Issue Copy modal page. POST: validate accession, create transaction."""
     req = get_object_or_404(
@@ -574,7 +603,7 @@ def issue_copy_view(request, request_id):
     req.save(update_fields=['copy'])
     _recalculate_reservation_expiries(book)
 
-    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     lost_fine = float(getattr(book, 'lost_fine', 0) or 0)
     librarian_name = request.user.get_full_name() or request.user.username
 
@@ -613,6 +642,9 @@ def issue_copy_view(request, request_id):
 # ── Copy autocomplete (AJAX) — returns available hardcopies for a book ────────
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Tafuta Nakala — Mtunzaji anatafuta nakala kwa accession number
+# ----------------------------------------------------------------------
 def copy_lookup_view(request):
     from django.http import JsonResponse
     book_id = request.GET.get('book_id', '')
@@ -629,6 +661,9 @@ def copy_lookup_view(request):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Kataa Ombi la Kukopa — Mtunzaji anakataa ombi
+# ----------------------------------------------------------------------
 def reject_borrow_request_view(request, request_id):
     """POST-only — protected by CSRF + librarian role decorator."""
     req = get_object_or_404(BorrowRequest, pk=request_id, status='pending')
@@ -651,6 +686,9 @@ def reject_borrow_request_view(request, request_id):
 # Kwa hardcopy: haiwezekani kama kuna uhifadhi au ni overdue
 @login_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Ongeza Muda wa Mkopo — Mwanachama anahitaji upya mkopo
+# ----------------------------------------------------------------------
 def renew_transaction_view(request, transaction_id):
     """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     tx = get_object_or_404(BorrowingTransaction, pk=transaction_id, user=request.user)
@@ -669,6 +707,9 @@ def renew_transaction_view(request, transaction_id):
 # Rudisha softcopy mapema kabla ya muda haujaisha
 @login_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Rudisha Mapema — Mwanachama anarudisha softcopy mapema
+# ----------------------------------------------------------------------
 def return_early_view(request, transaction_id):
     """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     tx = get_object_or_404(
@@ -711,6 +752,9 @@ def return_early_view(request, transaction_id):
 
 
 # ── Desk return helper ───────────────────────────────────────────────────────
+# ----------------------------------------------------------------------
+# Msaidizi wa Kusudia Kurudisha — Anatumia kurudisha kutoka desk ya mtunzaji
+# ----------------------------------------------------------------------
 def _process_desk_return(request, copy_pk_str):
     """Process a single copy return from the librarian desk (hard or soft).
     Returns the BorrowingTransaction on success, None on failure."""
@@ -742,7 +786,7 @@ def _process_desk_return(request, copy_pk_str):
         copy.status = 'available'
         copy.save(update_fields=['status'])
 
-    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     if days_late > 0:
         fine_amount = days_late * fine_per_day
         # Upsert fine record (never block the return — just ensure fine exists)
@@ -787,6 +831,9 @@ def _process_desk_return(request, copy_pk_str):
     return tx
 
 
+# ----------------------------------------------------------------------
+# Msaidizi wa Kurudisha za Hivi Karibuni — Anarudisha mikopo 30 ya hivi karibuni
+# ----------------------------------------------------------------------
 def _get_recent_returns():
     """Return the last 30 returned/softcopy-returned transactions for the return desk."""
     return (
@@ -799,6 +846,9 @@ def _get_recent_returns():
 # Kama kuna uhifadhi — inatuma arifa kwa mwanachama wa kwanza kwenye foleni
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Rudisha Hardcopy — Mtunzaji anarudisha hardcopy
+# ----------------------------------------------------------------------
 def return_hardcopy_view(request):
     if request.method == 'POST':
         search_input   = request.POST.get('barcode', '').strip()
@@ -886,6 +936,9 @@ def return_hardcopy_view(request):
 # expires_at = nearest_borrowed_due_date + (position × RESERVATION_WINDOW_DAYS)
 # If no active borrows, base = now(). Notified users keep min 24 h.
 # ============================================================
+# ----------------------------------------------------------------------
+# Msaidizi wa Kuhesabu Uhifadhi — Anahesabu muda wa uhifadhi upya
+# ----------------------------------------------------------------------
 def _recalculate_reservation_expiries(book):
     window = int(_pref('RESERVATION_WINDOW_DAYS', 7))
     nearest_tx = BorrowingTransaction.objects.filter(
@@ -908,6 +961,9 @@ def _recalculate_reservation_expiries(book):
 # Sets had_notified_skip=True when a 'notified' user misses 24 h.
 # At the end, auto-notifies the next member if a copy is available.
 # ============================================================
+# ----------------------------------------------------------------------
+# Msaidizi wa Kusudia Uhifadhi — Anasudia uhifadhi uliopita muda
+# ----------------------------------------------------------------------
 def _process_reservation_expiry(book):
     """Mark expired reservations, skip notified users who waited > 24 h, re-queue."""
     had_notified_skip = False
@@ -963,6 +1019,9 @@ def _process_reservation_expiry(book):
 # reason='skip'   → triggered by 24-h timeout skip
 # Guards against over-notifying: available_copies > notified_count
 # ============================================================
+# ----------------------------------------------------------------------
+# Msaidizi wa Kuambia Mwanachama wa Kwanza — Anamwambia mwanachama wa kwanza foleni
+# ----------------------------------------------------------------------
 def _notify_next_in_queue(book, reason='return'):
     """Notify the next PENDING member if unmatched available copies exist."""
     available = book.copies.filter(copy_type='hardcopy', status='available').count()
@@ -1038,6 +1097,9 @@ def _notify_next_in_queue(book, reason='return'):
 # ============================================================
 # RESERVATION HELPER — entry point called after a book is returned
 # ============================================================
+# ----------------------------------------------------------------------
+# Msaidizi wa Kuambia Uhifadhi Ujao — Anamwambia mwanachama wa uhifadhi ujao
+# ----------------------------------------------------------------------
 def _notify_next_reservation(book, request=None):
     """Called after a hardcopy is returned at the desk.
     1. Process expiry/skips (may auto-notify if a skip occurs + copy available).
@@ -1052,6 +1114,9 @@ def _notify_next_reservation(book, request=None):
 # Eligibility: all hardcopies borrowed/reserved, no overdue, no unpaid fines
 # ============================================================
 @login_required
+# ----------------------------------------------------------------------
+# View ya Hifadhi Kitabu — Mwanachama anahifadhi nafasi kwa kitabu
+# ----------------------------------------------------------------------
 def reserve_book_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
 
@@ -1135,6 +1200,9 @@ def reserve_book_view(request, book_id):
 # ============================================================
 @login_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Uhifadhi — Mwanachama anafuta uhifadhi wake
+# ----------------------------------------------------------------------
 def cancel_reservation_view(request, reservation_id):
     """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     res = get_object_or_404(
@@ -1162,6 +1230,9 @@ def cancel_reservation_view(request, reservation_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Mtunzaji Afute Uhifadhi — Mtunzaji anafuta uhifadhi
+# ----------------------------------------------------------------------
 def librarian_cancel_reservation_view(request, reservation_id):
     """POST-only — protected by CSRF + librarian role decorator."""
     res = get_object_or_404(Reservation, pk=reservation_id, status__in=['pending', 'notified'])
@@ -1188,6 +1259,9 @@ def librarian_cancel_reservation_view(request, reservation_id):
 # Marks reservation as fulfilled
 # ============================================================
 @login_required
+# ----------------------------------------------------------------------
+# View ya Kukopa kutoka Foleni — Mwanachama anatoka foleni kukopa
+# ----------------------------------------------------------------------
 def softcopy_queue_borrow_view(request, reservation_id):
     res = get_object_or_404(
         Reservation, pk=reservation_id, user=request.user, status='notified'
@@ -1257,6 +1331,9 @@ def softcopy_queue_borrow_view(request, reservation_id):
 # MY RESERVATIONS — member view with queue position, actions
 # ============================================================
 @login_required
+# ----------------------------------------------------------------------
+# View ya Uhifadhi Wangu — Mwanachama anaona uhifadhi wake
+# ----------------------------------------------------------------------
 def my_reservations_view(request):
     user = request.user
     # Run expiry checks on all books the user has reservations for
@@ -1318,6 +1395,9 @@ def my_reservations_view(request):
 # Inaweza kuchujwa kwa hali: pending, approved, rejected, cancelled
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Maombi Yote — Mtunzaji anaona maombi yote
+# ----------------------------------------------------------------------
 def all_requests_view(request):
     requests_qs = BorrowRequest.objects.select_related('user', 'copy__book').order_by('-request_date')
     status_filter = request.GET.get('status', '')
@@ -1332,6 +1412,9 @@ def all_requests_view(request):
 # Vitabu vilivyopita tarehe ya kurudisha — kwa mtunzaji
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Vitabu Vilivyopita Tarehe — Mtunzaji anaona overdue
+# ----------------------------------------------------------------------
 def overdue_list_view(request):
     _auto_mark_overdue()  # Catch any borrowed+past-due not yet marked by cron
     from django.db.models import Exists, OuterRef, F
@@ -1352,6 +1435,9 @@ def overdue_list_view(request):
     return render(request, 'circulation/overdue_list.html', {'overdue': overdue})
 
 
+# ----------------------------------------------------------------------
+# Msaidizi wa Kuonyesha Vilivyopita Tarehe — Anaonyesha mikopo iliyopita tarehe
+# ----------------------------------------------------------------------
 def _auto_mark_overdue():
     """Inline guard: mark any 'borrowed' transactions past their due_date as 'overdue'.
     Called at the top of every librarian page that shows overdue/fine data so the
@@ -1364,6 +1450,9 @@ def _auto_mark_overdue():
         stale.update(status='overdue')
 
 
+# ----------------------------------------------------------------------
+# Msaidizi wa Kuchukua Malipo kutoka Log — Anachukua jumla ya malipo kutoka log
+# ----------------------------------------------------------------------
 def _extract_total_paid_from_log(receipt_no):
     """Parse the payment history log to sum actual amounts paid.
     Returns Decimal total if parseable, else None."""
@@ -1379,6 +1468,9 @@ def _extract_total_paid_from_log(receipt_no):
     return None
 
 
+# ----------------------------------------------------------------------
+# Msaidizi wa Kusawazisha Faini — Anasawazisha faini za kuchelewa
+# ----------------------------------------------------------------------
 def _sync_overdue_fines(fine_per_day):
     """Shared helper: update existing unpaid fines and create missing ones for overdue transactions.
     Also merges any duplicates (paid + unpaid for same transaction) into a single fine record.
@@ -1465,9 +1557,12 @@ def _sync_overdue_fines(fine_per_day):
 # Orodha ya faini zote — kwa mtunzaji (pamoja na faini zinazojumlisha kwa siku)
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Faini — Mtunzaji anaona faini zote
+# ----------------------------------------------------------------------
 def fine_list_view(request):
     from django.db.models import Sum, Count
-    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     _sync_overdue_fines(fine_per_day)
     
     fines = Fine.objects.select_related('user__rank', 'transaction__copy__book').order_by('-created_at')
@@ -1503,9 +1598,12 @@ def fine_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Faini za Mwanachama — Mtunzaji anaona faini za mtumiaji mahususi
+# ----------------------------------------------------------------------
 def user_fines_view(request, user_id):
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
-    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     
     # Reuse shared helper to sync this user's overdue fines
     _sync_overdue_fines(fine_per_day)
@@ -1531,6 +1629,9 @@ def user_fines_view(request, user_id):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Faini Zangu — Mwanachama anaona faini zake
+# ----------------------------------------------------------------------
 def my_fines_view(request):
     # Show only overdue fines (exclude loss fines)
     fines = Fine.objects.filter(
@@ -1556,6 +1657,9 @@ def my_fines_view(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Ripoti za Hasara Zangu — Mwanachama anaona ripoti zake
+# ----------------------------------------------------------------------
 def my_loss_reports_view(request):
     """Member views their loss reports and loss fines."""
     reports = LossReport.objects.filter(
@@ -1571,6 +1675,9 @@ def my_loss_reports_view(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Lipa Faini — Mwanachama anapangia kulipa faini
+# ----------------------------------------------------------------------
 def pay_fine_view(request, fine_id):
     """
     Member-facing self-service fine payment request.
@@ -1667,6 +1774,9 @@ def pay_fine_view(request, fine_id):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Lipa Faini ya Hasara — Mwanachama anapangia kulipa faini ya hasara
+# ----------------------------------------------------------------------
 def pay_loss_fine_view(request, report_id):
     """
     Member-facing self-service loss fine payment request.
@@ -1766,14 +1876,48 @@ def pay_loss_fine_view(request, report_id):
     return render(request, 'circulation/pay_loss_fine.html', {'report': report, 'fine': fine})
 
 
+def _record_fine_payment(fine, amount, payment_method, receipt_ref='',
+                          phone_number='', bank_name='', bank_account_no='',
+                          card_holder='', card_last4='', card_expiry=''):
+    """Apply a payment to a Fine row and save. Pure helper — no redirect/messages."""
+    MOBILE_METHODS = {'mpesa', 'tigopesa', 'airtel_money', 'halopesa'}
+    CARD_METHODS   = {'visa', 'mastercard'}
+    now_str = timezone.now().strftime('%d %b %Y %H:%M')
+    entry = f"[{now_str}] {payment_method.upper()} TZS {amount}"
+    if payment_method in MOBILE_METHODS and phone_number:
+        entry += f" | Phone: {phone_number}"
+    elif payment_method == 'bank_transfer':
+        if bank_name:       entry += f" | Bank: {bank_name}"
+        if bank_account_no: entry += f" | Acct: {bank_account_no}"
+        if receipt_ref:     entry += f" | Ref: {receipt_ref}"
+    elif payment_method in CARD_METHODS:
+        if card_holder: entry += f" | Name: {card_holder}"
+        if card_last4:  entry += f" | Card: ****{card_last4}"
+        if card_expiry: entry += f" | Exp: {card_expiry}"
+    fine.amount_paid    += amount
+    fine.payment_method  = payment_method
+    fine.paid_at         = timezone.now()
+    fine.receipt_no      = (fine.receipt_no + "\n" + entry).strip()
+    fine.paid            = fine.amount_paid >= fine.amount
+    fine.save()
+
+
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Rekodi Malipo ya Faini ya Hasara — Mtunzaji anarekodi malipo
+# ----------------------------------------------------------------------
 def record_loss_fine_payment_view(request, report_id):
     """
     Librarian loss fine payment handler.
 
-    GET  : show the payment form page.
-    POST : validate and record payment.
+    Supports fine_type POST parameter:
+      'loss'   – pay the loss fine only (default)
+      'overdue' – pay the overdue fine only
+      'both'   – pay both; loss fine is cleared first, remainder to overdue fine
+
+    GET : show the payment form page (passes overdue_fine to template).
+    POST: validate and record payment on the selected fine(s).
     """
     report = get_object_or_404(LossReport, pk=report_id)
     if not report.loss_fine:
@@ -1782,123 +1926,135 @@ def record_loss_fine_payment_view(request, report_id):
 
     fine = report.loss_fine
 
-    if request.method != 'POST':
-        return render(request, 'circulation/loss_fine_payment.html', {'report': report, 'fine': fine})
+    # Resolve the overdue fine for this transaction (distinct from the loss fine)
+    overdue_fine = None
+    if report.transaction:
+        overdue_qs = Fine.objects.filter(
+            transaction=report.transaction,
+            reason__icontains='Overdue',
+        )
+        if report.loss_fine_id:
+            overdue_qs = overdue_qs.exclude(id=report.loss_fine_id)
+        overdue_fine = overdue_qs.first()
 
-    payment_method = request.POST.get('payment_method', 'cash')
-    receipt_no = request.POST.get('receipt_no', '').strip()
+    if request.method != 'POST':
+        return render(request, 'circulation/loss_fine_payment.html', {
+            'report': report,
+            'fine': fine,
+            'overdue_fine': overdue_fine,
+        })
+
+    # ── POST ────────────────────────────────────────────────────────────
+    fine_type       = request.POST.get('fine_type', 'loss')
+    payment_method  = request.POST.get('payment_method', 'cash')
+    receipt_ref     = request.POST.get('receipt_no', '').strip()
     payment_amount_str = request.POST.get('payment_amount', '')
-    # Extra fields per payment method
     phone_number    = request.POST.get('phone_number', '').strip()
     bank_name       = request.POST.get('bank_name', '').strip()
     bank_account_no = request.POST.get('bank_account_no', '').strip()
     card_holder     = request.POST.get('card_holder', '').strip()
     card_last4      = request.POST.get('card_last4', '').strip()
     card_expiry     = request.POST.get('card_expiry', '').strip()
-    card_cvv        = request.POST.get('card_cvv', '').strip()
 
-    # Validate payment amount
     try:
         payment_amount = Decimal(payment_amount_str) if payment_amount_str else Decimal('0')
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, InvalidOperation):
         payment_amount = Decimal('0')
 
     if payment_amount <= 0:
-        messages.error(request, 'Payment amount must be greater than 0')
+        messages.error(request, 'Payment amount must be greater than 0.')
         return redirect('record_loss_fine_payment', report_id=report.pk)
 
-    # Validate payment amount does not exceed remaining balance
-    remaining_balance = fine.amount - fine.amount_paid
-    if payment_amount > remaining_balance:
-        messages.error(
-            request,
-            f'Payment amount TZS {payment_amount} exceeds remaining balance TZS {remaining_balance}. '
-            f'Please enter correct amount not exceeding TZS {remaining_balance}.'
-        )
-        return redirect('record_loss_fine_payment', report_id=report.pk)
+    kwargs = dict(payment_method=payment_method, receipt_ref=receipt_ref,
+                  phone_number=phone_number, bank_name=bank_name,
+                  bank_account_no=bank_account_no, card_holder=card_holder,
+                  card_last4=card_last4, card_expiry=card_expiry)
 
-    # Build payment log entry (appended — never overwritten)
-    MOBILE_METHODS = {'mpesa', 'tigopesa', 'airtel_money', 'halopesa'}
-    CARD_METHODS   = {'visa', 'mastercard'}
-    now_str = timezone.now().strftime('%d %b %Y %H:%M')
-    log_entry = f"[{now_str}] {payment_method.upper()} TZS {payment_amount}"
+    # ── Route by fine_type ───────────────────────────────────────────────
+    if fine_type == 'overdue':
+        if not overdue_fine:
+            messages.error(request, 'No overdue fine found for this loss report.')
+            return redirect('record_loss_fine_payment', report_id=report.pk)
+        if payment_amount > overdue_fine.remaining_balance:
+            messages.error(request,
+                f'TZS {payment_amount:,.0f} exceeds overdue fine remaining balance '
+                f'TZS {overdue_fine.remaining_balance:,.0f}.')
+            return redirect('record_loss_fine_payment', report_id=report.pk)
+        _record_fine_payment(overdue_fine, payment_amount, **kwargs)
 
-    if payment_method in MOBILE_METHODS and phone_number:
-        log_entry += f" | Phone: {phone_number}"
-    elif payment_method == 'bank_transfer':
-        if bank_name:
-            log_entry += f" | Bank: {bank_name}"
-        if bank_account_no:
-            log_entry += f" | Acct: {bank_account_no}"
-        if receipt_no:
-            log_entry += f" | Ref: {receipt_no}"
-    elif payment_method in CARD_METHODS:
-        if card_holder:
-            log_entry += f" | Name: {card_holder}"
-        if card_last4:
-            log_entry += f" | Card: ****{card_last4}"
-        if card_expiry:
-            log_entry += f" | Exp: {card_expiry}"
-        # CVV not stored for security
+    elif fine_type == 'both' and overdue_fine:
+        total_rem = fine.remaining_balance + overdue_fine.remaining_balance
+        if payment_amount > total_rem:
+            messages.error(request,
+                f'TZS {payment_amount:,.0f} exceeds total remaining balance '
+                f'TZS {total_rem:,.0f}.')
+            return redirect('record_loss_fine_payment', report_id=report.pk)
+        # Apply to loss fine first, remainder to overdue fine
+        loss_pay    = min(payment_amount, fine.remaining_balance)
+        overdue_pay = payment_amount - loss_pay
+        if loss_pay > 0:
+            _record_fine_payment(fine, loss_pay, **kwargs)
+        if overdue_pay > 0:
+            _record_fine_payment(overdue_fine, overdue_pay, **kwargs)
 
-    # Accumulate payment
-    fine.amount_paid += payment_amount
-    fine.payment_method = payment_method
-    fine.paid_at = timezone.now()
-    # Append to log (never overwrite — preserves full payment history)
-    fine.receipt_no = (fine.receipt_no + "\n" + log_entry).strip()
+    else:  # fine_type == 'loss' (default)
+        if payment_amount > fine.remaining_balance:
+            messages.error(request,
+                f'TZS {payment_amount:,.0f} exceeds loss fine remaining balance '
+                f'TZS {fine.remaining_balance:,.0f}.')
+            return redirect('record_loss_fine_payment', report_id=report.pk)
+        _record_fine_payment(fine, payment_amount, **kwargs)
 
-    # Determine paid status based on actual accumulated amount
-    if fine.amount_paid >= fine.amount:
-        fine.paid = True
+    # ── Refresh and check if ALL fines are now settled ───────────────────
+    fine.refresh_from_db()
+    if overdue_fine:
+        overdue_fine.refresh_from_db()
+        all_paid = fine.paid and overdue_fine.paid
+        total_remaining = fine.remaining_balance + overdue_fine.remaining_balance
     else:
-        fine.paid = False
+        all_paid = fine.paid
+        total_remaining = fine.remaining_balance
 
-    fine.save()
-
-    # Determine SMS message based on payment status
-    remaining_balance = fine.remaining_balance
-    book_name = report.transaction.copy.book.title
-    if fine.paid:
-        sms_message = f"Umelipa deni lote la faini ya hasara TZS {fine.amount} kwa kitabu '{book_name}' kwa {payment_method.upper()}. Asante."
-    else:
-        sms_message = f"Umelipa TZS {payment_amount} kwa faini ya hasara TZS {fine.amount} ya kitabu '{book_name}'. Bado unadaiwa TZS {remaining_balance}. karibu tena."
-
-    # Send SMS notification
-    try:
-        notify_user(fine.user, sms_message, 'sms')
-    except Exception as e:
-        # Log error but don't fail the payment process
-        log_audit(request.user, f"SMS failed for loss fine {fine.pk}: {str(e)}", request)
-
-    log_audit(request.user, f"Loss fine {fine.pk} payment of TZS {payment_amount} by {fine.user.username} via {payment_method}", request)
-
-    if fine.paid:
-        # If fully paid, mark loss report as resolved
+    if all_paid:
         report.status = 'resolved'
-        report.resolved_at = timezone.now()
-        report.save(update_fields=['status', 'resolved_at'])
-        messages.success(
-            request,
-            f'Loss fine fully paid. TZS {payment_amount} recorded. '
-            f'Loss report LR-{report.pk} marked as resolved.'
-        )
+        report.save(update_fields=['status'])
+        messages.success(request,
+            f'All fines fully paid (TZS {payment_amount:,.0f}). '
+            f'Loss report LR-{report.pk} marked Resolved.')
     else:
-        messages.success(
-            request,
-            f'Payment recorded: TZS {payment_amount}. '
-            f'Remaining balance: TZS {remaining_balance}.'
-        )
+        messages.success(request,
+            f'Payment of TZS {payment_amount:,.0f} recorded ({fine_type} fine). '
+            f'Total still outstanding: TZS {total_remaining:,.0f}.')
+
+    # ── SMS notification ─────────────────────────────────────────────────
+    try:
+        book_name = report.transaction.copy.book.title
+        if all_paid:
+            sms = (f"MSICT OLMS: Umefunga deni lote la kitabu '{book_name}'. "
+                   f"Asante. LR-{report.pk}.")
+        else:
+            sms = (f"MSICT OLMS: Umelipa TZS {payment_amount:,.0f} kwa '{book_name}'. "
+                   f"Bado unadaiwa TZS {total_remaining:,.0f}. LR-{report.pk}.")
+        notify_user(fine.user, sms, 'sms', message_type='loss_fine')
+    except Exception as exc:
+        log_audit(request.user, f"SMS failed for LR-{report.pk}: {exc}", request)
+
+    log_audit(request.user,
+        f"LR-{report.pk} payment TZS {payment_amount} ({fine_type}) "
+        f"by {fine.user.username} via {payment_method}", request)
 
     return redirect('loss_report_list')
 
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Watumiaji Wanaodaiwa — Mtunzaji anaona watumiaji wanaodaiwa
+# ----------------------------------------------------------------------
 def users_with_unpaid_fines_view(request):
     from django.db.models import Sum, Count, Q
     from collections import defaultdict
-    fine_per_day = float(_pref('FINE_PER_DAY', 500))
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     _sync_overdue_fines(fine_per_day)  # Mark status + sync fine amounts before listing
 
     # Get users with unpaid fines
@@ -1962,6 +2118,9 @@ def users_with_unpaid_fines_view(request):
 # Rekodi malipo ya faini — mtunzaji anaweka nambari ya risiti na njia ya malipo
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Rekodi Malipo ya Faini — Mtunzaji anarekodi malipo
+# ----------------------------------------------------------------------
 def record_fine_payment_view(request, fine_id):
     """
     Librarian fine payment handler.
@@ -2072,6 +2231,9 @@ def record_fine_payment_view(request, fine_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Malipo ya Pamoja — Mtunzaji anarekodi malipo ya pamoja
+# ----------------------------------------------------------------------
 def bulk_fine_payment_view(request, user_id):
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
     unpaid_fines = Fine.objects.filter(user=user_obj, paid=False)
@@ -2199,11 +2361,17 @@ def bulk_fine_payment_view(request, user_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Desk ya Circulation — Mtunzaji anaona desk ya jumla
+# ----------------------------------------------------------------------
 def circulation_desk_view(request):
     return render(request, 'circulation/circulation_desk.html')
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Mikopo ya MSICT — Mwanachama anaona mikopo yake ya MSICT
+# ----------------------------------------------------------------------
 def member_msict_borrowings_view(request):
     """Member view for MSICT borrowings - history, pending, active"""
     user = request.user
@@ -2273,6 +2441,9 @@ def member_msict_borrowings_view(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Mikopo ya ILL — Mwanachama anaona mikopo yake ya ILL
+# ----------------------------------------------------------------------
 def member_ill_borrowings_view(request):
     """Member view for ILL borrowings - history and pending requests"""
     from acquisitions.models import ILLRequest
@@ -2317,6 +2488,9 @@ def member_ill_borrowings_view(request):
 
 # Maktaba ya kidijitali — vitabu vya PDF ambavyo mwanachama amekopa au vya bure
 @login_required
+# ----------------------------------------------------------------------
+# View ya Maktaba ya Vitabu vya Kidijitali — Mwanachama anaona softcopies
+# ----------------------------------------------------------------------
 def softcopy_library_view(request):
     query = request.GET.get('q', '').strip()
     category_id = request.GET.get('category', '')
@@ -2395,6 +2569,9 @@ def softcopy_library_view(request):
 # Orodha ya uhifadhi wote — mtunzaji anaweza kuchuja kwa hali (pending, fulfilled...)
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Uhifadhi — Mtunzaji anaona uhifadhi wote
+# ----------------------------------------------------------------------
 def reservation_list_view(request):
     status_filter = request.GET.get('status', 'pending')
     query = request.GET.get('q', '')
@@ -2447,6 +2624,9 @@ def reservation_list_view(request):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Ongeza Muda wa Uhifadhi — Mtunzaji anaongeza muda wa uhifadhi
+# ----------------------------------------------------------------------
 def renew_reservation_view(request, reservation_id):
     """POST-only — protected by CSRF + librarian role decorator."""
     res = get_object_or_404(Reservation, pk=reservation_id)
@@ -2470,6 +2650,9 @@ def renew_reservation_view(request, reservation_id):
 # ── Return History ───────────────────────────────────────────────────────────
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Historia ya Kurudisha — Mtunzaji anaona historia ya kurudisha
+# ----------------------------------------------------------------------
 def return_history_view(request):
     """All returned transactions (hard + soft) descending by return date, with filtering."""
     qs = (
@@ -2510,6 +2693,9 @@ def return_history_view(request):
 # ── All Borrowings (librarian full view) ─────────────────────────────────────
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Mikopo Yote — Mtunzaji anaona mikopo yote
+# ----------------------------------------------------------------------
 def all_borrowings_view(request):
     """All borrowing transactions across all statuses with filtering and day calculations."""
     from django.utils import timezone as tz
@@ -2573,6 +2759,9 @@ def all_borrowings_view(request):
 # ── Loss Report Views ─────────────────────────────────────────────────────────
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Ripoti ya Kupoteza — Mwanachama anaripoti kitabu kilichopotea
+# ----------------------------------------------------------------------
 def report_loss_view(request, transaction_id):
     """Member submits a loss report for one of their active/overdue borrowed books."""
     tx = get_object_or_404(
@@ -2651,26 +2840,62 @@ def report_loss_view(request, transaction_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Ripoti za Hasara — Mtunzaji anaona ripoti zote
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
 def loss_report_list_view(request):
     """Librarian views all loss reports."""
     status_filter = request.GET.get('status', '')
     qs = LossReport.objects.select_related(
         'user__rank', 'transaction__copy__book', 'reviewed_by', 'loss_fine'
-    ).prefetch_related('transaction__fines')
+    ).prefetch_related('transaction__fines').order_by('reported_at')
     if status_filter:
         qs = qs.filter(status=status_filter)
-    
-    # Calculate overdue fine count for each report
+
     reports_with_counts = []
-    for report in qs:
-        overdue_count = 0
+    for seq, report in enumerate(qs, start=1):
+        overdue_fine = None
         if report.transaction:
-            overdue_count = report.transaction.fines.filter(loss_report__isnull=True).count()
-        report.overdue_count = overdue_count
+            overdue_qs = report.transaction.fines.filter(reason__icontains='Overdue')
+            if report.loss_fine_id:
+                overdue_qs = overdue_qs.exclude(id=report.loss_fine_id)
+            overdue_fine = overdue_qs.first()
+
+        report.overdue_count = 1 if overdue_fine else 0
+        report.overdue_fine = overdue_fine
+
+        loss_amount    = report.loss_fine.amount            if report.loss_fine    else Decimal('0')
+        overdue_amount = overdue_fine.amount                if overdue_fine        else Decimal('0')
+        loss_rem       = report.loss_fine.remaining_balance if report.loss_fine    else Decimal('0')
+        overdue_rem    = overdue_fine.remaining_balance     if overdue_fine        else Decimal('0')
+
+        report.total_amount    = loss_amount    + overdue_amount
+        report.total_remaining = loss_rem       + overdue_rem
+
+        # Assign a stable, human-readable sequential reference number (LR-1, LR-2 …)
+        report.seq_no = seq
+
         reports_with_counts.append(report)
-    
+
+    # Group reports by member — order is preserved from the sorted queryset above
+    from collections import OrderedDict
+    grouped = OrderedDict()
+    for r in reports_with_counts:
+        key = r.user.pk if r.user else f'user-{r.pk}'
+        if key not in grouped:
+            grouped[key] = {
+                'user': r.user,
+                'reports': [],
+            }
+        grouped[key]['reports'].append(r)
+
+    grouped_reports = list(grouped.values())
+
     return render(request, 'circulation/loss_report_list.html', {
         'reports': reports_with_counts,
+        'grouped_reports': grouped_reports,
         'status_filter': status_filter,
     })
 
@@ -2678,6 +2903,9 @@ def loss_report_list_view(request):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Thibitisha Hasara — Mtunzaji anathibitisha au kataa ripoti
+# ----------------------------------------------------------------------
 def confirm_loss_view(request, report_id):
     """Librarian confirms loss: marks copy lost, creates a loss fine, updates report status."""
     report = get_object_or_404(LossReport, pk=report_id, status='pending')
@@ -2720,6 +2948,7 @@ def confirm_loss_view(request, report_id):
             tx.save(update_fields=['status'])
 
         # Create loss fine if amount provided
+        fine = None
         if loss_fine_amount > 0:
             fine = Fine.objects.create(
                 user=report.user,
@@ -2737,30 +2966,85 @@ def confirm_loss_view(request, report_id):
             ).first()
             if existing_loss_fine:
                 report.loss_fine = existing_loss_fine
+                fine = existing_loss_fine
+
+        # ── Concurrent overdue fine when confirmed past due date ─────────────
+        # Covers two scenarios:
+        #   B) Loss reported before due date, but librarian confirms after due date passes.
+        #   C) Loss reported after loan period (transaction was already overdue).
+        # An overdue fine is created (or updated) separately from the loss fine.
+        overdue_fine = None
+        overdue_amount = Decimal('0')
+        confirmed_past_due = timezone.now() > tx.due_date
+        if confirmed_past_due:
+            fine_per_day_val = Decimal(str(_pref('FINE_PER_DAY', 1000)))
+            days_late = max(1, (timezone.now() - tx.due_date).days)
+            overdue_amount = days_late * fine_per_day_val
+
+            # Find existing overdue fine for this transaction (mark_overdue may have created one)
+            existing_overdue = Fine.objects.filter(
+                transaction=tx,
+                reason__icontains='Overdue',
+            )
+            if fine:  # exclude the just-created loss fine
+                existing_overdue = existing_overdue.exclude(id=fine.id)
+            overdue_fine = existing_overdue.first()
+
+            if overdue_fine:
+                if not overdue_fine.paid:
+                    overdue_fine.amount = overdue_amount
+                    overdue_fine.reason = f"Overdue fine for '{copy.book.title}' ({days_late} days)"
+                    overdue_fine.save(update_fields=['amount', 'reason'])
+            else:
+                overdue_fine = Fine.objects.create(
+                    user=report.user,
+                    transaction=tx,
+                    amount=overdue_amount,
+                    reason=f"Overdue fine for '{copy.book.title}' ({days_late} days)",
+                    paid=False,
+                )
 
         report.status = 'confirmed'
         report.save()
 
+        # Build notification text — combine both fines when applicable
+        if loss_fine_amount > 0 and overdue_fine:
+            notify_body = (
+                f"A LOSS FINE of TZS {loss_fine_amount:,.0f} has been raised. "
+                f"Additionally, an OVERDUE FINE of TZS {overdue_amount:,.0f} applies "
+                f"({days_late} day(s) overdue). "
+                f"Total outstanding: TZS {loss_fine_amount + overdue_amount:,.0f}. "
+                f"Please pay at the library."
+            )
+            msg_type = 'loss_fine'
+        elif loss_fine_amount > 0:
+            notify_body = f"A LOSS FINE of TZS {loss_fine_amount:,.0f} has been raised. Please pay at the library."
+            msg_type = 'loss_fine'
+        else:
+            notify_body = "No fine has been raised at this time."
+            msg_type = 'loss_report'
+
         notify_user(
             report.user,
-            f"MSICT OLMS: LOSS FINE - Loss of '{copy.book.title}' confirmed (LR-{report.pk}). "
-            + (f"A LOSS FINE of TZS {loss_fine_amount} has been raised. Please pay at the library." if loss_fine_amount > 0 else "No fine has been raised."),
+            f"MSICT OLMS: LOSS CONFIRMED (LR-{report.pk}) - '{copy.book.title}'. {notify_body}",
             'sms',
-            message_type='loss_fine' if loss_fine_amount > 0 else 'loss_report',
+            message_type=msg_type,
+            priority='high',
         )
         notify_user(
             report.user,
-            f"MSICT OLMS: LOSS FINE - Loss confirmed for '{copy.book.title}'. Ref: LR-{report.pk}. "
-            + (f"A LOSS FINE of TZS {loss_fine_amount} has been raised." if loss_fine_amount > 0 else ""),
+            f"MSICT OLMS: LOSS CONFIRMED (LR-{report.pk}) - '{copy.book.title}'. {notify_body}",
             'email',
-            subject='LOSS FINE – Loss Report Confirmed – MSICT OLMS',
-            message_type='loss_fine' if loss_fine_amount > 0 else 'loss_report',
+            subject='Loss Report Confirmed – Fines Notice – MSICT OLMS',
+            message_type=msg_type,
+            priority='high',
         )
-        messages.success(
-            request,
-            f'Loss confirmed for LR-{report.pk}. Copy marked lost.'
-            + (f' Fine of TZS {loss_fine_amount} created.' if loss_fine_amount > 0 else ''),
-        )
+        flash_msg = f'Loss confirmed for LR-{report.pk}. Copy marked lost.'
+        if loss_fine_amount > 0:
+            flash_msg += f' Loss fine TZS {loss_fine_amount:,.0f} created.'
+        if overdue_fine:
+            flash_msg += f' Overdue fine TZS {overdue_amount:,.0f} also created ({days_late} day(s)).'
+        messages.success(request, flash_msg)
         log_audit(request.user, f"Confirmed loss report LR-{report.pk} for '{copy.book.title}'", request)
 
     return redirect('loss_report_list')
@@ -2769,6 +3053,9 @@ def confirm_loss_view(request, report_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Rejesha Kitabu — Mtunzaji anarejesha kitabu kilichopotea
+# ----------------------------------------------------------------------
 def recover_book_view(request, report_id):
     """Librarian marks a lost book as physically recovered (returned at desk)."""
     report = get_object_or_404(LossReport, pk=report_id)
@@ -2789,11 +3076,25 @@ def recover_book_view(request, report_id):
     tx.return_date = timezone.now()
     tx.save(update_fields=['status', 'return_date'])
 
-    # If there was a loss fine and it's unpaid, cancel it (waive) unless partially paid
+    # Capture loss fine PK before potential deletion (needed to exclude from overdue query)
+    loss_fine_pk = report.loss_fine_id
+
+    # Waive the loss fine if fully unpaid (no partial payment)
     if report.loss_fine and not report.loss_fine.paid:
         if report.loss_fine.amount_paid == 0:
             report.loss_fine.delete()
             report.loss_fine = None
+
+    # Waive any overdue fines linked to this transaction that are also fully unpaid
+    overdue_qs = Fine.objects.filter(
+        transaction=tx,
+        reason__icontains='Overdue',
+    )
+    if loss_fine_pk:
+        overdue_qs = overdue_qs.exclude(id=loss_fine_pk)
+    for of in overdue_qs:
+        if not of.paid and of.amount_paid == 0:
+            of.delete()
 
     report.status = 'resolved'
     report.reviewed_by = request.user

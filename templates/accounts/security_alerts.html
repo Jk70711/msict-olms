@@ -2,10 +2,30 @@
 {% block title %}Security Alerts{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h4 class="fw-bold mb-0 text-danger"><i class="bi bi-shield-exclamation"></i> Security Alerts</h4>
+  <h4 class="fw-bold mb-0 text-danger">
+    <i class="bi bi-shield-exclamation me-2"></i>Security Alerts
+    <span class="badge bg-danger ms-2">{{ alerts|length }}</span>
+  </h4>
   <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary btn-sm">
     <i class="bi bi-arrow-left"></i> Back to Dashboard
   </a>
+</div>
+
+<!-- Filter Tabs -->
+<div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+  <a href="{% url 'security_alerts' %}" class="btn btn-sm {% if not type_filter %}btn-danger{% else %}btn-outline-danger{% endif %}">
+    <i class="bi bi-list-ul me-1"></i> All
+  </a>
+  {% for t in alert_types %}
+    <a href="{% url 'security_alerts' %}?type={{ t }}"
+       class="btn btn-sm {% if type_filter == t %}btn-dark{% else %}btn-outline-secondary{% endif %}">
+      {% if t == 'account_lock' %}<i class="bi bi-lock-fill me-1 text-danger"></i> Account Lock
+      {% elif t == 'suspended' %}<i class="bi bi-person-slash me-1 text-warning"></i> Suspended
+      {% elif t == 'otp' %}<i class="bi bi-key me-1 text-info"></i> OTP / Password Reset
+      {% elif t == 'approval' %}<i class="bi bi-person-check me-1 text-success"></i> Approval
+      {% else %}<i class="bi bi-bell me-1"></i> {{ t|title }}{% endif %}
+    </a>
+  {% endfor %}
 </div>
 
 <div class="card border-danger border-2">
@@ -15,9 +35,11 @@
         <thead class="table-danger">
           <tr>
             <th>S/N</th>
+            <th>Type</th>
             <th>User</th>
             <th>Message</th>
             <th>Channel</th>
+            <th>Status</th>
             <th>Date &amp; Time</th>
             <th>Action</th>
           </tr>
@@ -26,8 +48,21 @@
           {% for alert in alerts %}
           <tr>
             <td>{{ forloop.counter }}</td>
+            <td>
+              {% if alert.message_type == 'account_lock' %}
+                <span class="badge bg-danger"><i class="bi bi-lock-fill"></i> Lock</span>
+              {% elif alert.message_type == 'suspended' %}
+                <span class="badge bg-warning text-dark"><i class="bi bi-person-slash"></i> Suspend</span>
+              {% elif alert.message_type == 'otp' or alert.message_type == 'approval' and 'OTP' in alert.message %}
+                <span class="badge bg-info text-dark"><i class="bi bi-key"></i> OTP</span>
+              {% elif alert.message_type == 'approval' %}
+                <span class="badge bg-success"><i class="bi bi-person-check"></i> Approval</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ alert.message_type|title }}</span>
+              {% endif %}
+            </td>
             <td><code class="small">{{ alert.user.username }}</code></td>
-            <td><small>{{ alert.message }}</small></td>
+            <td><small>{{ alert.message|truncatechars:100 }}</small></td>
             <td>
               {% if alert.channel == 'sms' %}
                 <span class="badge bg-warning text-dark"><i class="bi bi-phone"></i> SMS</span>
@@ -36,9 +71,18 @@
               {% endif %}
             </td>
             <td>
+              {% if alert.status == 'sent' %}
+                <span class="badge bg-success">Sent</span>
+              {% elif alert.status == 'failed' %}
+                <span class="badge bg-danger">Failed</span>
+              {% else %}
+                <span class="badge bg-secondary">{{ alert.status|title }}</span>
+              {% endif %}
+            </td>
+            <td>
               <small class="text-muted d-block">{{ alert.created_at|date:"d M Y" }}</small>
               <small class="fw-bold">{{ alert.created_at|time:"H:i:s" }}</small>
-              <small class="text-muted">({{ alert.created_at|timesince }} ago)</small>
+              <small class="text-muted d-block">({{ alert.created_at|timesince }} ago)</small>
             </td>
             <td>
               <form method="post" action="{% url 'delete_security_alert' alert.pk %}">
@@ -52,9 +96,9 @@
           </tr>
           {% empty %}
           <tr>
-            <td colspan="6" class="text-center py-5 text-muted">
+            <td colspan="8" class="text-center py-5 text-muted">
               <i class="bi bi-check-shield text-success fs-1 d-block mb-2"></i>
-              No security alerts found.
+              No security alerts found{% if type_filter %} for type "{{ type_filter }}"{% endif %}.
             </td>
           </tr>
           {% endfor %}

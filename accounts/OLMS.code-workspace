@@ -1,0 +1,14 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		},
+		{
+			"path": "../../../hardware_system/hardware"
+		},
+		{
+			"path": "../../../IT/CODEX/PYTHON/DJANGO/group_system"
+		}
+	],
+	"settings": {}
+}

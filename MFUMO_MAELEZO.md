@@ -1,5 +1,5 @@
 # 📚 MSICT OLMS — Mfumo Kamili wa Maelezo (Kiswahili)
-> **Online Library Management System** — Shule ya Teknolojia ya Habari ya Jeshi (MSICT)
+> **Library Management System** — Shule ya Teknolojia ya Habari ya Jeshi (MSICT)
 
 ---
 
@@ -88,6 +88,7 @@ theme = 'light' | 'dark'  # Mandhari ya mtumiaji
 
 | URL | Jina | Maelezo |
 |-----|------|---------|
+| `/register/` | `public_register` | Usajili wa umma (self-registration) — watumiaji wapya wanajisajili wenyewe |
 | `/login/` | `login` | Ukurasa wa kuingia |
 | `/logout/` | `logout` | Kutoka nje |
 | `/forgot-password/` | `forgot_password` | Omba OTP kwa kubadilisha nywila |
@@ -97,12 +98,28 @@ theme = 'light' | 'dark'  # Mandhari ya mtumiaji
 | `/profile/` | `profile` | Ukurasa wa wasifu wa mtumiaji |
 | `/change-password/` | `change_password` | Badilisha nywila |
 | `/virtual-card/` | `virtual_card` | Angalia kadi ya maktaba |
+| `/virtual-card/pdf/` | `virtual_card_pdf` | Pakua kadi ya maktaba kama PDF |
 | `/users/` | `user_list` | Orodha ya watumiaji wote (librarian/admin) |
 | `/users/create/` | `create_user` | Unda mtumiaji mpya |
 | `/users/<id>/edit/` | `edit_user` | Hariri mtumiaji |
+| `/users/<id>/detail/` | `user_detail` | Maelezo kamili ya mtumiaji |
+| `/users/<id>/reset-password/` | `reset_user_password` | Weka upya nywila ya mtumiaji |
+| `/users/<id>/approve/` | `approve_account` | Idhinisha akaunti iliyosajiliwa (kwa mtunzaji) |
+| `/users/<id>/reject/` | `reject_account` | Kataa akaunti iliyosajiliwa (kwa mtunzaji) |
+| `/users/<id>/<action>/` | `user_action` | Zuia/fungua akaunti (lock/unlock) |
+| `/public-registrations/` | `public_registrations` | Orodha ya usajili wa umma yanayosubiri idhini (kwa mtunzaji) |
 | `/admin-dashboard/` | `admin_dashboard` | Dashboard ya msimamizi |
+| `/admin/suspicious-activity/` | `suspicious_activity` | Shughuli za tuhuma (jaribio za kuingia zilizoshindwa) |
+| `/admin/suspended-members/` | `suspended_members` | Wanachama waliofungiwa (suspended) |
+| `/admin/unlock/<id>/` | `unlock_account` | Fungua akaunti iliyozuiwa |
 | `/admin/audit-logs/` | `audit_logs` | Historia ya vitendo |
+| `/admin/audit-logs/clear/` | `clear_audit_logs` | Futa vitendo vyote |
+| `/admin/audit-log/<pk>/delete/` | `delete_audit_log` | Futa rekodi moja ya vitendo |
+| `/admin/security-alerts/` | `security_alerts` | Tahadhari zote za usalama |
+| `/admin/security-alert/<pk>/delete/` | `delete_security_alert` | Futa tahadhari ya usalama |
 | `/admin/preferences/` | `system_preferences` | Mipangilio ya mfumo |
+| `/superuser/dashboard/` | `superuser_dashboard` | Dashboard ya superuser |
+| `/toggle-theme/` | `toggle_theme` | Badilisha dark/light mode |
 | `/system-appearance/` | `system_appearance` | Badilisha rangi, fonti, mandhari |
 
 ### 📄 Templeti za `accounts/`
@@ -110,6 +127,7 @@ theme = 'light' | 'dark'  # Mandhari ya mtumiaji
 | Faili | Maelezo |
 |-------|---------|
 | `login.html` | Ukurasa wa kuingia — dark theme ya Netflix-style |
+| `register.html` | Fomu ya usajili wa umma (self-registration) |
 | `forgot_password.html` | Omba OTP kwa barua pepe |
 | `verify_otp.html` | Weka OTP uliopokea |
 | `reset_password.html` | Weka nywila mpya |
@@ -123,10 +141,93 @@ theme = 'light' | 'dark'  # Mandhari ya mtumiaji
 | `system_appearance.html` | Badilisha rangi, fonti, mandhari ya mfumo |
 | `system_preferences.html` | Mipangilio ya mfumo (siku za mkopo, faini/siku...) |
 | `audit_logs.html` | Historia ya vitendo vyote |
+| `public_registrations.html` | Orodha ya usajili wa umma yanayosubiri idhini (kwa mtunzaji) |
+| `suspicious_activity.html` | Shughuli za tuhuma (jaribio za kuingia zilizoshindwa) |
+| `suspended_members.html` | Wanachama waliofungiwa (suspended) |
+| `security_alerts.html` | Tahadhari zote za usalama |
 
 ---
 
-## 📖 4. APP: `catalog` — Vitabu na Maktaba
+## � 4. APP: `chat` — Mawasiliano ya Muda Halisi (Real-time Chat)
+
+### 📊 Mifano ya Data (models.py)
+
+| Model | Jedwali DB | Maelezo |
+|-------|-----------|---------|
+| `Conversation` | `chat_conversations` | Mjadala wa 1-kwa-1 kati ya watumiaji wawili |
+| `Message` | `chat_messages` | Ujumbe mmoja ndani ya mjadala |
+| `UserPresence` | `chat_user_presence` | Inafuatilia mtumiaji online/offline |
+
+### 🔑 Kanuni za Mawasiliano (Chat Rules)
+
+- **Mwanachama** anaweza kuongea na **Mtunzaji** au **Msimamizi**
+- **Mtunzaji** anaweza kuongea na **Mwanachama** au **Msimamizi**
+- **Msimamizi** anaweza kuongea na **Mwanachama** au **Mtunzaji**
+- **Mwanachama HANAWEZI kuongea na Mwanachama mwingine** (imezuiwa)
+
+### 🌐 URL za `chat`
+
+| URL | Jina | Maelezo |
+|-----|------|---------|
+| `/chat/` | `chat_inbox` | Sanduku la barua pepe la mawasiliano (inbox) |
+| `/chat/new/` | `chat_new` | Anza mjadala mpya |
+| `/chat/start/<user_id>/` | `chat_start` | Anza mjadala na mtumiaji maalum |
+| `/chat/c/<conv_id>/` | `chat_conversation` | Angalia mjadala maalum |
+| `/chat/c/<conv_id>/messages/` | `chat_messages_json` | API ya ujumbe kwa ajili ya WebSocket |
+| `/chat/c/<conv_id>/read/` | `chat_mark_read` | Alama ujumbe kama umesoma |
+| `/chat/unread/` | `chat_unread_count` | Idadi ya ujumbe usiosomwa |
+
+### 📄 Templeti za `chat/`
+
+| Faili | Maelezo |
+|-------|---------|
+| `inbox.html` | Orodha ya majadala yote (inbox) |
+| `new_chat.html` | Chagua mtumiaji kuanza mjadala mpya |
+
+### 🔄 WebSocket za `chat`
+
+| WebSocket | Maelezo |
+|-----------|---------|
+| `ws/chat/<conv_id>/` | Mawasiliano ya muda halisi kwa mjadala maalum |
+| `ws/notifications/` | Arifa za kimataifa (badge ya ujumbe usiosomwa) |
+
+---
+
+## 🤖 5. APP: `chatbot` — Msaidizi wa Maktaba wa AI
+
+### 📊 Mifano ya Data (models.py)
+
+| Model | Jedwali DB | Maelezo |
+|-------|-----------|---------|
+| `ChatbotSession` | `chatbot_sessions` | Mjadala wa moja kwa moja na AI (unaweza kuwa kwa mtumiaji aliyeingia au bila kuingia) |
+| `ChatbotMessage` | `chatbot_messages` | Ujumbe mmoja ndani ya mjadala wa AI |
+
+### 🔑 Kanuni za Chatbot
+
+- **Watumiaji wasioingia** wanaweza kuongea na chatbot (kutumia session key)
+- **Watumiaji walioingia** wanaweza kuongea na chatbot (kuhifadhiwa kwenye akaunti yao)
+- Chatbot hutumia **Gemini AI** kwa majibu
+- Chatbot inaweza kutafuta vitabu kutoka **Google Books API** kama backup
+
+### 🌐 URL za `chatbot`
+
+| URL | Jina | Maelezo |
+|-----|------|---------|
+| `/assistant/` | `assistant_page` | Ukurasa wa msaidizi wa maktaba (AI) |
+| `/assistant/history/` | `assistant_history` | Historia ya majadala yako na AI |
+| `/assistant/send/` | `assistant_send` | Tuma ujumbe kwa AI |
+| `/assistant/reset/` | `assistant_reset` | Anza mjadala mpya na AI |
+
+### 📄 Templeti za `chatbot/`
+
+| Faili | Maelezo |
+|-------|---------|
+| `assistant.html` | Ukurasa wa msaidizi wa maktaba (AI) |
+| `assistant_history.html` | Historia ya majadala na AI |
+
+---
+
+## � 6. APP: `catalog` — Vitabu na Maktaba
 
 ### 📊 Mifano ya Data (models.py)
 
@@ -191,7 +292,7 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 🔄 5. APP: `circulation` — Mikopo na Shughuli
+## 🔄 7. APP: `circulation` — Mikopo na Shughuli
 
 ### 📊 Mifano ya Data (models.py)
 
@@ -237,7 +338,7 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 🛒 6. APP: `acquisitions` — Manunuzi ya Vitabu
+## 🛒 8. APP: `acquisitions` — Manunuzi ya Vitabu
 
 ### 📊 Mifano ya Data
 
@@ -263,7 +364,7 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 📊 7. APP: `reports` — Ripoti na Takwimu
+## 📊 9. APP: `reports` — Ripoti na Takwimu
 
 ### 🌐 URL za `reports`
 
@@ -280,7 +381,7 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 🌍 8. APP: `public` — Kurasa za Umma (Bila Kuingia)
+## 🌍 10. APP: `public` — Kurasa za Umma (Bila Kuingia)
 
 ### 🌐 URL za `public`
 
@@ -294,7 +395,29 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 🔄 9. MTIRIRIKO WA VITENDO (Flow of Actions)
+## 🔄 11. MTIRIRIKO WA VITENDO (Flow of Actions)
+
+### ✅ Usajili wa Umma (Self-Registration)
+
+```
+1. Mtu yeyote → /register/ → anajaza fomu ya usajili
+   [OLMSUser inaundwa, registration_status='pending', is_active=False]
+2. SMS na barua pepe zinatumwa: "Usajili umepokelewa, inasubiri idhini"
+3. Mtunzaji → /public-registrations/ → anaona orodha ya waliyosajili
+4. Mtunzaji → Approve → /users/<id>/approve/
+   [registration_status='approved', is_active=True]
+   [card_no inatengenezwa: MSICT-LIB-YY-XXXXXX]
+   [VirtualCard inaundwa na QR code]
+   [SMS na barua pepe zinatumwa na username, password, card_no]
+5. Mtumiaji anaonekana kwenye orodha ya wanachama (Members page) na status="Active"
+6. Mtumiaji anaweza kuingia na kutumia mfumo
+
+Kama Mtunzaji anataka kataa:
+4. Mtunzaji → Cancel → /users/<id>/reject/ + sababu
+   [registration_status='cancelled']
+   [SMS na barua pepe zinatumwa na sababu ya kukataliwa]
+   [Mtumiaji haonekani tena kwenye Public Registrations]
+```
 
 ### ✅ Kukopa Kitabu cha Kawaida (Hardcopy)
 
@@ -356,7 +479,7 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 🗄️ 10. JEDWALI ZOTE ZA DATABASE
+## 🗄️ 12. JEDWALI ZOTE ZA DATABASE
 
 | Jedwali | Model | App |
 |---------|-------|-----|
@@ -368,6 +491,11 @@ access_type (kwa softcopy tu):
 | `audit_logs` | AuditLog | accounts |
 | `system_preferences` | SystemPreference | accounts |
 | `blocked_ips` | BlockedIP | accounts |
+| `chat_conversations` | Conversation | chat |
+| `chat_messages` | Message | chat |
+| `chat_user_presence` | UserPresence | chat |
+| `chatbot_sessions` | ChatbotSession | chatbot |
+| `chatbot_messages` | ChatbotMessage | chatbot |
 | `categories` | Category | catalog |
 | `courses` | Course | catalog |
 | `books` | Book | catalog |
@@ -394,7 +522,7 @@ access_type (kwa softcopy tu):
 
 ---
 
-## 🛠️ 11. JINSI YA KUFANYA MABADILIKO
+## 🛠️ 13. JINSI YA KUFANYA MABADILIKO
 
 ---
 
@@ -529,7 +657,7 @@ Mipangilio ya mfumo (siku za mkopo, faini/siku, n.k.) inabadilishwa kupitia:
 
 ---
 
-## 🎨 12. TEMPLETI MAMA (base.html)
+## 🎨 14. TEMPLETI MAMA (base.html)
 
 Faili `templates/base.html` ni mama ya templeti zote. Ina:
 - **Sidebar** ya kushoto — menyu ya uabiri kulingana na jukumu
@@ -550,7 +678,7 @@ Faili `templates/base.html` ni mama ya templeti zote. Ina:
 
 ---
 
-## 🔐 13. MAJUKUMU NA RUHUSA (Roles & Permissions)
+## 🔐 15. MAJUKUMU NA RUHUSA (Roles & Permissions)
 
 | Jukumu | Wanachofanya |
 |--------|-------------|
@@ -567,7 +695,7 @@ Faili `templates/base.html` ni mama ya templeti zote. Ina:
 
 ---
 
-## 📧 14. MFUMO WA ARIFA (Notifications)
+## 📧 16. MFUMO WA ARIFA (Notifications)
 
 Arifa zinatumwa kupitia:
 - **SMS** → Beem Africa API (`BEEM_API_KEY` kwenye `.env`)
@@ -583,7 +711,7 @@ send_email_notification(email, subject, msg) # Tuma barua pepe
 
 ---
 
-## 🗂️ 15. FAILI ZA MIPANGILIO MUHIMU
+## 🗂️ 17. FAILI ZA MIPANGILIO MUHIMU
 
 | Faili | Mabadiliko gani |
 |-------|----------------|
@@ -595,7 +723,7 @@ send_email_notification(email, subject, msg) # Tuma barua pepe
 
 ---
 
-## 🧰 16. AMRI ZA KAWAIDA ZA MWENENDO (Common Commands)
+## 🧰 18. AMRI ZA KAWAIDA ZA MWENENDO (Common Commands)
 
 ```bash
 # Endesha seva ya maendeleo

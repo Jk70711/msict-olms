@@ -219,11 +219,17 @@
     <div class="ai-welcome" id="aiWelcome">
       <div style="font-size:2.2rem;margin-bottom:.5rem">📚</div>
       <h6>Karibu! / Welcome!</h6>
-      <p class="small mb-3">Ask me about books, topics, or how the library works.</p>
+      <p class="small mb-2">Uliza kuhusu vitabu, mada, au sheria za maktaba.<br><span style="font-size:.7rem;opacity:.8;">Ask about books, topics, or library rules — in English or Kiswahili.</span></p>
       <div>
+        {% if user.is_authenticated %}
+        <span class="ai-suggestion" data-q="Recommend books for me based on my reading history">📖 My Recommendations</span>
+        <span class="ai-suggestion" data-q="Nipe mapendekezo ya vitabu kulingana na historia yangu ya kukopa">📚 Mapendekezo Yangu</span>
+        {% endif %}
         <span class="ai-suggestion" data-q="Do you have any networking books?">Networking books?</span>
-        <span class="ai-suggestion" data-q="Recommend Python programming books">Python recommendations</span>
-        <span class="ai-suggestion" data-q="Je, kuna kitabu cha cyber security?">Kiswahili: cyber security</span>
+        <span class="ai-suggestion" data-q="Je, kuna vitabu vya programming?">Vitabu vya programming?</span>
+        <span class="ai-suggestion" data-q="Je, kuna kitabu cha cyber security?">Cyber security (SW)</span>
+        <span class="ai-suggestion" data-q="Where can I find books online if not in MSICT library?">🌐 Online libraries</span>
+        <span class="ai-suggestion" data-q="Nipe viungo vya maktaba za mtandaoni">🌐 Maktaba za nje</span>
         <span class="ai-suggestion" data-q="What are the library borrowing rules?">Borrowing rules</span>
       </div>
     </div>
@@ -252,6 +258,8 @@
   const RESET_URL   = '{% url "assistant_reset" %}';
 
   function getCsrf() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) return meta.getAttribute('content');
     const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
   }

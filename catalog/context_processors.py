@@ -1,3 +1,83 @@
+def security_badges(request):
+    """Pass security counts for admin sidebar badges (available on every page)."""
+    security_alerts_count = 0
+    suspicious_users_count = 0
+    locked_accounts_count = 0
+    suspicious_ips_count = 0
+    recent_failed_logins_count = 0
+    pending_requests_count = 0
+    pending_registrations_count = 0
+    member_active_borrowings = 0
+    member_reservations = 0
+    member_unpaid_fines = 0
+    try:
+        if request.user.is_authenticated:
+            from circulation.models import Notification, BorrowRequest, Reservation, BorrowingTransaction, Fine
+            from accounts.models import OLMSUser
+            from django.db.models import Q
+            from datetime import timedelta
+            from django.utils import timezone
+
+            # Admin-specific counts
+            if request.user.role == 'admin':
+                security_alerts_count = Notification.objects.filter(
+                    is_security_alert=True
+                ).exclude(message__icontains='OTP').exclude(
+                    message__icontains='password reset'
+                ).count()
+                suspicious_users_count = OLMSUser.objects.filter(
+                    failed_attempts__gte=1
+                ).exclude(role='admin').count()
+                locked_accounts_count = OLMSUser.objects.exclude(role='admin').filter(
+                    Q(is_active=False) | Q(registration_status='pending')
+                ).distinct().count()
+                # Suspicious IPs in last 1 hour with >=5 fails
+                from accounts.models import LoginAttempt
+                window_1h = timezone.now() - timedelta(hours=1)
+                suspicious_ips_count = LoginAttempt.objects.filter(
+                    status='failed', timestamp__gte=window_1h
+                ).values('ip_address').annotate(
+                    total=Count('attempt_count')
+                ).filter(total__gte=5).count()
+                # Recent failed logins in last 1 hour (individual attempts)
+                recent_failed_logins_count = LoginAttempt.objects.filter(
+                    status='failed', timestamp__gte=window_1h
+                ).count()
+                pending_registrations_count = OLMSUser.objects.filter(
+                    registration_status='pending'
+                ).count()
+
+            # Librarian-specific counts
+            if request.user.role in ('admin', 'librarian'):
+                pending_requests_count = BorrowRequest.objects.filter(status='pending').count()
+
+            # Member-specific counts
+            if request.user.role == 'member':
+                member_active_borrowings = BorrowingTransaction.objects.filter(
+                    user=request.user, status__in=['borrowed', 'overdue']
+                ).count()
+                member_reservations = Reservation.objects.filter(
+                    user=request.user, status__in=['pending', 'notified']
+                ).count()
+                member_unpaid_fines = Fine.objects.filter(
+                    user=request.user, paid=False
+                ).count()
+    except Exception:
+        pass
+    return {
+        'security_alerts_count': security_alerts_count,
+        'suspicious_users_count': suspicious_users_count,
+        'locked_users': locked_accounts_count,
+        'suspicious_ips_count': suspicious_ips_count,
+        'recent_failed_logins_count': recent_failed_logins_count,
+        'pending_requests_count': pending_requests_count,
+        'pending_registrations_count': pending_registrations_count,
+        'member_active_borrowings': member_active_borrowings,
+        'member_reservations': member_reservations,
+        'member_unpaid_fines': member_unpaid_fines,
+    }
+
+
 def overdue_counter(request):
     """Pass overdue count to templates for sidebar badge."""
     count = 0

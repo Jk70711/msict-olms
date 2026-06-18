@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Loss Reports{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-2">
   <h4 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Loss Reports</h4>
   <div class="d-flex gap-2">
     <a href="?status=" class="btn btn-sm {% if not status_filter %}btn-dark{% else %}btn-outline-secondary{% endif %}">All</a>
@@ -20,307 +20,467 @@
   {% endfor %}
 {% endif %}
 
-<div class="table-responsive">
-  <table class="table table-hover align-middle">
-    <thead class="table-dark">
-      <tr>
-        <th>Ref</th>
-        <th>Member</th>
-        <th>Book</th>
-        <th>Overdue Fine</th>
-        <th>Loss Fine</th>
-        <th>Total</th>
-        <th>Payment</th>
-        <th>Reported</th>
-        <th>Status</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for report in reports %}
-      {% with tx=report.transaction copy=report.transaction.copy %}
-      <tr>
-
-        <!-- Ref -->
-        <td><span class="badge bg-secondary">LR-{{ report.pk }}</span></td>
-
-        <!-- Member -->
-        <td>
-          <div class="fw-semibold">{{ report.user.get_full_name }}</div>
-          <div class="small text-muted">{{ report.user.army_no }}{% if report.user.rank %} · <span class="badge bg-dark">{{ report.user.rank.rank_name }}</span>{% endif %}</div>
-        </td>
-
-        <!-- Book -->
-        <td>
-          <div class="fw-semibold">{{ copy.book.title|truncatechars:35 }}</div>
-          <div class="small text-muted">Acc: {{ copy.accession_no }}</div>
-          <div class="small">
-            <span class="badge bg-secondary"><i class="bi bi-book"></i> Hardcopy</span>
-            {% if copy.status == 'lost' %}
-            <span class="badge bg-danger">Lost</span>
-            {% endif %}
-          </div>
-          <div class="small text-muted mt-1">Due: {{ tx.due_date|date:"d M Y" }}{% if tx.is_overdue %} <span class="text-danger">({{ tx.days_overdue }}d overdue)</span>{% endif %}</div>
-        </td>
-
-        <!-- Overdue Fine -->
-        <td>
-          {% with overdue_fines=tx.fines.all %}
-          {% if overdue_fines %}
-            {% for f in overdue_fines %}
-              {% if not f.loss_report %}
-              <div class="text-danger fw-semibold">TZS {{ f.amount|floatformat:0 }}</div>
-              <div class="small text-muted">Paid: {{ f.amount_paid|floatformat:0 }}</div>
-              <div><span class="badge {% if f.paid %}bg-success{% elif f.amount_paid > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                {% if f.paid %}Paid{% elif f.amount_paid > 0 %}Partial{% else %}Unpaid{% endif %}
-              </span></div>
-              {% endif %}
-            {% endfor %}
-          {% else %}
-            <span class="text-muted small">—</span>
-          {% endif %}
-          {% endwith %}
-        </td>
-
-        <!-- Loss Fine -->
-        <td>
-          {% with loss_fine=report.loss_fine %}
-          {% if loss_fine %}
-          <div class="text-danger fw-semibold">TZS {{ loss_fine.amount|floatformat:0 }}</div>
-          <div class="small text-muted">Paid: {{ loss_fine.amount_paid|floatformat:0 }}</div>
-          <div><span class="badge {% if loss_fine.paid %}bg-success{% elif loss_fine.amount_paid > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-            {% if loss_fine.paid %}Paid{% elif loss_fine.amount_paid > 0 %}Partial{% else %}Unpaid{% endif %}
-          </span></div>
-          {% else %}
-            {% with tx_fines=tx.fines.all %}
-            {% for f in tx_fines %}
-              {% if 'loss' in f.reason.lower %}
-              <div class="text-danger fw-semibold">TZS {{ f.amount|floatformat:0 }}</div>
-              <div class="small text-muted">Paid: {{ f.amount_paid|floatformat:0 }}</div>
-              <div><span class="badge {% if f.paid %}bg-success{% elif f.amount_paid > 0 %}bg-warning text-dark{% else %}bg-danger{% endif %}">
-                {% if f.paid %}Paid{% elif f.amount_paid > 0 %}Partial{% else %}Unpaid{% endif %}
-              </span></div>
-              {% endif %}
-            {% empty %}
-            <span class="text-muted small">—</span>
-            {% endfor %}
-            {% endwith %}
-          {% endif %}
-          {% endwith %}
-        </td>
-
-        <!-- Total -->
-        <td>
-          {% with overdue_total=0 loss_total=0 %}
-          <strong class="text-danger">
-            TZS {% with tx.fines.all as allfines %}
-              {% for f in allfines %}{% if not f.loss_report %}{{ f.amount|floatformat:0 }}{% endif %}{% endfor %}
-            {% endwith %}
-            {% if report.loss_fine %}+ {{ report.loss_fine.amount|floatformat:0 }}{% endif %}
-          </strong>
-          {% endwith %}
-          <div class="small text-muted mt-1">
-            {% if report.overdue_count == 0 %}
-              <span class="badge bg-secondary">No Overdue</span>
-            {% else %}
-              {% with tx.fines.all as allfines %}
-                {% for f in allfines %}
-                  {% if not f.loss_report and not f.paid %}
-                  <span class="badge bg-danger">Overdue Unpaid</span>
-                  {% elif not f.loss_report and f.paid %}
-                  <span class="badge bg-success">Overdue Paid</span>
-                  {% endif %}
-                {% endfor %}
-              {% endwith %}
-            {% endif %}
-          </div>
-        </td>
-
-        <!-- Payment Status -->
-        <td>
-          {% with tx.fines.all as allfines %}
-            {% if report.overdue_count > 0 %}
-              {% for f in allfines %}
-                {% if not f.paid and f.remaining_balance > 0 %}
-                <span class="badge bg-danger">Overdue Unpaid</span>
-                {% elif f.paid %}
-                <span class="badge bg-success">Overdue Paid</span>
-                {% endif %}
-              {% endfor %}
-            {% else %}
-              <span class="badge bg-secondary">No Overdue</span>
-            {% endif %}
-            {% if report.loss_fine %}
-              {% if report.loss_fine.paid %}
-              <span class="badge bg-success">Loss Fine Paid</span>
-              {% elif report.loss_fine.amount_paid > 0 %}
-              <span class="badge bg-warning text-dark">Loss Fine Partial</span>
-              {% else %}
-              <span class="badge bg-danger">Loss Fine Unpaid</span>
-              {% endif %}
-            {% endif %}
-            {% if not report.loss_fine and not tx.fines.exists %}
-              <span class="badge bg-secondary">No Fines</span>
-            {% endif %}
-          {% endwith %}
-        </td>
-
-        <!-- Date Reported -->
-        <td>
-          <div class="small">{{ report.reported_at|date:"d M Y" }}</div>
-          <div class="small text-muted">{{ report.reported_at|time:"H:i" }}</div>
-          {% if report.reviewed_by %}
-          <div class="small text-muted mt-1">Reviewed by {{ report.reviewed_by.get_full_name }}</div>
-          {% endif %}
-        </td>
-
-        <!-- Status -->
-        <td>
-          <span class="badge fs-6
-            {% if report.status == 'pending' %}bg-warning text-dark
-            {% elif report.status == 'confirmed' %}bg-danger
-            {% elif report.status == 'resolved' %}bg-success
-            {% else %}bg-secondary{% endif %}">
-            {{ report.get_status_display }}
-          </span>
-        </td>
-
-        <!-- Actions -->
-        <td>
-          <!-- View description toggle -->
-          <button class="btn btn-sm btn-outline-info mb-1" type="button"
-            data-bs-toggle="collapse" data-bs-target="#desc-{{ report.pk }}">
-            <i class="bi bi-eye"></i> Details
-          </button>
-
-          {% if report.status == 'pending' %}
-          <!-- Confirm Loss -->
-          <button class="btn btn-sm btn-danger mb-1" type="button"
-            data-bs-toggle="modal" data-bs-target="#confirmModal-{{ report.pk }}">
-            <i class="bi bi-check-circle"></i> Confirm
-          </button>
-          <!-- Dismiss -->
-          <form method="post" action="{% url 'confirm_loss' report.pk %}" class="d-inline"
-            onsubmit="return confirm('Dismiss LR-{{ report.pk }}?')">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="dismiss">
-            <button class="btn btn-sm btn-outline-secondary mb-1"><i class="bi bi-x-circle"></i> Dismiss</button>
-          </form>
-          {% endif %}
-
-          <!-- Record Payment (librarian only) -->
-          {% if report.loss_fine and not report.loss_fine.paid %}
-          <a href="{% url 'record_loss_fine_payment' report.pk %}" class="btn btn-sm btn-primary mb-1">
-            <i class="bi bi-cash-stack"></i> Record Payment
-          </a>
-          {% endif %}
-
-          {% if report.status in 'pending confirmed' %}
-          <!-- Book Recovered -->
-          <button class="btn btn-sm btn-success mb-1" type="button"
-            data-bs-toggle="modal" data-bs-target="#recoverModal-{{ report.pk }}">
-            <i class="bi bi-arrow-return-left"></i> Recovered
-          </button>
-          {% endif %}
-        </td>
-      </tr>
-
-      <!-- Collapsible description row -->
-      <tr class="collapse" id="desc-{{ report.pk }}">
-        <td colspan="10" class="bg-light">
-          <div class="px-2 py-2">
-            <strong>Circumstances:</strong> {{ report.circumstances|default:"Not specified" }}<br>
-            <strong>Description:</strong> {{ report.description }}<br>
-            {% if report.librarian_notes %}
-            <strong>Librarian Notes:</strong> {{ report.librarian_notes|linebreaksbr }}
-            {% endif %}
-          </div>
-        </td>
-      </tr>
-
-      <!-- Confirm Modal -->
-      {% if report.status == 'pending' %}
-      <div class="modal fade" id="confirmModal-{{ report.pk }}" tabindex="-1">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header bg-danger text-white">
-              <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Confirm Loss – LR-{{ report.pk }}</h5>
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" action="{% url 'confirm_loss' report.pk %}">
-              {% csrf_token %}
-              <input type="hidden" name="action" value="confirm">
-              <div class="modal-body">
-                <p>Confirming will mark <strong>{{ copy.book.title }}</strong> (Acc: {{ copy.accession_no }}) as <span class="text-danger fw-bold">LOST</span>.</p>
-                <div class="mb-3">
-                  <label class="form-label fw-semibold">Loss Fine Amount (TZS)</label>
-                  <input type="number" name="loss_fine_amount" class="form-control" min="0" step="100"
-                    placeholder="0 = no fine" value="{{ copy.book.lost_fine|default:'' }}">
-                  <div class="form-text">Book's default loss fine: <strong>TZS {{ copy.book.lost_fine|default:0|floatformat:0 }}</strong>. Modify if needed.</div>
-                </div>
-                <div class="mb-3">
-                  <label class="form-label fw-semibold">Librarian Notes</label>
-                  <textarea name="librarian_notes" class="form-control" rows="3"
-                    placeholder="Optional notes...">{{ report.librarian_notes }}</textarea>
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="submit" class="btn btn-danger"><i class="bi bi-check-circle"></i> Confirm Loss</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-      {% endif %}
-
-      <!-- Recover Modal -->
-      {% if report.status == 'pending' or report.status == 'confirmed' %}
-      <div class="modal fade" id="recoverModal-{{ report.pk }}" tabindex="-1">
-        <div class="modal-dialog">
-          <div class="modal-content">
-            <div class="modal-header bg-success text-white">
-              <h5 class="modal-title"><i class="bi bi-arrow-return-left"></i> Book Recovered – LR-{{ report.pk }}</h5>
-              <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-            </div>
-            <form method="post" action="{% url 'recover_book' report.pk %}">
-              {% csrf_token %}
-              <div class="modal-body">
-                <p>Mark <strong>{{ copy.book.title }}</strong> as physically returned at the desk.</p>
-                <ul class="small text-muted">
-                  <li>Copy status will be restored to <strong>Available</strong>.</li>
-                  <li>Transaction will be marked <strong>Returned</strong>.</li>
-                  {% if report.loss_fine and not report.loss_fine.paid and report.loss_fine.amount_paid == 0 %}
-                  <li class="text-success">Unpaid loss fine will be <strong>waived</strong> since the book is returned.</li>
-                  {% endif %}
-                </ul>
-                <div class="mb-3">
-                  <label class="form-label fw-semibold">Recovery Notes <span class="text-muted fw-normal">(optional)</span></label>
-                  <textarea name="recovery_notes" class="form-control" rows="2"
-                    placeholder="E.g. Member returned book in good condition..."></textarea>
-                </div>
-              </div>
-              <div class="modal-footer">
-                <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Mark as Recovered</button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-      {% endif %}
-
-      {% endwith %}
-      {% empty %}
-      <tr>
-        <td colspan="10" class="text-center text-muted py-4">
-          <i class="bi bi-check-circle fs-3 text-success d-block mb-1"></i>
-          No loss reports found{% if status_filter %} with status "<strong>{{ status_filter }}</strong>"{% endif %}.
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+{% if not grouped_reports %}
+<div class="text-center text-muted py-4">
+  <i class="bi bi-check-circle fs-3 text-success d-block mb-1"></i>
+  No loss reports found{% if status_filter %} with status "<strong>{{ status_filter }}</strong>"{% endif %}.
 </div>
+{% else %}
+  {% for grp in grouped_reports %}
+  <div class="card mb-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <div>
+        <strong class="me-2">{{ grp.user.get_full_name }}</strong>
+        <span class="small text-muted">{{ grp.user.army_no }}{% if grp.user.rank %} · {{ grp.user.rank.rank_name }}{% endif %}</span>
+      </div>
+      <div class="small text-muted">Reports: <span class="badge bg-secondary">{{ grp.reports|length }}</span></div>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Ref</th>
+              <th>Book / Acc</th>
+              <th>Reported</th>
+              <th>Fines (Loss / Overdue)</th>
+              <th>Remaining</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for report in grp.reports %}
+            {% with tx=report.transaction copy=report.transaction.copy %}
+            <tr>
+              <td><span class="badge bg-secondary">LR-{{ report.seq_no }}</span></td>
+              <td>
+                <div class="fw-semibold">{{ copy.book.title|truncatechars:50 }}</div>
+                <div class="small text-muted">Acc: {{ copy.accession_no }} · {{ copy.book.author|default:'—' }}</div>
+              </td>
+              <td class="small text-muted">{{ report.reported_at|date:"d M Y" }}<br>{{ report.reported_at|time:"H:i" }}</td>
+              <td>
+                {% if report.loss_fine %}
+                <div class="text-danger">Loss: TZS {{ report.loss_fine.amount|floatformat:0 }}</div>
+                {% endif %}
+                {% if report.overdue_fine %}
+                <div class="text-warning">Overdue: TZS {{ report.overdue_fine.amount|floatformat:0 }}</div>
+                {% endif %}
+                {% if not report.loss_fine and not report.overdue_fine %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td>
+                <strong class="text-danger">TZS {{ report.total_remaining|floatformat:0 }}</strong>
+              </td>
+              <td>
+                <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}bg-danger{% elif report.status == 'resolved' %}bg-success{% else %}bg-secondary{% endif %}">{{ report.get_status_display }}</span>
+              </td>
+                <td>
+                {% if report.total_remaining > 0 or report.status == 'pending' or report.status == 'confirmed' %}
+                <div class="dropdown">
+                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-three-dots-vertical me-1"></i> Actions
+                  </button>
+                  <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:200px;">
 
+                    {% if report.total_remaining > 0 %}
+                    <li>
+                      <button class="dropdown-item fw-semibold" type="button"
+                              data-bs-toggle="modal" data-bs-target="#payModal-{{ report.pk }}">
+                        <i class="bi bi-cash-stack me-2 text-primary"></i> Record Payment
+                      </button>
+                    </li>
+                    {% endif %}
+
+                    {% if report.status == 'pending' %}
+                    {% if report.total_remaining > 0 %}<li><hr class="dropdown-divider my-1"></li>{% endif %}
+                    <li>
+                      <button class="dropdown-item fw-semibold" type="button"
+                              data-bs-toggle="modal" data-bs-target="#confirmModal-{{ report.pk }}">
+                        <i class="bi bi-check-circle me-2 text-danger"></i> Confirm Loss
+                      </button>
+                    </li>
+                    <li>
+                      <form method="post" action="{% url 'confirm_loss' report.pk %}" class="m-0"
+                            onsubmit="return confirm('Are you sure you want to dismiss LR-{{ report.seq_no }}?')">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="dismiss">
+                        <button type="submit" class="dropdown-item fw-semibold">
+                          <i class="bi bi-x-circle me-2 text-secondary"></i> Dismiss Report
+                        </button>
+                      </form>
+                    </li>
+                    {% endif %}
+
+                    {% if report.status == 'pending' or report.status == 'confirmed' %}
+                    <li><hr class="dropdown-divider my-1"></li>
+                    <li>
+                      <button class="dropdown-item fw-semibold" type="button"
+                              data-bs-toggle="modal" data-bs-target="#recoverModal-{{ report.pk }}">
+                        <i class="bi bi-arrow-return-left me-2 text-success"></i> Mark Recovered
+                      </button>
+                    </li>
+                    {% endif %}
+
+                  </ul>
+                </div>
+                {% else %}
+                <span class="badge bg-light text-muted border">No Actions</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endwith %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Render full-width detail cards for each report so nothing is clipped -->
+      <div class="px-3 pb-3">
+        {% for report in grp.reports %}
+        <div class="card border-0 border-start border-4 {% if report.status == 'pending' %}border-warning{% elif report.status == 'confirmed' %}border-danger{% elif report.status == 'resolved' %}border-success{% else %}border-secondary{% endif %} mt-2 bg-light shadow-sm">
+          <div class="card-body py-2">
+            <div class="row">
+              <div class="col-md-6">
+                <p class="mb-1"><strong>Ref:</strong> <span class="badge bg-secondary">LR-{{ report.seq_no }}</span></p>
+                <p class="mb-1"><strong>Transaction:</strong> {{ report.transaction.id }}</p>
+                <p class="mb-1"><strong>Borrowed:</strong> {{ report.transaction.borrow_date|date:'d M Y' }}</p>
+                <p class="mb-1"><strong>Due:</strong> {{ report.transaction.due_date|date:'d M Y' }}</p>
+                <p class="mb-1"><strong>Last Known Location:</strong> {{ report.last_known_location|default:'—' }}</p>
+              </div>
+              <div class="col-md-6">
+                <p class="mb-1"><strong>Date Noticed:</strong> {{ report.date_noticed|date:'d M Y H:i'|default:'Not specified' }}</p>
+                <p class="mb-1"><strong>Authority Reported:</strong> {% if report.authority_reported %}Yes — Ref: {{ report.authority_reference|default:'—' }}{% else %}No{% endif %}</p>
+                <p class="mb-1"><strong>Circumstances:</strong> {{ report.circumstances|default:'Not specified' }}</p>
+                <p class="mb-1"><strong>Status:</strong> <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}bg-danger{% elif report.status == 'resolved' %}bg-success{% else %}bg-secondary{% endif %}">{{ report.get_status_display }}</span></p>
+              </div>
+            </div>
+            <hr>
+            <p class="mb-1"><strong>Description:</strong><br>{{ report.description }}</p>
+            {% if report.librarian_notes %}
+            <p class="mb-1"><strong>Librarian Notes:</strong><br>{{ report.librarian_notes|linebreaksbr }}</p>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+    </div>
+  </div>
+  {% endfor %}
+{% endif %}
+
+  <!-- Modals rendered outside of the table and cards to avoid stacking/clipping issues -->
+  {% for grp in grouped_reports %}
+    {% for report in grp.reports %}
+      {% with tx=report.transaction copy=report.transaction.copy %}
+        <!-- Confirm Modal -->
+        {% if report.status == 'pending' %}
+        <div class="modal fade" id="confirmModal-{{ report.pk }}" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title"><i class="bi bi-exclamation-triangle"></i> Confirm Loss – LR-{{ report.seq_no }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <form method="post" action="{% url 'confirm_loss' report.pk %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="confirm">
+                <div class="modal-body">
+                  <p>Confirming will mark <strong>{{ copy.book.title }}</strong> (Acc: {{ copy.accession_no }}) as <span class="text-danger fw-bold">LOST</span>.</p>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Loss Fine Amount (TZS)</label>
+                    <input type="number" name="loss_fine_amount" class="form-control" min="0" step="100" placeholder="0 = no fine" value="{{ copy.book.lost_fine|default:'' }}">
+                    <div class="form-text">Book's default loss fine: <strong>TZS {{ copy.book.lost_fine|default:0|floatformat:0 }}</strong>. Modify if needed.</div>
+                  </div>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Librarian Notes</label>
+                    <textarea name="librarian_notes" class="form-control" rows="3" placeholder="Optional notes...">{{ report.librarian_notes }}</textarea>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="submit" class="btn btn-danger"><i class="bi bi-check-circle"></i> Confirm Loss</button>
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Recover Modal -->
+        {% if report.status == 'pending' or report.status == 'confirmed' %}
+        <div class="modal fade" id="recoverModal-{{ report.pk }}" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content">
+              <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="bi bi-arrow-return-left"></i> Book Recovered – LR-{{ report.seq_no }}</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <form method="post" action="{% url 'recover_book' report.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                  <p>Mark <strong>{{ copy.book.title }}</strong> as physically returned at the desk.</p>
+                  <ul class="small text-muted">
+                    <li>Copy status will be restored to <strong>Available</strong>.</li>
+                    <li>Transaction will be marked <strong>Returned</strong>.</li>
+                    {% if report.loss_fine and not report.loss_fine.paid and report.loss_fine.amount_paid == 0 %}
+                    <li class="text-success">Unpaid loss fine of <strong>TZS {{ report.loss_fine.amount|floatformat:0 }}</strong> will be <strong>waived</strong>.</li>
+                    {% endif %}
+                    {% if report.overdue_fine and not report.overdue_fine.paid and report.overdue_fine.amount_paid == 0 %}
+                    <li class="text-success">Unpaid overdue fine of <strong>TZS {{ report.overdue_fine.amount|floatformat:0 }}</strong> will also be <strong>waived</strong>.</li>
+                    {% endif %}
+                  </ul>
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold">Recovery Notes <span class="text-muted fw-normal">(optional)</span></label>
+                    <textarea name="recovery_notes" class="form-control" rows="2" placeholder="E.g. Member returned book in good condition..."></textarea>
+                  </div>
+                </div>
+                <div class="modal-footer">
+                  <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Mark as Recovered</button>
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Payment Modal -->
+        {% if report.total_remaining > 0 %}
+        <div class="modal fade" id="payModal-{{ report.pk }}" tabindex="-1" aria-labelledby="payModalLabel-{{ report.pk }}">
+          <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+              <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="payModalLabel-{{ report.pk }}">
+                  <i class="bi bi-cash-stack"></i> Record Payment – LR-{{ report.seq_no }}
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+              </div>
+              <form method="post" action="{% url 'record_loss_fine_payment' report.pk %}">
+                {% csrf_token %}
+                <div class="modal-body">
+
+                  <!-- Fine breakdown -->
+                  <table class="table table-sm table-bordered mb-3">
+                    <thead class="table-secondary">
+                      <tr>
+                        <th>Fine Type</th>
+                        <th>Total</th>
+                        <th>Paid</th>
+                        <th>Remaining</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% if report.loss_fine %}
+                      <tr>
+                        <td><span class="badge bg-danger">Loss Fine</span></td>
+                        <td>TZS {{ report.loss_fine.amount|floatformat:0 }}</td>
+                        <td>TZS {{ report.loss_fine.amount_paid|floatformat:0 }}</td>
+                        <td class="fw-semibold text-danger">TZS {{ report.loss_fine.remaining_balance|floatformat:0 }}</td>
+                        <td>{% if report.loss_fine.paid %}<span class="badge bg-success">Paid</span>{% elif report.loss_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+                      </tr>
+                      {% endif %}
+                      {% if report.overdue_fine %}
+                      <tr>
+                        <td><span class="badge bg-warning text-dark">Overdue Fine</span></td>
+                        <td>TZS {{ report.overdue_fine.amount|floatformat:0 }}</td>
+                        <td>TZS {{ report.overdue_fine.amount_paid|floatformat:0 }}</td>
+                        <td class="fw-semibold text-danger">TZS {{ report.overdue_fine.remaining_balance|floatformat:0 }}</td>
+                        <td>{% if report.overdue_fine.paid %}<span class="badge bg-success">Paid</span>{% elif report.overdue_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+                      </tr>
+                      {% endif %}
+                      <tr class="table-dark">
+                        <td><strong>TOTAL</strong></td>
+                        <td><strong>TZS {{ report.total_amount|floatformat:0 }}</strong></td>
+                        <td></td>
+                        <td class="text-warning fw-bold">TZS {{ report.total_remaining|floatformat:0 }}</td>
+                        <td></td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <!-- Fine type selector -->
+                  <div class="mb-3">
+                    <label class="form-label fw-bold">Fine to Pay <span class="text-danger">*</span></label>
+                    <select name="fine_type" id="fineType-{{ report.pk }}" class="form-select" required
+                      onchange="olmsSetPayAmount('{{ report.pk }}',
+                        {{ report.loss_fine.remaining_balance|floatformat:2|default:'0' }},
+                        {{ report.overdue_fine.remaining_balance|floatformat:2|default:'0' }},
+                        {{ report.total_remaining|floatformat:2 }})">
+                      <option value="">— Select —</option>
+                      {% if report.loss_fine and not report.loss_fine.paid %}
+                      <option value="loss">Loss Fine only — TZS {{ report.loss_fine.remaining_balance|floatformat:0 }} remaining</option>
+                      {% endif %}
+                      {% if report.overdue_fine and not report.overdue_fine.paid %}
+                      <option value="overdue">Overdue Fine only — TZS {{ report.overdue_fine.remaining_balance|floatformat:0 }} remaining</option>
+                      {% endif %}
+                      {% if report.loss_fine and not report.loss_fine.paid and report.overdue_fine and not report.overdue_fine.paid %}
+                      <option value="both">Both Fines — TZS {{ report.total_remaining|floatformat:0 }} total</option>
+                      {% endif %}
+                    </select>
+                  </div>
+
+                  <!-- Payment method (full featured) -->
+                  <div class="mb-3">
+                    <label class="form-label fw-bold">Payment Method <span class="text-danger">*</span></label>
+                    <select name="payment_method" id="payMethod-{{ report.pk }}" class="form-select" required
+                      onchange="olmsTogglePayFields('{{ report.pk }}', this.value)">
+                      <option value="">— Select Method —</option>
+                      <optgroup label="💵 Manual">
+                        <option value="cash">Cash</option>
+                      </optgroup>
+                      <optgroup label="📱 Mobile Money">
+                        <option value="mpesa">M-Pesa</option>
+                        <option value="tigopesa">Tigo Pesa</option>
+                        <option value="airtel_money">Airtel Money</option>
+                        <option value="halopesa">Halopesa</option>
+                      </optgroup>
+                      <optgroup label="🏦 Bank Transfer">
+                        <option value="bank_transfer">Bank Transfer</option>
+                      </optgroup>
+                      <optgroup label="💳 Card">
+                        <option value="visa">Visa Card</option>
+                        <option value="mastercard">Mastercard</option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <!-- Mobile money: phone number -->
+                  <div class="mb-3 d-none" id="payMobile-{{ report.pk }}">
+                    <label class="form-label fw-bold">Phone Number <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                      <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                      <input type="tel" name="phone_number" class="form-control" placeholder="e.g. 0712345678" pattern="^0[67]\d{8}$" maxlength="10">
+                    </div>
+                    <div class="form-text">10 digits starting with 07 or 06</div>
+                  </div>
+
+                  <!-- Bank transfer: bank name + account + reference -->
+                  <div class="mb-3 d-none" id="payBank-{{ report.pk }}">
+                    <div class="row g-2">
+                      <div class="col-12">
+                        <label class="form-label fw-bold">Bank Name <span class="text-danger">*</span></label>
+                        <select name="bank_name" class="form-select">
+                          <option value="">— Select Bank —</option>
+                          <option value="CRDB">CRDB Bank</option>
+                          <option value="NMB">NMB Bank</option>
+                          <option value="NBC">NBC (National Bank of Commerce)</option>
+                          <option value="Stanbic">Stanbic Bank Tanzania</option>
+                          <option value="Standard Chartered">Standard Chartered Bank</option>
+                          <option value="Absa">Absa Bank Tanzania</option>
+                          <option value="DTB">Diamond Trust Bank (DTB)</option>
+                          <option value="BOA">Bank of Africa (BOA)</option>
+                          <option value="Exim">Exim Bank Tanzania</option>
+                          <option value="Azania">Azania Bank</option>
+                          <option value="TPB">TPB Bank (Tanzania Postal)</option>
+                          <option value="PBZ">People's Bank of Zanzibar (PBZ)</option>
+                          <option value="Other">Other Bank</option>
+                        </select>
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label fw-bold">Account Number <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                          <span class="input-group-text"><i class="bi bi-bank"></i></span>
+                          <input type="text" name="bank_account_no" class="form-control" placeholder="e.g. 0150123456789" maxlength="20">
+                        </div>
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label fw-semibold">Reference / Receipt No <span class="text-muted fw-normal">(optional)</span></label>
+                        <div class="input-group">
+                          <span class="input-group-text"><i class="bi bi-receipt"></i></span>
+                          <input type="text" name="receipt_no" data-optional="true" class="form-control" placeholder="e.g. TRF-20260531-001">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Card: cardholder + last 4 + expiry + CVV -->
+                  <div class="mb-3 d-none" id="payCard-{{ report.pk }}">
+                    <div class="row g-2">
+                      <div class="col-12">
+                        <label class="form-label fw-bold">Cardholder Name <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                          <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                          <input type="text" name="card_holder" class="form-control" placeholder="Name as on card" autocomplete="cc-name">
+                        </div>
+                      </div>
+                      <div class="col-md-5">
+                        <label class="form-label fw-bold">Card No. (last 4 digits) <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                          <span class="input-group-text"><i class="bi bi-credit-card-2-front"></i></span>
+                          <input type="text" name="card_last4" class="form-control" placeholder="e.g. 4521" maxlength="4" pattern="\d{4}" autocomplete="off">
+                        </div>
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label fw-bold">Expiry (MM/YY) <span class="text-danger">*</span></label>
+                        <input type="text" name="card_expiry" class="form-control" placeholder="MM/YY" maxlength="5" pattern="\d{2}/\d{2}">
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label fw-bold">CVV <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                          <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+                          <input type="password" name="card_cvv" class="form-control" placeholder="3–4 digits" maxlength="4" pattern="\d{3,4}" autocomplete="cc-csc">
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Amount -->
+                  <div class="mb-3">
+                    <label class="form-label fw-bold">Amount (TZS) <span class="text-danger">*</span></label>
+                    <input type="number" name="payment_amount" id="payAmt-{{ report.pk }}" class="form-control form-control-lg" min="1" step="100" required placeholder="Select fine type above to auto-fill">
+                    <div class="form-text">Adjust for partial payments.</div>
+                  </div>
+
+                </div>
+                <div class="modal-footer">
+                  <button type="submit" class="btn btn-primary"><i class="bi bi-check-circle"></i> Confirm Payment</button>
+                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+      {% endwith %}
+    {% endfor %}
+  {% endfor %}
+
+<script>
+function olmsSetPayAmount(reportId, lossRem, overdueRem, totalRem) {
+  const sel = document.getElementById('fineType-' + reportId);
+  const inp = document.getElementById('payAmt-' + reportId);
+  if (!sel || !inp) return;
+  const v = sel.value;
+  if      (v === 'loss')    inp.value = parseFloat(lossRem).toFixed(0);
+  else if (v === 'overdue') inp.value = parseFloat(overdueRem).toFixed(0);
+  else if (v === 'both')    inp.value = parseFloat(totalRem).toFixed(0);
+  else                      inp.value = '';
+}
+
+function olmsTogglePayFields(reportId, method) {
+  const isMobile = ['mpesa', 'tigopesa', 'airtel_money', 'halopesa'].includes(method);
+  const isBank   = method === 'bank_transfer';
+  const isCard   = ['visa', 'mastercard'].includes(method);
+
+  function toggleSection(id, show) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('d-none', !show);
+    el.querySelectorAll('input, select').forEach(function(inp) {
+      if (show && inp.dataset.optional !== 'true') {
+        inp.setAttribute('required', '');
+      } else {
+        inp.removeAttribute('required');
+      }
+      if (!show) inp.value = '';
+    });
+  }
+
+  toggleSection('payMobile-' + reportId, isMobile);
+  toggleSection('payBank-'   + reportId, isBank);
+  toggleSection('payCard-'   + reportId, isCard);
+}
+</script>
 {% endblock %}

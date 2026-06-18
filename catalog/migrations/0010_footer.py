@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
             name='Footer',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('school_name', models.CharField(default='MSICT Online Library', max_length=255)),
+                ('school_name', models.CharField(default='MSICT Library', max_length=255)),
                 ('address', models.TextField(blank=True, help_text='Physical address')),
                 ('phone', models.CharField(blank=True, help_text='Contact phone number', max_length=50)),
                 ('email', models.EmailField(blank=True, help_text='Contact email', max_length=254)),

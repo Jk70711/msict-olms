@@ -93,6 +93,42 @@ search_external_books_fn = types.FunctionDeclaration(
     ),
 )
 
+get_online_libraries_fn = types.FunctionDeclaration(
+    name="get_online_libraries",
+    description=(
+        "Return a curated list of free/open-access external online libraries "
+        "(Google Books, Open Library, MIT OCW, Project Gutenberg, Springer, etc.) "
+        "with direct search URLs pre-filled for the given topic. "
+        "Call this when: (a) the requested book is not in MSICT library, "
+        "(b) user asks where to find books online, or "
+        "(c) user asks for online/external resources."
+    ),
+    parameters=types.Schema(
+        type="object",
+        properties={
+            "query": types.Schema(type="string", description="Book title or topic to pre-fill in the search URLs."),
+        },
+    ),
+)
+
+get_user_recommendations_fn = types.FunctionDeclaration(
+    name="get_user_recommendations",
+    description=(
+        "Get personalised book recommendations for the currently logged-in user, "
+        "based on their borrowing history and favourite categories/authors. "
+        "Only available for authenticated users. Call this when the user asks "
+        "for recommendations, 'what should I read next', 'vitabu vya kupendekeza', "
+        "'napendekeza nini', or similar personal recommendation requests."
+    ),
+    parameters=types.Schema(
+        type="object",
+        properties={
+            "limit": types.Schema(type="integer", description="Number of recommendations (1-10). Default 5."),
+        },
+    ),
+)
+
+# Base tools always available
 TOOLS = types.Tool(
     function_declarations=[
         search_library_books_fn,
@@ -101,57 +137,93 @@ TOOLS = types.Tool(
         get_library_info_fn,
         suggest_similar_books_fn,
         search_external_books_fn,
+        get_online_libraries_fn,
     ]
 )
 
-# Tool registry for execution
+# Auth-user tools (added dynamically in chat() when user is logged in)
+AUTH_TOOLS_FNS = [get_user_recommendations_fn]
+
+# Tool registry for execution (get_user_recommendations added per-request with user_id bound)
 callable_tools = {
-    "search_library_books": library.search_library_books,
-    "get_book_detail": library.get_book_detail,
-    "list_categories": library.list_categories,
-    "get_library_info": library.get_library_info,
-    "search_external_books": google_books.search_external_books,
-    "suggest_similar_books": library.suggest_similar_books,
+    "search_library_books":  library.search_library_books,
+    "get_book_detail":        library.get_book_detail,
+    "list_categories":        library.list_categories,
+    "get_library_info":       library.get_library_info,
+    "search_external_books":  google_books.search_external_books,
+    "suggest_similar_books":  library.suggest_similar_books,
+    "get_online_libraries":   library.get_online_libraries,
 }
 
-SYSTEM_INSTRUCTION = """You are MSICT Library Assistant — a friendly, professional digital librarian for the Military School of Information and Communication Technology online library.
+SYSTEM_INSTRUCTION = """Wewe ni Msaidizi wa Maktaba wa MSICT (MSICT Library Assistant) — daktari wa kidijitali wa Maktaba ya Shule ya Kijeshi ya Teknolojia ya Habari na Mawasiliano (Military School of Information and Communication Technology).
 
-LANGUAGE:
-- Auto-detect whether the user wrote in English or Swahili (or a mix).
-- ALWAYS reply in the SAME language the user used.
-- Swahili indicators: words like "je", "naomba", "kitabu", "vitabu", "tafuta", "kuna", "naweza", "habari".
-- For mixed input, reply in the language that dominates.
+═══════════════════════════════════════════
+LUGHA / LANGUAGE
+═══════════════════════════════════════════
+- Tambua lugha ya mtumiaji KIOTOMATIKI — Kiingereza au Kiswahili au mchanganyiko.
+- JIBU DAIMA KWA LUGHA HIYO HIYO aliyoandika mtumiaji.
+- Dalili za Kiswahili: maneno kama "je", "naomba", "kitabu", "vitabu", "tafuta", "kuna", "naweza", "habari", "ninataka", "ninaomba", "nipe", "niambie", "napenda", "saidia", "msaada".
+- Kwa mchanganyiko wa lugha, jibu kwa lugha inayotawala.
+- Unapojibu kwa Kiswahili, tumia Kiswahili safi na sahihi, usichanganye bila sababu.
+- English detection: any sentence that is clearly English — reply in English.
 
-CORE RULES:
-1. ALWAYS check the internal MSICT library first via `search_library_books` before going external.
-2. Only call `search_external_books` (Google Books) if internal search returns nothing relevant, OR the user explicitly asks for external sources.
-3. When a book IS found internally, mention:
-   - title, author, year, category;
-   - clear availability (hard-copy count, free softcopy, special softcopy);
-   - **ALWAYS include the detail_url as a clickable markdown link**: `[Book Title](detail_url)`.
-4. When a book is NOT in MSICT but exists on Google Books:
-   - say so clearly;
-   - use `suggest_similar_books` to suggest alternatives in MSICT;
-   - **ALWAYS include the info_url or preview_url as a clickable markdown link** to the external source.
-5. Keep answers concise (2–5 short paragraphs or a short list). Use markdown for clarity.
-6. NEVER invent book ids, ISBNs, availability numbers — only use what the tools return.
-7. Borrowing requires the user to be logged in. If they ask to borrow, tell them to click the book detail link and sign in.
+═══════════════════════════════════════════
+SHERIA ZA MSINGI / CORE RULES
+═══════════════════════════════════════════
+1. ANGALIA KWANZA maktaba ya MSICT kupitia `search_library_books` kabla ya vyanzo vya nje.
+2. Piga simu `search_external_books` (Google Books) TU ikiwa utafutaji wa ndani haukupata matokeo yanayofaa, AU mtumiaji ameomba vyanzo vya nje.
+3. Kitabu kikipatikana NDANI ya MSICT, taja:
+   - Kichwa cha kitabu, mwandishi, mwaka, kategoria;
+   - Upatikanaji wazi (nakala ngumu, softcopy huru, softcopy maalum);
+   - **DAIMA jumuisha detail_url kama kiungo cha markdown: `[Jina la Kitabu](detail_url)`**.
+4. Kitabu KISIPOKUWA katika MSICT:
+   a. Sema wazi kwamba hakipo MSICT.
+   b. Tumia `suggest_similar_books` kupendekeza mbadala katika MSICT.
+   c. Tumia `get_online_libraries` kutoa viungo vya maktaba za nje zinazofaa.
+   d. **DAIMA jumuisha viungo vya maktaba za nje kama markdown links zinazoweza kubonyezwa**.
+5. Jibu liwe fupi na wazi (aya 2–5 au orodha fupi). Tumia markdown.
+6. USIVUMBIE vitambulisho vya vitabu, ISBN, au namba za upatikanaji — tumia tu kinachorejesha zana.
+7. Kukopa kitabu kunahitaji kuingia (login). Ikiwa wanauliza kukopa, waeleze kubonyeza kiungo cha kitabu na kuingia.
 
-CAPABILITIES YOU CAN OFFER:
-- Search books by title, author, topic — use `search_library_books`.
-- Suggest similar books when unavailable — use `suggest_similar_books`.
-- Recommend books on a topic.
-- Explain a topic at a beginner / intermediate level.
-- Summarise a book.
-- Answer library policy questions (loan period, fines, etc.) — use `get_library_info`.
+═══════════════════════════════════════════
+MAPENDEKEZO YA KIBINAFSI / PERSONALISED RECOMMENDATIONS
+(Authenticated users only)
+═══════════════════════════════════════════
+- Kama mtumiaji ameingia (logged in) na anauliza mapendekezo, vita vya kusoma, au "what should I read next" — LAZIMA piga simu `get_user_recommendations`.
+- Zana hii hutumia historia ya kukopa ya mtumiaji kutengeneza mapendekezo ya kibinafsi.
+- Ikiwa mtumiaji HAJAINGIYA (not logged in) na anauliza mapendekezo ya kibinafsi:
+  Jibu: "Mapendekezo ya kibinafsi yanapatikana kwa watumiaji walioingia tu. / Personal recommendations are only available for logged-in users. Please log in to get personalised suggestions."
 
-Be warm, helpful, and short. Use the tools.
+═══════════════════════════════════════════
+MAKTABA ZA NJE / EXTERNAL ONLINE LIBRARIES
+═══════════════════════════════════════════
+- Kitabu kisipokuwa MSICT, LAZIMA tumia `get_online_libraries` na query ya kitabu hicho.
+- Onyesha maktaba 3–5 zinazofaa zaidi kwa mada hiyo kama viungo vya kubonyezwa.
+- Maktaba zinazofaa kwa ICT/tech: MIT OCW, Springer, Bookboon, Open Library.
+- Maktaba zinazofaa kwa classics/fasihi: Project Gutenberg, Standard Ebooks.
+- Maktaba ya jumla: Google Books, Open Library.
+- Format ya jibu kwa maktaba za nje:
+  `🌐 [Jina la Maktaba](url) — maelezo mafupi`
+
+═══════════════════════════════════════════
+UWEZO WAKO / YOUR CAPABILITIES
+═══════════════════════════════════════════
+- Tafuta vitabu kwa kichwa, mwandishi, mada — tumia `search_library_books`.
+- Pendekeza vitabu vinavyofanana — tumia `suggest_similar_books`.
+- Mapendekezo ya kibinafsi kwa mtumiaji aliyeingia — tumia `get_user_recommendations`.
+- Toa viungo vya maktaba za nje — tumia `get_online_libraries`.
+- Eleza mada kwa kiwango cha mwanzo/kati.
+- Fupi muhtasari wa kitabu.
+- Jibu maswali ya sera ya maktaba — tumia `get_library_info`.
+
+Kuwa na joto, msaada, na ufupi. Tumia zana. Be warm, helpful, and concise. Use the tools.
 """
 
 
-def _run_tool(name, args):
+def _run_tool(name, args, tools_registry=None):
     """Execute a tool by name with given arguments."""
-    tool_func = callable_tools.get(name)
+    registry = tools_registry if tools_registry is not None else callable_tools
+    tool_func = registry.get(name)
     if not tool_func:
         return {"error": f"Unknown tool: {name}"}
     try:
@@ -241,15 +313,40 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
             "referenced_book_ids": [],
         }
 
-    # Build context-aware system instruction
+    # Build context-aware system instruction and per-request tool set
     system_instruction = SYSTEM_INSTRUCTION
+    local_callable = dict(callable_tools)
+    active_tool_fns = list(TOOLS.function_declarations)
+
     if user_context:
-        is_auth = user_context.get('is_authenticated', False)
-        role = user_context.get('role', None)
+        is_auth  = user_context.get('is_authenticated', False)
+        role     = user_context.get('role', None)
+        user_id  = user_context.get('user_id', None)
+
         if not is_auth:
-            system_instruction += "\n\nUSER CONTEXT: User is NOT logged in. Show book information in VIEW-ONLY mode. Mention that login is required to borrow or access full features."
+            system_instruction += (
+                "\n\n[MUKTADHA WA MTUMIAJI / USER CONTEXT]: "
+                "Mtumiaji HAJAINGIYA (not logged in). "
+                "Onyesha taarifa za vitabu tu bila kukopa. "
+                "Mapendekezo ya kibinafsi HAYAPATIKANI — waeleze kuingia kwanza. "
+                "Show books in VIEW-ONLY mode; borrowing and personal recommendations require login."
+            )
         else:
-            system_instruction += f"\n\nUSER CONTEXT: User is logged in with role: {role}. Adjust recommendations accordingly."
+            system_instruction += (
+                f"\n\n[MUKTADHA WA MTUMIAJI / USER CONTEXT]: "
+                f"Mtumiaji ameingia (logged in), role={role}. "
+                f"Mapendekezo ya kibinafsi YANAPATIKANA — tumia get_user_recommendations. "
+                f"Personal recommendations ARE available — call get_user_recommendations when asked."
+            )
+            if user_id:
+                # Bind user_id via closure so the model never needs to pass it
+                _uid = user_id
+                local_callable['get_user_recommendations'] = (
+                    lambda limit=5, _u=_uid: library.get_user_recommendations(user_id=_u, limit=limit)
+                )
+                active_tool_fns = active_tool_fns + AUTH_TOOLS_FNS
+
+    active_tools = types.Tool(function_declarations=active_tool_fns)
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
     primary = _model_name()
@@ -266,7 +363,7 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
         last_exc = None
         config_kwargs = {'system_instruction': system_instruction}
         if with_tools:
-            config_kwargs['tools'] = [TOOLS]
+            config_kwargs['tools'] = [active_tools]
         for m in model_chain:
             try:
                 return client.models.generate_content(
@@ -325,7 +422,7 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
                 args = dict(fc.args) if fc.args else {}
 
                 # Execute the tool
-                result = _run_tool(name, args)
+                result = _run_tool(name, args, local_callable)
 
                 # Log the tool call
                 tool_calls_log.append({

@@ -1,3 +1,8 @@
+# ============================================================
+# accounts/utils.py — Kazi za Msaidizi (Helper Functions)
+# Inashughulikia: SMS, barua pepe, OTP, kadi za maktaba, IP
+# ============================================================
+
 import io
 import base64
 import random
@@ -10,6 +15,7 @@ from datetime import timedelta
 
 
 def get_client_ip(request):
+    """Pata anwani ya IP ya mtumiaji kutoka kwenye request"""
     x_forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded:
         return x_forwarded.split(',')[0].strip()
@@ -17,10 +23,12 @@ def get_client_ip(request):
 
 
 def generate_otp():
+    """Tengeneza nambari ya siri ya 6 tarakimu (OTP)"""
     return ''.join(random.choices(string.digits, k=6))
 
 
 def create_otp_for_user(user):
+    """Unda OTP mpya kwa mtumiaji na izima zote zilizopo"""
     from .models import OTPRecord
     OTPRecord.objects.filter(user=user, used=False).update(used=True)
     expiry = timezone.now() + timedelta(minutes=getattr(settings, 'OTP_EXPIRY_MINUTES', 10))
@@ -28,26 +36,27 @@ def create_otp_for_user(user):
 
 
 def format_phone_for_sms(phone):
-    """Convert local Tanzanian phone number to international format for BEEM API"""
+    """Badilisha nambari ya simu ya Tanzania kuwa muundo wa kimataifa kwa BEEM API"""
     phone = str(phone).strip().replace(' ', '').replace('-', '')
     
-    # If already has +, return as-is
+    # Kama tayari ina +, rudisha kama ilivyo
     if phone.startswith('+'):
         return phone
     
-    # Remove leading 0 and add Tanzania country code (+255)
+    # Ondoa 0 ya mwanzo na ongeza nambari ya nchi ya Tanzania (+255)
     if phone.startswith('0'):
         return '+255' + phone[1:]
     
-    # If no country code and doesn't start with 0, assume needs +255
+    # Kama hakuna nambari ya nchi na haianzi na 0, ongeza +255
     if not phone.startswith('255'):
         return '+255' + phone
     
-    # Already has 255 but no +
+    # Ina 255 lakini haina +
     return '+' + phone
 
 
 def send_sms(phone, message):
+    """Tuma SMS kwa kutumia BEEM Africa API"""
     import logging
     logger = logging.getLogger(__name__)
     
@@ -56,7 +65,7 @@ def send_sms(phone, message):
     api_key = settings.BEEM_API_KEY
     secret_key = settings.BEEM_SECRET_KEY
     
-    # Format phone number
+    # Badilisha nambari ya simu
     formatted_phone = format_phone_for_sms(phone)
     
     logger.info(f"SMS Request: to={formatted_phone} (original: {phone}), sender={sender}, api_key={api_key[:8]}...")
@@ -96,6 +105,7 @@ def send_sms(phone, message):
 
 
 def send_email_notification(to_email, subject, body):
+    """Tuma barua pepe kwa kutumia Django mail"""
     import logging
     logger = logging.getLogger(__name__)
     try:
@@ -108,12 +118,13 @@ def send_email_notification(to_email, subject, body):
 
 
 def create_notification(user, message, channel, priority='normal', is_security_alert=False, message_type='approval'):
+    """Unda rekodi ya arifa kwenye database (bila kutuma)"""
     from circulation.models import Notification
     return Notification.objects.create(user=user, message=message, channel=channel, priority=priority, is_security_alert=is_security_alert, message_type=message_type)
 
 
 def notify_user(user, message, channel, subject=None, priority='normal', is_security_alert=False, message_type='approval'):
-    """Send notification via SMS or email AND record with proper sent/failed status."""
+    """Tuma arifa kwa SMS au barua pepe NA rekodi status ya kumewasilika/kushindwa"""
     import logging
     from django.utils import timezone as tz
     from circulation.models import Notification
@@ -138,18 +149,20 @@ def notify_user(user, message, channel, subject=None, priority='normal', is_secu
 
 
 def log_audit(user, action, request=None):
+    """Rekodi kitendo kwenye audit log (nani alifanya nini na lini)"""
     from .models import AuditLog
     ip = get_client_ip(request) if request else None
     AuditLog.objects.create(user=user, action=action, ip_address=ip)
 
 
 def generate_virtual_card(user):
+    """Tengeneza kadi ya maktaba ya kidijitali na QR code"""
     import qrcode
     from .models import VirtualCard
 
     card, created = VirtualCard.objects.get_or_create(user=user)
 
-    # Use user.card_no if set; otherwise generate a new one and sync both
+    # Tumia user.card_no kama imewekwa; vinginevyo tengeneza mpya na usawazisha
     if user.card_no:
         card.card_no = user.card_no
     elif not card.card_no:
@@ -173,13 +186,14 @@ def generate_virtual_card(user):
 
 
 def generate_virtual_card_pdf(user):
+    """Tengeneza PDF ya kadi ya maktaba (kadi 2 kwenye ukurasa mmoja wa A4)"""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     import qrcode
 
-    # Ensure card_no exists
+    # Hakikisha card_no inaopo
     card = generate_virtual_card(user)
 
     buf = io.BytesIO()
@@ -215,7 +229,7 @@ def generate_virtual_card_pdf(user):
         if user.member_type:
             c.drawString(x + 5 * mm, y + 19 * mm, f"Type: {user.get_member_type_display()}")
 
-        # Card number – highlighted in gold
+        # Nambari ya kadi — inaonyeshwa kwa rangi ya dhahabu
         c.setFillColor(colors.HexColor('#FFD700'))
         c.setFont('Helvetica-Bold', 7.5)
         c.drawString(x + 5 * mm, y + 9 * mm, f"Card No: {card.card_no or 'N/A'}")
@@ -233,3 +247,52 @@ def generate_virtual_card_pdf(user):
     c.save()
     buf.seek(0)
     return buf
+
+
+def is_password_reused(user, raw_password):
+    """Angalia kama nywila imetumika awali (historia ya PASSWORD_HISTORY_DEPTH za mwisho)"""
+    from .models import PasswordHistory
+    from django.contrib.auth.hashers import check_password
+    from django.conf import settings
+
+    depth = getattr(settings, 'PASSWORD_HISTORY_DEPTH', 5)
+
+    # Pata nywila za mwisho za mtumiaji huyu kulingana na depth
+    recent_passwords = PasswordHistory.objects.filter(
+        user=user
+    ).order_by('-created_at')[:depth]
+    
+    for ph in recent_passwords:
+        if check_password(raw_password, ph.password_hash):
+            return True
+    return False
+
+
+def add_password_to_history(user, password_hash):
+    """Hifadhi nywila kwenye historia, ukiweka zile PASSWORD_HISTORY_DEPTH za mwisho tu.
+    
+    MUHIMU: pita password_hash ya ZAMANI (kabla ya kubadilisha), si ya mpya.
+    Mfano wa matumizi sahihi:
+        old_hash = user.password               # hifadhi ya zamani
+        user.set_password(new_pw)
+        user.save(...)
+        add_password_to_history(user, old_hash) # rekodi ya zamani
+    """
+    from .models import PasswordHistory
+    from django.conf import settings
+    
+    depth = getattr(settings, 'PASSWORD_HISTORY_DEPTH', 5)
+    
+    # Unda rekodi mpya ya historia ya nywila
+    PasswordHistory.objects.create(
+        user=user,
+        password_hash=password_hash
+    )
+    
+    # Hifadhi zile `depth` za mwisho tu — futa za zamani zaidi
+    old_entries = PasswordHistory.objects.filter(
+        user=user
+    ).order_by('-created_at')[depth:]
+    
+    if old_entries:
+        old_entries.delete()

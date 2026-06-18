@@ -1,4 +1,4 @@
-# MSICT Online Library Management System (OLMS)
+# MSICT Library Management System (OLMS)
 
 A full-featured Django-based Library Management System for the Military Science and Information and Communications Technology (MSICT) college, backed by Oracle 23ai.
 

@@ -54,33 +54,50 @@
             <div class="small text-muted">{{ report.get_status_display }}</div>
           </div>
           <div class="col-4">
-            <div class="small text-muted">Remaining</div>
-            <div class="fw-bold {% if fine.remaining_balance > 0 %}text-danger{% else %}text-success{% endif %} fs-5">
-              TZS {{ fine.remaining_balance|floatformat:2 }}
+            <div class="small text-muted">Total Outstanding</div>
+            {% with total_rem=fine.remaining_balance|add:overdue_fine.remaining_balance %}
+            <div class="fw-bold text-danger fs-5">
+              TZS {{ fine.remaining_balance|floatformat:0 }}{% if overdue_fine %} + {{ overdue_fine.remaining_balance|floatformat:0 }}{% endif %}
             </div>
-            {% if fine.amount_paid > 0 %}
-            <div class="small text-success">Paid so far: TZS {{ fine.amount_paid|floatformat:2 }}</div>
-            {% endif %}
+            {% endwith %}
           </div>
         </div>
         <hr class="my-2">
+
+        <!-- Fine breakdown table -->
+        <table class="table table-sm table-bordered mb-2">
+          <thead class="table-secondary">
+            <tr><th>Fine Type</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge bg-danger">Loss Fine</span></td>
+              <td>TZS {{ fine.amount|floatformat:0 }}</td>
+              <td>TZS {{ fine.amount_paid|floatformat:0 }}</td>
+              <td class="fw-semibold text-danger">TZS {{ fine.remaining_balance|floatformat:0 }}</td>
+              <td>{% if fine.paid %}<span class="badge bg-success">Paid</span>{% elif fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+            </tr>
+            {% if overdue_fine %}
+            <tr>
+              <td><span class="badge bg-warning text-dark">Overdue Fine</span></td>
+              <td>TZS {{ overdue_fine.amount|floatformat:0 }}</td>
+              <td>TZS {{ overdue_fine.amount_paid|floatformat:0 }}</td>
+              <td class="fw-semibold text-danger">TZS {{ overdue_fine.remaining_balance|floatformat:0 }}</td>
+              <td>{% if overdue_fine.paid %}<span class="badge bg-success">Paid</span>{% elif overdue_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+
         <div class="small text-muted">
           <i class="bi bi-book"></i> {{ report.transaction.copy.book.title }} (Acc: {{ report.transaction.copy.accession_no }})
-        </div>
-        {% if report.circumstances %}
-        <div class="small text-muted">
-          <i class="bi bi-tag"></i> {{ report.circumstances }}
-        </div>
-        {% endif %}
-        <div class="small text-muted">
-          <i class="bi bi-cash"></i> Total Fine: TZS {{ fine.amount|floatformat:2 }}
         </div>
       </div>
     </div>
 
-    {% if fine.paid %}
+    {% if fine.paid and not overdue_fine or fine.paid and overdue_fine.paid %}
     <div class="alert alert-success">
-      <i class="bi bi-check-circle-fill"></i> This loss fine has been fully paid. No further payment required.
+      <i class="bi bi-check-circle-fill"></i> All fines for this loss report have been fully paid.
     </div>
     {% else %}
     <!-- Payment Form -->
@@ -91,6 +108,28 @@
       <div class="card-body">
         <form method="post" id="paymentForm">{% csrf_token %}
           <div class="row g-3">
+
+            <!-- Fine Type -->
+            <div class="col-12">
+              <label class="form-label fw-bold">Fine to Pay <span class="text-danger">*</span></label>
+              <select name="fine_type" id="detailFineType" class="form-select" required
+                onchange="detailSetAmount(
+                  '{{ fine.remaining_balance|floatformat:2 }}',
+                  '{{ overdue_fine.remaining_balance|floatformat:2|default:0 }}')">
+                <option value="">— Select —</option>
+                {% if not fine.paid %}
+                <option value="loss">Loss Fine only — TZS {{ fine.remaining_balance|floatformat:0 }} remaining</option>
+                {% endif %}
+                {% if overdue_fine and not overdue_fine.paid %}
+                <option value="overdue">Overdue Fine only — TZS {{ overdue_fine.remaining_balance|floatformat:0 }} remaining</option>
+                {% endif %}
+                {% if not fine.paid and overdue_fine and not overdue_fine.paid %}
+                {% with total=fine.remaining_balance|add:overdue_fine.remaining_balance %}
+                <option value="both">Both Fines — TZS {{ total|floatformat:0 }} total</option>
+                {% endwith %}
+                {% endif %}
+              </select>
+            </div>
 
             <!-- Payment Method -->
             <div class="col-12">
@@ -217,21 +256,13 @@
               </div>
             </div>
 
-            <!-- Amount (always visible after method selection) -->
+            <!-- Amount -->
             <div class="col-12" id="section-amount">
               <hr class="my-1">
               <label class="form-label fw-bold">Amount to Pay (TZS) <span class="text-danger">*</span></label>
               <input type="number" name="payment_amount" id="paymentAmount" class="form-control form-control-lg"
-                     value="{{ fine.remaining_balance }}" min="100" step="100" required>
-              <div class="d-flex justify-content-between mt-1">
-                <small class="text-muted">Remaining: <strong class="text-danger">TZS {{ fine.remaining_balance|floatformat:2 }}</strong></small>
-                <small>
-                  <a href="#" class="text-primary text-decoration-none"
-                     onclick="document.getElementById('paymentAmount').value='{{ fine.remaining_balance }}'; return false;">
-                    Pay full remaining ↑
-                  </a>
-                </small>
-              </div>
+                     min="1" step="100" required placeholder="Select fine type above to auto-fill">
+              <div class="form-text">Select fine type above to auto-fill. Adjust for partial payments.</div>
             </div>
 
           </div>
@@ -252,6 +283,19 @@
 </div>
 
 <script>
+function detailSetAmount(lossRem, overdueRem) {
+  const sel = document.getElementById('detailFineType');
+  const inp = document.getElementById('paymentAmount');
+  if (!sel || !inp) return;
+  const v = sel.value;
+  const loss    = parseFloat(lossRem)    || 0;
+  const overdue = parseFloat(overdueRem) || 0;
+  if      (v === 'loss')    inp.value = loss.toFixed(0);
+  else if (v === 'overdue') inp.value = overdue.toFixed(0);
+  else if (v === 'both')    inp.value = (loss + overdue).toFixed(0);
+  else                      inp.value = '';
+}
+
 function toggleFields(method) {
   const isMobile  = ['mpesa','tigopesa','airtel_money','halopesa'].includes(method);
   const isBank    = method === 'bank_transfer';

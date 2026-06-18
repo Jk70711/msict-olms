@@ -123,7 +123,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>S/N</th><th>Username</th><th>Full Name</th><th>Card No</th><th>Army No</th><th>Rank</th><th>Role</th><th>Type</th><th>Email</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>S/N</th><th>Username</th><th>Full Name</th><th>Card No</th><th>Army No</th><th>Rank</th><th>Role</th><th>Type</th><th>Email</th><th>Status</th>{% if status == 'locked' %}<th>Lock Reason</th>{% endif %}<th>Actions</th></tr>
       </thead>
       <tbody>
         {% for u in users %}
@@ -150,9 +150,32 @@ document.addEventListener('DOMContentLoaded', function() {
           </td>
           <td><small>{{ u.email }}</small></td>
           <td>
-            {% if u.is_active %}<span class="badge bg-success">Active</span>{% else %}<span class="badge bg-danger">Locked</span>{% endif %}
+            {% if not u.is_active %}
+              <span class="badge bg-danger">Locked</span>
+            {% elif u.registration_status == 'pending' %}
+              <span class="badge bg-warning text-dark">Unapproved</span>
+            {% else %}
+              <span class="badge bg-success">Active</span>
+            {% endif %}
             {% if u.failed_attempts > 0 %}<span class="badge bg-warning text-dark ms-1">{{ u.failed_attempts }} fails</span>{% endif %}
           </td>
+          {% if status == 'locked' %}
+          <td>
+            {% if u.registration_status == 'pending' %}
+              <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Unapproved</span>
+            {% elif u.registration_status == 'cancelled' %}
+              <span class="badge bg-secondary"><i class="bi bi-x-circle-fill"></i> Cancelled</span>
+            {% elif u.failed_attempts >= 5 %}
+              <span class="badge bg-danger"><i class="bi bi-exclamation-triangle-fill"></i> Max Attempts ({{ u.failed_attempts }})</span>
+            {% elif u.failed_attempts >= 3 %}
+              <span class="badge bg-warning text-dark"><i class="bi bi-shield-exclamation"></i> Too Many Attempts</span>
+            {% elif u.failed_attempts > 0 %}
+              <span class="badge bg-warning text-dark"><i class="bi bi-shield-exclamation"></i> Failed Attempts</span>
+            {% else %}
+              <span class="badge bg-danger"><i class="bi bi-lock-fill"></i> Admin Locked</span>
+            {% endif %}
+          </td>
+          {% endif %}
           <td>
             <div class="btn-group">
               {# <a href="{% url 'edit_user' u.pk %}" class="btn btn-sm btn-outline-primary" title="Edit User"><i class="bi bi-pencil"></i></a> #}
@@ -176,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="11" class="text-center text-muted py-4">No users found.</td></tr>
+        <tr><td colspan="{% if status == 'locked' %}12{% else %}11{% endif %}" class="text-center text-muted py-4">No users found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

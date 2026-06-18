@@ -2,14 +2,110 @@
 {% block title %}Suspicious Activity{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h4 class="fw-bold mb-0"><i class="bi bi-exclamation-triangle-fill text-warning"></i> Suspicious Activity &amp; Failed Logins</h4>
+  <h4 class="fw-bold mb-0">
+    <i class="bi bi-exclamation-triangle-fill text-warning"></i> Suspicious Activity &amp; Failed Logins
+    {% if recent_failed_logins_count %}<span class="badge bg-danger ms-2">{{ recent_failed_logins_count }}</span>{% endif %}
+  </h4>
+  <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+    <i class="bi bi-arrow-left"></i> Back to Dashboard
+  </a>
 </div>
 
 <div class="row g-4">
+
+  <!-- Users with Failed Login Attempts Panel -->
+  {% if users_with_failed_attempts %}
+  <div class="col-12">
+    <div class="card shadow-sm border-0" style="border-left: 4px solid #f59e0b !important;">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0 text-warning">
+            <i class="bi bi-person-exclamation me-2"></i>Users with Failed Login Attempts
+            <span class="badge bg-warning text-dark ms-2">{{ users_with_failed_attempts|length }} user(s)</span>
+          </h6>
+          <div class="d-flex gap-2 align-items-center">
+            <small class="text-muted">
+              <span class="badge bg-secondary me-1">1–2</span>Low &nbsp;
+              <span class="badge bg-warning text-dark me-1">3–4</span>High &nbsp;
+              <span class="badge bg-danger me-1">5+</span>Critical
+            </small>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+              <tr>
+                <th class="small text-muted">S/N</th>
+                <th class="small text-muted">Username</th>
+                <th class="small text-muted">Full Name</th>
+                <th class="small text-muted">Role</th>
+                <th class="small text-muted">Rank</th>
+                <th class="small text-muted">Card No</th>
+                <th class="small text-muted text-center">Total Failed Attempts</th>
+                <th class="small text-muted text-center">Account Status</th>
+                <th class="small text-muted text-end">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for u in users_with_failed_attempts %}
+              <tr {% if u.failed_attempts >= 5 %}class="table-danger"{% elif u.failed_attempts >= 3 %}class="table-warning"{% endif %}>
+                <td>{{ forloop.counter }}</td>
+                <td><a href="{% url 'user_detail' u.pk %}" class="fw-bold text-decoration-none"><code>{{ u.username }}</code></a></td>
+                <td><small>{{ u.get_full_name }}</small></td>
+                <td><span class="badge badge-role-{{ u.role }}">{{ u.role|title }}</span></td>
+                <td><small class="badge bg-dark">{{ u.rank.rank_name|default:"—" }}</small></td>
+                <td><code class="text-primary small">{{ u.virtual_card.short_card_no|default:"—" }}</code></td>
+                <td class="text-center">
+                  {% if u.failed_attempts >= 5 %}
+                    <span class="badge bg-danger rounded-pill px-3 py-2" style="font-size:1rem;">
+                      {{ u.failed_attempts }} <i class="bi bi-exclamation-circle-fill ms-1"></i>
+                    </span>
+                  {% elif u.failed_attempts >= 3 %}
+                    <span class="badge bg-warning text-dark rounded-pill px-3 py-2" style="font-size:1rem;">
+                      {{ u.failed_attempts }} <i class="bi bi-exclamation-triangle-fill ms-1"></i>
+                    </span>
+                  {% else %}
+                    <span class="badge bg-secondary rounded-pill px-3 py-2" style="font-size:1rem;">
+                      {{ u.failed_attempts }}
+                    </span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  {% if not u.is_active %}
+                    <span class="badge bg-danger"><i class="bi bi-lock-fill"></i> Locked</span>
+                  {% else %}
+                    <span class="badge bg-success"><i class="bi bi-unlock-fill"></i> Active</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  {% if not u.is_active %}
+                    <a href="{% url 'user_action' u.pk 'unlock' %}" class="btn btn-sm btn-success"
+                       onclick="return confirm('Unlock account for {{ u.username }}?')">
+                      <i class="bi bi-unlock-fill"></i> Unlock
+                    </a>
+                  {% else %}
+                    <a href="{% url 'user_detail' u.pk %}" class="btn btn-sm btn-outline-secondary">
+                      <i class="bi bi-eye"></i> View
+                    </a>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Suspicious IPs Panel -->
   <div class="col-12">
     <div class="card p-3 h-100 shadow-sm border-0">
-      <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock-fill text-danger"></i> Suspicious IPs (last 1h, ≥5 fails)</h6>
+      <h6 class="fw-bold mb-3">
+        <i class="bi bi-shield-lock-fill text-danger"></i> Suspicious IPs (last 1h, ≥5 fails)
+        <span class="badge bg-danger ms-2">{{ suspicious_ips_count }}</span>
+      </h6>
       
       {% if suspicious_ips %}
       <div class="table-responsive">
@@ -19,6 +115,7 @@
               <th>S/N</th>
               <th>IP Address</th>
               <th>Fails</th>
+              <th>Users</th>
               <th>Last Attempt</th>
               <th>Usernames Tried</th>
               <th>User Status</th>
@@ -30,6 +127,7 @@
               <td>{{ forloop.counter }}</td>
               <td class="text-danger fw-bold"><code>{{ ip.ip_address }}</code></td>
               <td><span class="badge bg-danger">{{ ip.total }}</span></td>
+              <td><span class="badge bg-info text-dark">{{ ip.user_count }}</span></td>
               <td>
                 <small class="text-muted">{{ ip.last_attempt|date:"M d, Y" }}</small><br>
                 <small class="fw-bold">{{ ip.last_attempt|time:"H:i:s" }}</small>
@@ -116,7 +214,10 @@
   <div class="col-12">
     <div class="card p-3 h-100 shadow-sm border-0">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="fw-bold mb-0"><i class="bi bi-clock-history text-secondary"></i> Recent Failed Logins (24h)</h6>
+        <h6 class="fw-bold mb-0">
+          <i class="bi bi-clock-history text-secondary"></i> Recent Failed Logins (24h)
+          <span class="badge bg-danger ms-2">{{ recent_failed_logins_count }}</span>
+        </h6>
       </div>
       
       <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">

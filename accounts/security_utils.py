@@ -36,6 +36,33 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, resolve_url
 from django.urls import NoReverseMatch
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.translation import gettext as _
+
+
+class PasswordMaxLengthValidator:
+    """Password validator enforcing an upper bound on password length.
+
+    Configurable via the standard AUTH_PASSWORD_VALIDATORS entry:
+        {'NAME': 'accounts.security_utils.PasswordMaxLengthValidator', 'OPTIONS': {'max_length': 12}}
+    """
+    def __init__(self, max_length=12):
+        try:
+            self.max_length = int(max_length)
+        except (TypeError, ValueError):
+            self.max_length = 12
+
+    def validate(self, password, user=None):
+        if password is None:
+            return
+        if len(password) > self.max_length:
+            raise ValidationError(
+                _('This password is too long. It must contain at most %(max)d characters.'),
+                code='password_too_long',
+                params={'max': self.max_length},
+            )
+
+    def get_help_text(self):
+        return _('Your password must contain at most %(max)d characters.') % {'max': self.max_length}
 
 
 # ---------------------------------------------------------------

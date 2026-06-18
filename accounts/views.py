@@ -18,7 +18,7 @@ from django.contrib import messages
 from django.utils import timezone
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
-from django.db.models import Q, Sum, Count
+from django.db.models import Sum, Max, Count, Q
 from django.views.decorators.http import require_POST
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -31,10 +31,10 @@ from .models import Rank
 
 
 # ----------------------------------------------------------------------
-# WebSocket Helper — Send account status updates to librarians
+# Msaidizi wa WebSocket — Tuma arifa za status ya akaunti kwa watumiaji
 # ----------------------------------------------------------------------
 def send_account_status_update(user, action):
-    """Send websocket notification to all librarians about account status change."""
+    """Tuma arifa ya WebSocket kwa watumiaji wote kuhusu mabadiliko ya status ya akaunti"""
     channel_layer = get_channel_layer()
     async_to_sync(channel_layer.group_send)(
         'librarians',
@@ -50,10 +50,10 @@ def send_account_status_update(user, action):
 
 
 # ----------------------------------------------------------------------
-# Public Registration View — Self-registration for members
+# View ya Usajili wa Umma — Self-registration kwa wanachama
 # ----------------------------------------------------------------------
 def public_register_view(request):
-    """Public self-registration for library members (students, lecturers, staff)."""
+    """Usajili wa umma kwa wanachama wa maktaba (wanafunzi, walimu, wafanyakazi)"""
     if request.user.is_authenticated:
         return redirect('dashboard')
 
@@ -169,6 +169,7 @@ def public_register_view(request):
 # first validation error message, or None if the password is acceptable.
 # ----------------------------------------------------------------------
 def _validate_password(password, user=None):
+    """Thibitisha nguvu ya nywila"""
     from django.contrib.auth.password_validation import validate_password
     from django.core.exceptions import ValidationError
     try:
@@ -178,10 +179,13 @@ def _validate_password(password, user=None):
     return None
 
 
-# Ukurasa wa kuingia — inashughulikia uthibitishaji wa mtumiaji
+# ----------------------------------------------------------------------
+# View ya Kuingia — Inashughulikia uthibitishaji wa mtumiaji
 # Inalinda kwa: kuzuia baada ya majaribio 3 mabaya kwa dakika 10
 # Inakumbuka vikao kwa "remember me"
+# ----------------------------------------------------------------------
 def login_view(request):
+    """Ukurasa wa kuingia kwa watumiaji"""
     if request.user.is_authenticated:
         return redirect('dashboard')
     if request.method == 'POST':
@@ -198,15 +202,16 @@ def login_view(request):
 
             # ── Gate check before attempting authentication ─────────────
             if db_user:
-                # Pending account check - prevent login until approved
-                if db_user.registration_status == 'pending':
-                    messages.error(request, 'Your account is pending librarian approval. You will receive a notification once approved.')
-                    return render(request, 'accounts/login.html', {'form': form})
+                # Pending/cancelled checks apply to members only — admin & librarian
+                # are created directly by staff and never go through the approval queue.
+                if db_user.role == 'member':
+                    if db_user.registration_status == 'pending':
+                        messages.error(request, 'Your account is pending librarian approval. You will receive a notification once approved.')
+                        return render(request, 'accounts/login.html', {'form': form})
 
-                # Cancelled account check
-                if db_user.registration_status == 'cancelled':
-                    messages.error(request, f'Your account registration was cancelled. Reason: {db_user.cancelled_reason or "Contact library administration."}')
-                    return render(request, 'accounts/login.html', {'form': form})
+                    if db_user.registration_status == 'cancelled':
+                        messages.error(request, f'Your account registration was cancelled. Reason: {db_user.cancelled_reason or "Contact library administration."}')
+                        return render(request, 'accounts/login.html', {'form': form})
 
                 # Locked account check (admin action or 6 failed attempts)
                 if not db_user.is_active:
@@ -293,11 +298,11 @@ def login_view(request):
                             f"SECURITY ALERT: Account '{username}' permanently LOCKED after "
                             f"6 failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
-                        notify_user(db_user, lock_msg_user, 'sms', priority='high')
-                        notify_user(db_user, lock_msg_user, 'email', subject='MSICT OLMS – Account Locked', priority='high')
+                        notify_user(db_user, lock_msg_user, 'sms', priority='high', is_security_alert=True, message_type='account_lock')
+                        notify_user(db_user, lock_msg_user, 'email', subject='MSICT OLMS – Account Locked', priority='high', is_security_alert=True, message_type='account_lock')
                         for admin in admins:
-                            notify_user(admin, lock_msg_admin, 'sms', priority='high')
-                            notify_user(admin, lock_msg_admin, 'email', subject='SECURITY ALERT – Account Locked', priority='high')
+                            notify_user(admin, lock_msg_admin, 'sms', priority='high', is_security_alert=True, message_type='account_lock')
+                            notify_user(admin, lock_msg_admin, 'email', subject='SECURITY ALERT – Account Locked', priority='high', is_security_alert=True, message_type='account_lock')
                         messages.error(request, 'YOUR ACCOUNT HAS BEEN LOCKED. CONTACT ADMIN FOR UNLOCKING.')
 
                     elif total == 5:
@@ -320,11 +325,11 @@ def login_view(request):
                             f"Security Notice: Account '{username}' temporarily suspended (10 min) "
                             f"after 3 failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
-                        notify_user(db_user, susp_msg_user, 'sms', priority='high')
-                        notify_user(db_user, susp_msg_user, 'email', subject='MSICT OLMS – Account Suspended', priority='high')
+                        notify_user(db_user, susp_msg_user, 'sms', priority='high', is_security_alert=True, message_type='suspended')
+                        notify_user(db_user, susp_msg_user, 'email', subject='MSICT OLMS – Account Suspended', priority='high', is_security_alert=True, message_type='suspended')
                         for admin in admins:
-                            notify_user(admin, susp_msg_admin, 'sms', priority='high')
-                            notify_user(admin, susp_msg_admin, 'email', subject='Security Notice – Account Suspended', priority='high')
+                            notify_user(admin, susp_msg_admin, 'sms', priority='high', is_security_alert=True, message_type='suspended')
+                            notify_user(admin, susp_msg_admin, 'email', subject='Security Notice – Account Suspended', priority='high', is_security_alert=True, message_type='suspended')
                         messages.error(request, 'Account suspended for 10 minutes after 3 failed attempts. You will be notified. Try again after 10 minutes.')
 
                     elif total == 2:
@@ -346,7 +351,9 @@ def login_view(request):
     return render(request, 'accounts/login.html', {'form': form, 'logo': logo})
 
 
-# Kutoka nje — inahifadhi rekodi ya kutoka na kuelekeza kwenye ukurasa wa nyumbani
+# ----------------------------------------------------------------------
+# View ya Kutoka Nje — Inahifadhi rekodi ya kutoka na kuelekeza kwenye ukurasa wa nyumbani
+# ----------------------------------------------------------------------
 def logout_view(request):
     if request.user.is_authenticated:
         log_audit(request.user, f"User '{request.user.username}' logged out", request)
@@ -358,8 +365,10 @@ def logout_view(request):
     return redirect('home')
 
 
-# Omba kubadilisha nywila — inatuma OTP kwa SMS na barua pepe
+# ----------------------------------------------------------------------
+# View ya Omba Kubadilisha Nywila — Inatuma OTP kwa SMS na barua pepe
 # Mtumiaji anaweza kutumia nambari ya jeshi au barua pepe
+# ----------------------------------------------------------------------
 def forgot_password_view(request):
     if request.method == 'POST':
         identifier = request.POST.get('identifier', '').strip()
@@ -417,6 +426,9 @@ def forgot_password_view(request):
 # Thibitisha OTP — inachunguza kama OTP ni sahihi na bado haijaisha muda
 # Brute-force protection: max 5 wrong attempts per session — then the
 # pending OTP is invalidated and the user must request a fresh one.
+# ----------------------------------------------------------------------
+# View ya Thibitisha OTP — Mtumiaji anaweka OTP aliyopokea
+# ----------------------------------------------------------------------
 def verify_otp_view(request):
     user_id = request.session.get('otp_user_id')
     if not user_id:
@@ -463,6 +475,9 @@ def verify_otp_view(request):
 
 
 # Weka nywila mpya — inafanya kazi tu baada ya OTP kuthibitishwa
+# ----------------------------------------------------------------------
+# View ya Kubadilisha Nywila — Mtumiaji anaweka nywila mpya
+# ----------------------------------------------------------------------
 def reset_password_view(request):
     user_id = request.session.get('otp_verified_user_id')
     if not user_id:
@@ -477,13 +492,22 @@ def reset_password_view(request):
             err = 'Passwords do not match.'
         else:
             err = _validate_password(new_password, user=user)
+            # Check password history (last 5 passwords)
+            if not err:
+                from accounts.utils import is_password_reused
+                if is_password_reused(user, new_password):
+                    err = 'You cannot reuse your last 5 passwords. Please choose a different password.'
         if err:
             messages.error(request, err)
         else:
+            _old_hash = user.password  # capture BEFORE set_password()
             user.set_password(new_password)
             user.last_password_change = timezone.now()
             user.password_changed_after_first_login = True
             user.save(update_fields=['password', 'last_password_change', 'password_changed_after_first_login'])
+            # Save OLD hash so history tracks every password that was ever used
+            from accounts.utils import add_password_to_history
+            add_password_to_history(user, _old_hash)
             del request.session['otp_verified_user_id']
             request.session.pop('otp_user_id', None)
             log_audit(user, f"Password reset via OTP for '{user.username}'", request)
@@ -505,6 +529,9 @@ def dashboard_redirect(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Dashboard ya Superuser — Dashboard ya msimamizi mkuu
+# ----------------------------------------------------------------------
 def superuser_dashboard_view(request):
     """Allows Django superusers to visit any dashboard directly."""
     if not request.user.is_superuser:
@@ -522,6 +549,9 @@ def superuser_dashboard_view(request):
 
 # Badilisha nywila ya mtumiaji aliyeingia — inahitaji nywila ya zamani
 @login_required
+# ----------------------------------------------------------------------
+# View ya Kubadilisha Nywila — Mtumiaji anabadilisha nywila yake
+# ----------------------------------------------------------------------
 def change_password_view(request):
     if request.method == 'POST':
         old_pw = request.POST.get('old_password', '')
@@ -537,14 +567,23 @@ def change_password_view(request):
             err = 'New password must be different from your current password.'
         else:
             err = _validate_password(new_pw, user=request.user)
+            # Check password history (last 5 passwords)
+            if not err:
+                from accounts.utils import is_password_reused
+                if is_password_reused(request.user, new_pw):
+                    err = 'You cannot reuse your last 5 passwords. Please choose a different password.'
 
         if err:
             messages.error(request, err)
         else:
+            _old_hash = request.user.password  # capture BEFORE set_password()
             request.user.set_password(new_pw)
             request.user.last_password_change = timezone.now()
             request.user.password_changed_after_first_login = True
             request.user.save(update_fields=['password', 'last_password_change', 'password_changed_after_first_login'])
+            # Save OLD hash so history tracks every password that was ever used
+            from accounts.utils import add_password_to_history
+            add_password_to_history(request.user, _old_hash)
             login(request, request.user)
             log_audit(request.user, f"Password changed by '{request.user.username}'", request)
             messages.success(request, 'Password changed successfully.')
@@ -554,6 +593,9 @@ def change_password_view(request):
 
 # Wasifu wa mtumiaji — anaweza kusasisha barua pepe, simu na picha
 @login_required
+# ----------------------------------------------------------------------
+# View ya Wasifu — Mtumiaji anaona na kuhariri wasifu wake
+# ----------------------------------------------------------------------
 def profile_view(request):
     from accounts.models import Rank
     if request.method == 'POST':
@@ -587,12 +629,17 @@ def profile_view(request):
 
 # Onyesha kadi ya maktaba ya kidijitali (QR code + barcode)
 @login_required
+# ----------------------------------------------------------------------
+# View ya Kadi ya Maktaba — Mtumiaji anaona kadi yake ya kidijitali
+# ----------------------------------------------------------------------
 def virtual_card_view(request):
     card = generate_virtual_card(request.user)
     return render(request, 'accounts/virtual_card.html', {'card': card, 'user_obj': request.user})
 
 
-# Pakua kadi ya maktaba kama PDF
+# ----------------------------------------------------------------------
+# View ya Pakua Kadi ya Maktaba kama PDF
+# ----------------------------------------------------------------------
 @login_required
 def virtual_card_pdf_view(request):
     buf = generate_virtual_card_pdf(request.user)
@@ -621,6 +668,9 @@ def librarian_required(func):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Idhinisha Akaunti — Mtunzaji anaidhinisha akaunti iliyosajiliwa
+# ----------------------------------------------------------------------
 def approve_account_view(request, user_id):
     """Approve a pending user account and send credentials."""
     user = get_object_or_404(OLMSUser, pk=user_id, role='member', registration_status='pending')
@@ -702,6 +752,9 @@ def approve_account_view(request, user_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Kataa Akaunti — Mtunzaji anakataa akaunti iliyosajiliwa
+# ----------------------------------------------------------------------
 def reject_account_view(request, user_id):
     """Reject a pending user account with reason."""
     user = get_object_or_404(OLMSUser, pk=user_id, role='member', registration_status='pending')
@@ -758,6 +811,9 @@ def reject_account_view(request, user_id):
 # ----------------------------------------------------------------------
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Usajili wa Umma — Mtunzaji anaona orodha ya waliyosajili
+# ----------------------------------------------------------------------
 def public_registrations_view(request):
     """View all public self-registrations — only pending users shown. Cancelled/approved disappear."""
     
@@ -788,6 +844,9 @@ def admin_required(func):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Watumiaji — Mtunzaji anaona watumiaji wote
+# ----------------------------------------------------------------------
 def user_list_view(request):
     if request.user.role not in ['admin', 'librarian']:
         messages.error(request, 'Access denied.')
@@ -796,15 +855,20 @@ def user_list_view(request):
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
     role_filter = request.GET.get('role', '')
-    users = OLMSUser.objects.exclude(role='admin').filter(registration_status='approved').select_related('virtual_card', 'rank').order_by('surname', 'first_name')
+    if status == 'locked':
+        # Show ALL locked non-admin users: inactive OR pending (unapproved)
+        users = OLMSUser.objects.exclude(role='admin').filter(
+            Q(is_active=False) | Q(registration_status='pending')
+        ).distinct()
+    else:
+        users = OLMSUser.objects.exclude(role='admin').filter(registration_status='approved')
+    users = users.select_related('virtual_card', 'rank').order_by('-id')
 
     if query:
         users = users.filter(
             Q(username__icontains=query) | Q(army_no__icontains=query) |
             Q(first_name__icontains=query) | Q(surname__icontains=query)
         )
-    if status == 'locked':
-        users = users.filter(is_active=False)
     if role_filter:
         users = users.filter(role=role_filter)
 
@@ -813,6 +877,9 @@ def user_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hatua za Mtumiaji — Zuia/fungua akaunti (lock/unlock)
+# ----------------------------------------------------------------------
 def user_action_view(request, user_id, action):
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
     is_admin = request.user.role == 'admin'
@@ -860,6 +927,9 @@ def user_action_view(request, user_id, action):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Maelezo ya Mtumiaji — Anaona maelezo kamili ya mtumiaji
+# ----------------------------------------------------------------------
 def user_detail_view(request, user_id):
     from circulation.models import BorrowingTransaction, Fine
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
@@ -885,6 +955,9 @@ def user_detail_view(request, user_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Mtumiaji — Mtunzaji anaweka mtumiaji mpya
+# ----------------------------------------------------------------------
 def create_user_view(request):
     if request.method == 'POST':
         role = request.POST.get('role', 'member')
@@ -989,6 +1062,9 @@ def create_user_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Mtumiaji — Mtunzaji anahariri maelezo ya mtumiaji
+# ----------------------------------------------------------------------
 def edit_user_view(request, user_id):
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
     if request.method == 'POST':
@@ -1019,6 +1095,9 @@ def edit_user_view(request, user_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Weka Upya Nywila ya Mtumiaji — Mtunzaji anaweka upya nywila
+# ----------------------------------------------------------------------
 def reset_user_password_view(request, user_id):
     """
     Librarian-triggered password reset.
@@ -1057,6 +1136,9 @@ def reset_user_password_view(request, user_id):
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Dashboard ya Msimamizi — Dashboard ya msimamizi wa mfumo
+# ----------------------------------------------------------------------
 def admin_dashboard_view(request):
     from circulation.models import BorrowingTransaction, Fine
     from django.db.models.functions import TruncDay
@@ -1069,12 +1151,17 @@ def admin_dashboard_view(request):
         messages.error(request, 'Access denied. Admin privileges required.')
         return redirect('dashboard')
 
-    total_users = OLMSUser.objects.count()
-    active_users = OLMSUser.objects.filter(is_active=True).count()
-    locked_users = OLMSUser.objects.filter(is_active=False).count()
+    # All non-admin users (includes cancelled/pending) so locked users always show
+    _all_users   = OLMSUser.objects.exclude(role='admin')
+    total_users  = _all_users.count()
+    active_users = _all_users.filter(is_active=True).count()
+    # Locked = inactive OR unapproved (pending registration can't login either)
+    locked_users = _all_users.filter(Q(is_active=False) | Q(registration_status='pending')).distinct().count()
 
     overdue_count = BorrowingTransaction.objects.filter(status='overdue').count()
-    total_borrows = BorrowingTransaction.objects.filter(status='borrowed').count()
+    currently_borrowed = BorrowingTransaction.objects.filter(status='borrowed').count()
+    # Total active loans = borrowed + overdue (denominator for overdue rate)
+    total_borrows = currently_borrowed + overdue_count
     unpaid_fines = sum(fine.remaining_balance for fine in Fine.objects.filter(paid=False))
 
     # Analytics - Users by role
@@ -1093,6 +1180,28 @@ def admin_dashboard_view(request):
         failed_attempts__gte=3, role='member'
     ).select_related('virtual_card').order_by('-failed_attempts', '-created_at')[:5]
 
+    # All users with ANY failed login attempts — for suspicious activity alert panel
+    suspicious_activity_users = OLMSUser.objects.filter(
+        failed_attempts__gte=1
+    ).exclude(role='admin').select_related('rank').order_by('-failed_attempts', '-created_at')
+
+    # Locked accounts detail — inactive OR unapproved (pending) non-admin users
+    locked_accounts_detail = (
+        OLMSUser.objects.exclude(role='admin')
+        .filter(Q(is_active=False) | Q(registration_status='pending'))
+        .distinct()
+        .select_related('rank', 'virtual_card')
+        .order_by('registration_status', '-failed_attempts', 'surname', 'first_name')
+    )
+
+    # Unapproved (pending) registrations
+    unapproved_accounts = (
+        OLMSUser.objects.exclude(role='admin')
+        .filter(registration_status='pending')
+        .select_related('rank')
+        .order_by('-created_at')
+    )
+
     # Security - System Alerts (exclude OTP and password reset messages)
     from circulation.models import Notification
     security_alerts = Notification.objects.filter(
@@ -1102,6 +1211,31 @@ def admin_dashboard_view(request):
     ).exclude(
         message__icontains='password reset'
     ).order_by('-created_at')[:5]
+
+    # Suspicious IPs (last 1 hour, >=5 failed attempts)
+    from accounts.models import LoginAttempt
+    window_1h = timezone.now() - timedelta(hours=1)
+    suspicious_ips_qs = (
+        LoginAttempt.objects.filter(status='failed', timestamp__gte=window_1h)
+        .values('ip_address')
+        .annotate(total=Sum('attempt_count'), last_attempt=Max('timestamp'))
+        .filter(total__gte=5)
+        .order_by('-total')[:5]
+    )
+    suspicious_ips = []
+    for row in suspicious_ips_qs:
+        usernames = list(
+            LoginAttempt.objects.filter(
+                status='failed', timestamp__gte=window_1h, ip_address=row['ip_address']
+            ).values_list('username', flat=True).distinct()
+        )
+        suspicious_ips.append({
+            'ip_address': row['ip_address'],
+            'total': row['total'],
+            'last_attempt': row['last_attempt'],
+            'usernames': usernames,
+            'user_count': len(usernames),
+        })
 
     # Additional Analytics
     # Monthly borrowing stats for the last 6 months
@@ -1152,13 +1286,18 @@ def admin_dashboard_view(request):
         'active_users': active_users,
         'locked_users': locked_users,
         'overdue_count': overdue_count,
+        'currently_borrowed': currently_borrowed,
         'total_borrows': total_borrows,
         'unpaid_fines': unpaid_fines,
         'users_by_role': users_by_role,
         'most_borrowed': most_borrowed,
         'recent_logs': recent_logs,
+        'suspicious_ips': suspicious_ips,
         'recent_suspended': recent_suspended,
+        'locked_accounts_detail': locked_accounts_detail,
+        'unapproved_accounts': unapproved_accounts,
         'security_alerts': security_alerts,
+        'suspicious_activity_users': suspicious_activity_users,
         'monthly_borrows': monthly_borrows_with_pct,
         'category_stats': category_stats,
         'copy_type_stats': copy_type_stats,
@@ -1173,6 +1312,9 @@ def admin_dashboard_view(request):
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Shughuli za Tuhuma — Anaona jaribio zilizoshindwa za kuingia
+# ----------------------------------------------------------------------
 def suspicious_activity_view(request):
     from django.db.models import Max
     window_24h = timezone.now() - timedelta(days=1)
@@ -1210,6 +1352,7 @@ def suspicious_activity_view(request):
             'total': row['total'],
             'last_attempt': row['last_attempt'],
             'usernames': usernames,
+            'user_count': len(usernames),
             'is_known': is_known,
         })
 
@@ -1234,16 +1377,29 @@ def suspicious_activity_view(request):
         message__icontains='password reset'
     ).order_by('-created_at')[:10]
 
+    users_with_failed_attempts = (
+        OLMSUser.objects.filter(failed_attempts__gte=1)
+        .exclude(role='admin')
+        .select_related('rank', 'virtual_card')
+        .order_by('-failed_attempts', '-created_at')
+    )
+
     return render(request, 'accounts/suspicious_activity.html', {
         'failed_logins': enriched_logins,
         'suspicious_ips': suspicious_ips,
+        'suspicious_ips_count': len(suspicious_ips),
+        'recent_failed_logins_count': len(failed_logins),
         'known_usernames': known_usernames,
         'security_alerts': security_alerts,
+        'users_with_failed_attempts': users_with_failed_attempts,
     })
 
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Wanachama Waliofungiwa — Anaona wanachama waliozuiwa
+# ----------------------------------------------------------------------
 def suspended_members_view(request):
     # Find users with failed attempts (temporarily suspended or locked)
     # Users with 3+ failed attempts are considered suspended/locked
@@ -1270,6 +1426,9 @@ def suspended_members_view(request):
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Fungua Akaunti — Msimamizi anafungua akaunti iliyozuiwa
+# ----------------------------------------------------------------------
 def unlock_account_view(request, user_id):
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
     user_obj.is_active = True
@@ -1289,6 +1448,9 @@ def unlock_account_view(request, user_id):
 @login_required
 @admin_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Tahadhari ya Usalama — Msimamizi anafuta tahadhari
+# ----------------------------------------------------------------------
 def delete_security_alert_view(request, pk):
     from circulation.models import Notification
     alert = get_object_or_404(Notification, pk=pk, priority='high')
@@ -1299,21 +1461,36 @@ def delete_security_alert_view(request, pk):
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Tahadhari za Usalama — Anaona tahadhari zote za usalama
+# ----------------------------------------------------------------------
 def security_alerts_view(request):
     from circulation.models import Notification
-    alerts = Notification.objects.filter(
+    type_filter = request.GET.get('type', '')
+    alerts_qs = Notification.objects.filter(
         is_security_alert=True
-    ).exclude(
-        message__icontains='OTP'
-    ).exclude(
-        message__icontains='password reset'
     ).select_related('user').order_by('-created_at')
-    return render(request, 'accounts/security_alerts.html', {'alerts': alerts})
+    if type_filter:
+        alerts_qs = alerts_qs.filter(message_type=type_filter)
+    alert_types = (
+        Notification.objects.filter(is_security_alert=True)
+        .values_list('message_type', flat=True)
+        .distinct()
+        .order_by('message_type')
+    )
+    return render(request, 'accounts/security_alerts.html', {
+        'alerts': alerts_qs,
+        'alert_types': alert_types,
+        'type_filter': type_filter,
+    })
 
 
 @login_required
 @admin_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Rekodi ya Vitendo — Msimamizi anafuta rekodi moja
+# ----------------------------------------------------------------------
 def delete_audit_log_view(request, pk):
     entry = get_object_or_404(AuditLog, pk=pk)
     entry.delete()
@@ -1325,6 +1502,9 @@ def delete_audit_log_view(request, pk):
 @login_required
 @admin_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Vitendo Vyote — Msimamizi anafuta rekodi zote za vitendo
+# ----------------------------------------------------------------------
 def clear_audit_logs_view(request):
     count = AuditLog.objects.count()
     AuditLog.objects.all().delete()
@@ -1334,6 +1514,9 @@ def clear_audit_logs_view(request):
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Vitendo — Anaona historia ya vitendo vyote kwenye mfumo
+# ----------------------------------------------------------------------
 def audit_log_view(request):
     logs = AuditLog.objects.select_related('user').all()
     
@@ -1354,6 +1537,9 @@ def audit_log_view(request):
 
 @login_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Kubadilisha Mandhari — Mtumiaji anabadilisha dark/light mode
+# ----------------------------------------------------------------------
 def toggle_theme_view(request):
     """Toggle dark/light mode for the current user."""
     user = request.user
@@ -1363,6 +1549,9 @@ def toggle_theme_view(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Mwonekano wa Mfumo — Msimamizi anabadilisha rangi na fonti
+# ----------------------------------------------------------------------
 def system_appearance_view(request):
     """Librarian/admin: customise global site appearance."""
     if request.user.role not in ('librarian', 'admin'):
@@ -1398,6 +1587,9 @@ def system_appearance_view(request):
 
 @login_required
 @admin_required
+# ----------------------------------------------------------------------
+# View ya Mipangilio ya Mfumo — Msimamizi anabadilisha mipangilio
+# ----------------------------------------------------------------------
 def system_preferences_view(request):
     # Ensure all core preferences exist with defaults
     DEFAULTS = [

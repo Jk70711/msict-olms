@@ -72,6 +72,9 @@ def book_search_ajax(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Dashboard ya Mtunzaji — Dashboard ya mtunzaji wa vitabu
+# ----------------------------------------------------------------------
 def librarian_dashboard_view(request):
     from circulation.models import BorrowRequest, BorrowingTransaction, Reservation, Fine
     from accounts.models import OLMSUser
@@ -147,6 +150,9 @@ def librarian_dashboard_view(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Vitabu — Mtunzaji anaona vitabu vyote
+# ----------------------------------------------------------------------
 def book_list_view(request):
     query = request.GET.get('q', '')
     category_id = request.GET.get('category', '')
@@ -180,6 +186,9 @@ def book_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Kitabu — Mtunzaji anaweka kitabu kipya
+# ----------------------------------------------------------------------
 def book_create_view(request):
     categories = Category.objects.all()
     courses = Course.objects.all()
@@ -276,6 +285,9 @@ def book_create_view(request):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Kitabu — Mtunzaji anafuta kitabu
+# ----------------------------------------------------------------------
 def book_delete_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
     title = book.title
@@ -287,6 +299,9 @@ def book_delete_view(request, book_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Kitabu — Mtunzaji anahariri maelezo ya kitabu
+# ----------------------------------------------------------------------
 def book_edit_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
     categories = Category.objects.all()
@@ -325,6 +340,9 @@ def book_edit_view(request, book_id):
     })
 
 
+# ----------------------------------------------------------------------
+# View ya Maelezo ya Kitabu — Anaona maelezo kamili ya kitabu
+# ----------------------------------------------------------------------
 def book_detail_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
     copies = book.copies.all()
@@ -344,6 +362,9 @@ def book_detail_view(request, book_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Ongeza Nakala — Mtunzaji anaongeza nakala kwa kitabu
+# ----------------------------------------------------------------------
 def copy_create_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
     if request.method == 'POST':
@@ -383,6 +404,9 @@ def copy_create_view(request, book_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Ongeza Nakala (Njia Mbadala) — Mtunzaji anaongeza nakala
+# ----------------------------------------------------------------------
 def copy_add_standalone_view(request):
     """Standalone Add Copy form — lets the librarian pick the book from a dropdown."""
     books = Book.objects.select_related('category').order_by('title')
@@ -445,6 +469,9 @@ def copy_add_standalone_view(request):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Taji Nakala kama Imapotea — Mtunzaji anataji nakala
+# ----------------------------------------------------------------------
 def copy_mark_lost_view(request, copy_id):
     """POST-only — protected by CSRF + librarian role decorator."""
     copy = get_object_or_404(BookCopy, pk=copy_id)
@@ -458,6 +485,9 @@ def copy_mark_lost_view(request, copy_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Kozi — Mtunzaji anaona kozi zote
+# ----------------------------------------------------------------------
 def course_list_view(request):
     courses = Course.objects.all()
     return render(request, 'catalog/course_list.html', {'courses': courses})
@@ -465,6 +495,9 @@ def course_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Kozi — Mtunzaji anaweka kozi mpya
+# ----------------------------------------------------------------------
 def course_create_view(request):
     categories = Category.objects.all()
     if request.method == 'POST':
@@ -481,6 +514,9 @@ def course_create_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Kozi — Mtunzaji anahariri kozi
+# ----------------------------------------------------------------------
 def course_edit_view(request, course_id):
     course = get_object_or_404(Course, pk=course_id)
     categories = Category.objects.all()
@@ -496,6 +532,9 @@ def course_edit_view(request, course_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Maktaba za Nje — Mtunzaji anaona maktaba za nje
+# ----------------------------------------------------------------------
 def external_library_list_view(request):
     libs = ExternalLibrary.objects.all()
     return render(request, 'catalog/external_library_list.html', {'libs': libs})
@@ -503,6 +542,9 @@ def external_library_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Maktaba ya Nje — Mtunzaji anaongeza maktaba ya nje
+# ----------------------------------------------------------------------
 def external_library_create_view(request):
     if request.method == 'POST':
         ExternalLibrary.objects.create(
@@ -511,6 +553,7 @@ def external_library_create_view(request):
             search_param=request.POST.get('search_param', 'q'),
             lib_type=request.POST.get('lib_type', 'opac'),
             is_active=request.POST.get('is_active') == 'on',
+            
         )
         messages.success(request, 'External library added.')
         return redirect('external_library_list')
@@ -519,6 +562,9 @@ def external_library_create_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Simamia Carousel — Mtunzaji anasimamia picha za carousel
+# ----------------------------------------------------------------------
 def carousel_manage_view(request):
     if request.method == 'POST':
         carousel_ids = set(map(int, request.POST.getlist('carousel_books')))
@@ -532,6 +578,9 @@ def carousel_manage_view(request):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Soma Softcopy — Mtumiaji anasoma PDF online
+# ----------------------------------------------------------------------
 def serve_softcopy_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy')
 
@@ -582,6 +631,9 @@ def serve_softcopy_view(request, copy_id):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Data ya PDF — Inatoa data ya PDF kwa ajili ya kusoma
+# ----------------------------------------------------------------------
 def special_pdf_data_view(request, copy_id):
     """Serve raw PDF bytes for special softcopy — only called by the in-browser viewer.
     Direct access still requires active borrow; the URL is not guessable without auth.
@@ -610,6 +662,9 @@ def special_pdf_data_view(request, copy_id):
 
 
 @login_required
+# ----------------------------------------------------------------------
+# View ya Pakua Softcopy Bure — Mtumiaji anapakua PDF bure
+# ----------------------------------------------------------------------
 def free_softcopy_download_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='free')
     if not copy.file_path:
@@ -625,6 +680,9 @@ def free_softcopy_download_view(request, copy_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Kozi — Mtunzaji anafuta kozi
+# ----------------------------------------------------------------------
 def course_delete_view(request, course_id):
     course = get_object_or_404(Course, pk=course_id)
     name = course.course_name
@@ -636,6 +694,9 @@ def course_delete_view(request, course_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Nakala — Mtunzaji anaona nakala zote
+# ----------------------------------------------------------------------
 def copy_list_view(request):
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
@@ -662,6 +723,9 @@ def copy_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Nakala — Mtunzaji anahariri nakala
+# ----------------------------------------------------------------------
 def copy_edit_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id)
     if request.method == 'POST':
@@ -693,6 +757,9 @@ def copy_edit_view(request, copy_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Nakala — Mtunzaji anafuta nakala
+# ----------------------------------------------------------------------
 def copy_delete_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id)
     accession_no = copy.accession_no
@@ -705,6 +772,9 @@ def copy_delete_view(request, copy_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Makategoria — Mtunzaji anaona makategoria zote
+# ----------------------------------------------------------------------
 def category_list_view(request):
     categories = Category.objects.all()
     return render(request, 'catalog/category_list.html', {'categories': categories})
@@ -712,6 +782,9 @@ def category_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Mahali pa Rafu — Mtunzaji anaona mahali pa rafu
+# ----------------------------------------------------------------------
 def shelf_location_view(request):
     from django.db.models import Count, Q, Case, When, IntegerField
     from circulation.models import BorrowingTransaction
@@ -764,6 +837,9 @@ def shelf_location_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Maelezo ya Rafu — Anaona maelezo ya rafu moja
+# ----------------------------------------------------------------------
 def shelf_detail_view(request, shelf_id):
     shelf = get_object_or_404(Category, pk=shelf_id)
 
@@ -823,6 +899,9 @@ def shelf_detail_view(request, shelf_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Kategoria — Mtunzaji anaweka kategoria mpya
+# ----------------------------------------------------------------------
 def category_create_view(request):
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -837,6 +916,9 @@ def category_create_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Kategoria — Mtunzaji anahariri kategoria
+# ----------------------------------------------------------------------
 def category_edit_view(request, category_id):
     category = get_object_or_404(Category, pk=category_id)
     categories = Category.objects.exclude(pk=category_id)
@@ -860,6 +942,9 @@ def category_edit_view(request, category_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Kategoria — Mtunzaji anafuta kategoria
+# ----------------------------------------------------------------------
 def category_delete_view(request, category_id):
     category = get_object_or_404(Category, pk=category_id)
     name = category.name
@@ -882,6 +967,9 @@ def next_accession_api(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha Kamili ya Rafu — Mtunzaji anaona rafu zote
+# ----------------------------------------------------------------------
 def shelf_list_all_view(request):
     """List all shelves across all categories"""
     categories = Category.objects.prefetch_related('shelves').order_by('shelf_prefix')
@@ -890,6 +978,9 @@ def shelf_list_all_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Rafu — Mtunzaji anaweka rafu mpya
+# ----------------------------------------------------------------------
 def shelf_create_view(request):
     if request.method == 'POST':
         category_id = request.POST.get('category')
@@ -914,6 +1005,9 @@ def shelf_create_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Rafu — Mtunzaji anahariri rafu
+# ----------------------------------------------------------------------
 def shelf_edit_view(request, shelf_id):
     shelf = get_object_or_404(Shelf, pk=shelf_id)
     if request.method == 'POST':
@@ -931,6 +1025,9 @@ def shelf_edit_view(request, shelf_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Futa Rafu — Mtunzaji anafuta rafu
+# ----------------------------------------------------------------------
 def shelf_delete_view(request, shelf_id):
     shelf = get_object_or_404(Shelf, pk=shelf_id)
     code = shelf.shelf_code
@@ -966,6 +1063,9 @@ def shelves_by_category_api(request, category_id):
     })
 
 
+# ----------------------------------------------------------------------
+# View ya Tafuta Maktaba za Nje — Proxy kwa federated search
+# ----------------------------------------------------------------------
 def federated_proxy_view(request):
     """Public AJAX proxy: fetch one external library and return normalised JSON results."""
     import requests as _req
@@ -1075,6 +1175,9 @@ def federated_proxy_view(request):
 # Media Slide Management Views (CRUD for Librarians)
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Media Slides — Mtunzaji anaona slides zote
+# ----------------------------------------------------------------------
 def media_slide_list_view(request):
     """List all media slides for librarian management"""
     slides = MediaSlide.objects.all().order_by('display_order', '-created_at')
@@ -1083,6 +1186,9 @@ def media_slide_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Media Slide — Mtunzaji anaongeza slide mpya
+# ----------------------------------------------------------------------
 def media_slide_create_view(request):
     """Create new media slide (carousel, advertisement, news)"""
     if request.method == 'POST':
@@ -1122,6 +1228,9 @@ def media_slide_create_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Media Slide — Mtunzaji anahariri slide
+# ----------------------------------------------------------------------
 def media_slide_edit_view(request, slide_id):
     """Edit existing media slide"""
     slide = get_object_or_404(MediaSlide, pk=slide_id)
@@ -1151,6 +1260,9 @@ def media_slide_edit_view(request, slide_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Futa Media Slide — Mtunzaji anafuta slide
+# ----------------------------------------------------------------------
 def media_slide_delete_view(request, slide_id):
     """Delete media slide"""
     slide = get_object_or_404(MediaSlide, pk=slide_id)
@@ -1169,6 +1281,9 @@ def media_slide_delete_view(request, slide_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Orodha ya Habari — Mtunzaji anaona habari zote
+# ----------------------------------------------------------------------
 def news_list_view(request):
     type_filter = request.GET.get('type', '')
     status_filter = request.GET.get('status', 'active')
@@ -1207,6 +1322,9 @@ def news_list_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Unda Habari — Mtunzaji anaongeza habari mpya
+# ----------------------------------------------------------------------
 def news_create_view(request):
     if request.method == 'POST':
         title       = request.POST.get('title', '').strip()
@@ -1253,6 +1371,9 @@ def news_create_view(request):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Habari — Mtunzaji anahariri habari
+# ----------------------------------------------------------------------
 def news_edit_view(request, news_id):
     news = get_object_or_404(News, pk=news_id)
     if request.method == 'POST':
@@ -1300,6 +1421,9 @@ def news_edit_view(request, news_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Futa Habari — Mtunzaji anafuta habari
+# ----------------------------------------------------------------------
 def news_delete_view(request, news_id):
     news = get_object_or_404(News, pk=news_id)
     if request.method == 'POST':
@@ -1314,6 +1438,9 @@ def news_delete_view(request, news_id):
 @login_required
 @librarian_required
 @require_POST
+# ----------------------------------------------------------------------
+# View ya Washa/Zima Habari — Mtunzaji anawasha au kuzima habari
+# ----------------------------------------------------------------------
 def news_toggle_view(request, news_id):
     news = get_object_or_404(News, pk=news_id)
     news.is_active = not news.is_active
@@ -1326,6 +1453,9 @@ def news_toggle_view(request, news_id):
 
 @login_required
 @librarian_required
+# ----------------------------------------------------------------------
+# View ya Hariri Footer — Mtunzaji anahariri maelezo ya footer
+# ----------------------------------------------------------------------
 def footer_edit_view(request):
     """Edit footer configuration - creates or updates the active footer"""
     footer = Footer.get_active_footer()

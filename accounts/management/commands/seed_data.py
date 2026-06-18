@@ -101,15 +101,15 @@ class Command(BaseCommand):
     def _seed_news(self):
         items = [
             (
-                'Welcome to MSICT Online Library Management System',
-                'The MSICT Library is pleased to announce the launch of the new Online Library Management System (OLMS). '
+                'Welcome to MSICT Library Management System',
+                'The MSICT Library is pleased to announce the launch of the new Library Management System (OLMS). '
                 'Members can now search the catalog, request books, track borrows, and access free digital resources online. '
                 'Login with your army number credentials to get started.',
             ),
             (
                 'Library Operating Hours',
                 'The library is open Monday to Friday, 08:00 – 18:00 hrs, and Saturday 09:00 – 14:00 hrs. '
-                'Members are reminded that all borrowed books must be returned by the due date to avoid fines of TZS 500 per day.',
+                'Members are reminded that all borrowed books must be returned by the due date to avoid fines of TZS 1,000 per day.',
             ),
             (
                 'New Books Available – April 2024',

@@ -25,8 +25,11 @@ def _pref(key, default):
     return getattr(settings, key, default)
 
 
-# Ombi la kukopa kitabu — mwanachama anatuma, mtunzaji anaidhinisha au kukataa
+# ----------------------------------------------------------------------
+# Model ya BorrowRequest — Ombi la kukopa kitabu
+# Mwanachama anatuma, mtunzaji anaidhinisha au kukataa
 # Hali: pending (inasubiri) → approved (imeidhinishwa) / rejected (imekataliwa)
+# ----------------------------------------------------------------------
 class BorrowRequest(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
@@ -67,8 +70,11 @@ class BorrowRequest(models.Model):
         return self.temp_book
 
 
-# Mkopo ulioidhinishwa — unafuatilia vitabu vilivyokopwa
+# ----------------------------------------------------------------------
+# Model ya BorrowingTransaction — Mkopo ulioidhinishwa
+# Unafuatilia vitabu vilivyokopwa
 # Hali: borrowed → returned (imerudishwa) / overdue (imechelewa)
+# ----------------------------------------------------------------------
 class BorrowingTransaction(models.Model):
     BORROW_TYPE_CHOICES = [('hardcopy', 'Hardcopy'), ('softcopy', 'Softcopy')]
     STATUS_CHOICES = [
@@ -265,9 +271,12 @@ class BorrowingTransaction(models.Model):
         return False, message
 
 
-# Uhifadhi wa nafasi — kwa vitabu vya hardcopy (nakala za kimwili) zilizokopwa zote
+# ----------------------------------------------------------------------
+# Model ya Reservation — Uhifadhi wa nafasi
+# Kwa vitabu vya hardcopy (nakala za kimwili) zilizokopwa zote
 # Nafasi inagawiwa otomatiki (FIFO) kulingana na wakati wa kuhifadhi
 # Mtiririko: pending → notified (nakala imerudishwa, subiri kukopa) → fulfilled/cancelled/expired
+# ----------------------------------------------------------------------
 class Reservation(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),        # Inasubiri — bado hakuna nakala iliyopatikana
@@ -315,8 +324,10 @@ class Reservation(models.Model):
         return None
 
 
-# Faini ya kuchelewa kurudisha kitabu
+# ----------------------------------------------------------------------
+# Model ya Fine — Faini ya kuchelewa kurudisha kitabu
 # Kiasi kinahesabiwa kulingana na FINE_PER_DAY kwenye mipangilio
+# ----------------------------------------------------------------------
 class Fine(models.Model):
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='fines')
     transaction = models.ForeignKey(
@@ -350,8 +361,11 @@ class Fine(models.Model):
         return self.amount_paid >= self.amount
 
 
-# Ripoti ya kupoteza kitabu — mwanachama anaweza kutuma baada ya kukopa
+# ----------------------------------------------------------------------
+# Model ya LossReport — Ripoti ya kupoteza kitabu
+# Mwanachama anaweza kutuma baada ya kukopa
 # Hali: pending → confirmed (mtunzaji akithibitisha) → resolved (faini imelipwa)
+# ----------------------------------------------------------------------
 class LossReport(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending Review'),
@@ -394,8 +408,11 @@ class LossReport(models.Model):
         return f"Loss: {self.user.username} – {self.transaction.copy.book.title} [{self.status}]"
 
 
-# Arifa zilizotumwa kwa mwanachama — SMS au barua pepe
+# ----------------------------------------------------------------------
+# Model ya Notification — Arifa zilizotumwa kwa mwanachama
+# SMS au barua pepe
 # channel: 'sms' au 'email' | status: pending → sent / failed
+# ----------------------------------------------------------------------
 class Notification(models.Model):
     CHANNEL_CHOICES = [('email', 'Email'), ('sms', 'SMS')]
     STATUS_CHOICES = [('pending', 'Pending'), ('sent', 'Sent'), ('failed', 'Failed')]

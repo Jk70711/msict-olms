@@ -17,6 +17,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from accounts.utils import notify_user
+from accounts.models import SystemPreference
 from circulation.models import BorrowingTransaction
 
 
@@ -27,41 +28,44 @@ class Command(BaseCommand):
         now = timezone.now()
         total = 0
 
+        # Fetch fine rate from system settings (not hardcoded)
+        fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 1000))
+
         reminders = [
             (
                 '2-day',
                 now + timedelta(hours=47),
                 now + timedelta(hours=49),
-                lambda book, copy_type, due: (
-                    f"MSICT OLMS: Reminder - '{book}' is due in 2 days "
+                lambda book, copy_type, due, fpd=fine_per_day: (
+                    f"MSICT OLMS: REMINDER - '{book}' is due in 2 days "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
-                    + ("Sign in to your dashboard to read or return online."
+                    + ("Sign in to your dashboard to read or return online before the deadline."
                        if copy_type == 'softcopy'
-                       else "Please return to the library on time to avoid fines.")
+                       else f"Please return the book to the library on time to avoid fines (TZS {fpd:,.0f}/day).")
                 ),
             ),
             (
                 '1-day',
                 now + timedelta(hours=23),
                 now + timedelta(hours=25),
-                lambda book, copy_type, due: (
+                lambda book, copy_type, due, fpd=fine_per_day: (
                     f"MSICT OLMS: URGENT - '{book}' is due TOMORROW "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
                     + ("Return it online from your dashboard before the link expires."
                        if copy_type == 'softcopy'
-                       else "Bring the book to the library tomorrow to avoid a TZS 500/day fine.")
+                       else f"Bring the book to the library tomorrow to avoid a TZS {fpd:,.0f}/day overdue fine.")
                 ),
             ),
             (
                 'due-day',
                 now - timedelta(hours=1),
                 now + timedelta(hours=1),
-                lambda book, copy_type, due: (
-                    f"MSICT OLMS: '{book}' is DUE TODAY "
-                    f"({due.strftime('%H:%M')}). "
-                    + ("Return it now from your dashboard to avoid overdue status."
+                lambda book, copy_type, due, fpd=fine_per_day: (
+                    f"MSICT OLMS: DUE TODAY - '{book}' must be returned today by "
+                    f"{due.strftime('%H:%M')}. "
+                    + ("Return it now from your member dashboard to avoid overdue status."
                        if copy_type == 'softcopy'
-                       else "Return the book immediately to avoid overdue fines (TZS 500/day).")
+                       else f"Return the book to the library immediately. A TZS {fpd:,.0f}/day fine starts after the deadline.")
                 ),
             ),
         ]
@@ -84,9 +88,11 @@ class Command(BaseCommand):
                 due       = timezone.localtime(tx.due_date)
                 msg       = msg_fn(book, copy_type, due)
 
-                notify_user(tx.user, msg, 'sms')
+                _priority = 'normal' if label == '2-day' else 'high'
+                notify_user(tx.user, msg, 'sms', priority=_priority, message_type='borrowing')
                 notify_user(tx.user, msg, 'email',
-                            subject=f"MSICT OLMS Due Date Reminder ({label.replace('-', ' ').title()})")
+                            subject=f"MSICT OLMS — {label.replace('-', ' ').title()} Due Date Reminder",
+                            priority=_priority, message_type='borrowing')
                 total += 1
 
             self.stdout.write(self.style.WARNING(
@@ -94,5 +100,5 @@ class Command(BaseCommand):
             ))
 
         self.stdout.write(self.style.SUCCESS(
-            f'Done. Total reminders sent: {total}.'
+            f'[send_due_reminders] Done. Total sent: {total}.'
         ))

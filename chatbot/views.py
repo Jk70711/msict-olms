@@ -128,7 +128,8 @@ def send(request):
     # Pass user authentication status and role to Gemini
     user_context = {
         'is_authenticated': request.user.is_authenticated,
-        'role': getattr(request.user, 'role', None) if request.user.is_authenticated else None,
+        'role':    getattr(request.user, 'role', None) if request.user.is_authenticated else None,
+        'user_id': request.user.pk                     if request.user.is_authenticated else None,
     }
 
     result = gemini.chat(history_payload, text, user_context=user_context)

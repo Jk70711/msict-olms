@@ -96,11 +96,18 @@
       <div class="text-center py-4 text-body-secondary">
         <div style="font-size:3rem">📚</div>
         <h5>Karibu! / Welcome!</h5>
-        <p class="small">Try one of these to get started:</p>
+        <p class="small mb-3">Uliza kuhusu vitabu au niambie utafute nini. / Ask me anything about books, topics, or library services.</p>
         <div>
+          {% if user.is_authenticated %}
+          <button class="btn btn-sm btn-outline-success m-1 ai-suggestion" data-q="Recommend books for me based on my reading history">📖 My Recommendations</button>
+          <button class="btn btn-sm btn-outline-success m-1 ai-suggestion" data-q="Nipe mapendekezo ya vitabu kulingana na historia yangu ya kukopa">📚 Mapendekezo Yangu</button>
+          {% endif %}
           <button class="btn btn-sm btn-outline-primary m-1 ai-suggestion" data-q="Recommend networking textbooks">Networking textbooks</button>
           <button class="btn btn-sm btn-outline-primary m-1 ai-suggestion" data-q="Je, kuna vitabu vya programming?">Vitabu vya programming?</button>
-          <button class="btn btn-sm btn-outline-primary m-1 ai-suggestion" data-q="What are the library rules?">Library rules</button>
+          <button class="btn btn-sm btn-outline-primary m-1 ai-suggestion" data-q="Je, kuna kitabu cha database systems?">Database systems (SW)</button>
+          <button class="btn btn-sm btn-outline-secondary m-1 ai-suggestion" data-q="Where can I find books online if not available in MSICT?">🌐 Online libraries</button>
+          <button class="btn btn-sm btn-outline-secondary m-1 ai-suggestion" data-q="Nipe viungo vya maktaba za mtandaoni kwa vitabu vya TEHAMA">🌐 Maktaba za nje</button>
+          <button class="btn btn-sm btn-outline-primary m-1 ai-suggestion" data-q="What are the library borrowing rules?">Library rules</button>
         </div>
       </div>
     {% endfor %}
@@ -127,6 +134,8 @@
   const resetBtn = document.getElementById('resetBtn');
 
   function csrf() {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    if (meta) return meta.getAttribute('content');
     const m = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
     return m ? decodeURIComponent(m[1]) : '';
   }

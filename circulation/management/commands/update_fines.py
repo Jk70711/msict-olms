@@ -35,7 +35,7 @@ class Command(BaseCommand):
                 skipped += 1
                 continue
 
-            fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 500))
+            fine_per_day = float(SystemPreference.get('FINE_PER_DAY', 1000))
             calculated_amount = days_overdue * fine_per_day
 
             # Check if Fine record exists for this transaction

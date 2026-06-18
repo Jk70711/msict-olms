@@ -82,7 +82,7 @@ SESSION_SAVE_EVERY_REQUEST = True         # rolls expiry on every request
 
 # CSRF cookie — anti cross-site request forgery
 CSRF_COOKIE_SECURE   = config('CSRF_COOKIE_SECURE',   default=not DEBUG, cast=bool)
-CSRF_COOKIE_HTTPONLY = config('CSRF_COOKIE_HTTPONLY', default=False, cast=bool)
+CSRF_COOKIE_HTTPONLY = config('CSRF_COOKIE_HTTPONLY', default=True, cast=bool)
 CSRF_COOKIE_SAMESITE = config('CSRF_COOKIE_SAMESITE', default='Lax')
 CSRF_USE_SESSIONS    = False              # token in cookie is fine; SameSite + HTTPS protect it
 CSRF_FAILURE_VIEW    = 'django.views.csrf.csrf_failure'
@@ -99,7 +99,7 @@ OLMS_CSP_REPORT_URI  = config('OLMS_CSP_REPORT_URI',  default='')
 # File upload safety: cap memory upload size to mitigate DoS via huge POSTs.
 DATA_UPLOAD_MAX_MEMORY_SIZE = config('DATA_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024, cast=int)  # 10 MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = config('FILE_UPLOAD_MAX_MEMORY_SIZE', default=10 * 1024 * 1024, cast=int)  # 10 MB
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 2000
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 200
 # Files written to disk should not be world-readable (protects /media uploads).
 FILE_UPLOAD_PERMISSIONS = 0o640
 FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o750
@@ -162,6 +162,7 @@ TEMPLATES = [
                 'catalog.context_processors.system_appearance',
                 'catalog.context_processors.category_menu',
                 'catalog.context_processors.overdue_counter',
+                'catalog.context_processors.security_badges',
             ],
         },
     },
@@ -219,6 +220,7 @@ DEFAULT_PROTOCOL = 'https' if not DEBUG else 'http'
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', 'OPTIONS': {'min_length': 8}},
+    {'NAME': 'accounts.security_utils.PasswordMaxLengthValidator', 'OPTIONS': {'max_length': 12}},
     {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
@@ -274,3 +276,103 @@ FINE_PER_DAY = 1000
 LOGIN_FAILURE_LIMIT = 5
 OTP_EXPIRY_MINUTES = 10
 PASSWORD_CHANGE_REMINDER_DAYS = 30
+PASSWORD_HISTORY_DEPTH = 5
+
+# ── Security Logging (A09) ───────────────────────────────────────────
+# All security events, errors, and warnings are written to rotating log
+# files in BASE_DIR/logs/. Handlers: file (errors) + security (warnings+).
+# StreamHandler is always active so runserver still prints to console.
+_LOG_DIR = BASE_DIR / 'logs'
+_LOG_DIR.mkdir(exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{asctime} [{levelname}] {name} {process:d} {thread:d} — {message}',
+            'style': '{',
+        },
+        'simple': {
+            'format': '{asctime} [{levelname}] {name} — {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+        'file_error': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(_LOG_DIR / 'olms_errors.log'),
+            'maxBytes': 5 * 1024 * 1024,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'ERROR',
+        },
+        'file_security': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(_LOG_DIR / 'olms_security.log'),
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 10,
+            'formatter': 'verbose',
+            'level': 'WARNING',
+        },
+        'file_django': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': str(_LOG_DIR / 'olms_django.log'),
+            'maxBytes': 5 * 1024 * 1024,
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'WARNING',
+        },
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'file_django'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console', 'file_security'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console', 'file_error'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        # OLMS application loggers
+        'accounts': {
+            'handlers': ['console', 'file_security'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'circulation': {
+            'handlers': ['console', 'file_django'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'catalog': {
+            'handlers': ['console', 'file_django'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'chat': {
+            'handlers': ['console', 'file_django'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'chatbot': {
+            'handlers': ['console', 'file_django'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file_error'],
+        'level': 'ERROR',
+    },
+}
