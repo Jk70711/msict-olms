@@ -1143,7 +1143,10 @@
         </ul>
       </div>
       {% else %}
-      <a href="{% url 'login' %}" class="btn btn-msict btn-sm">Sign In</a>
+      <div class="d-flex gap-2">
+        <a href="{% url 'login' %}" class="btn btn-msict btn-sm">Sign In</a>
+        <a href="{% url 'public_register' %}" class="btn btn-outline-primary btn-sm">Register</a>
+      </div>
       {% endif %}
     </div>
   </header>

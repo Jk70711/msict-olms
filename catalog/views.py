@@ -119,6 +119,23 @@ def librarian_dashboard_view(request):
         count=Count('id')
     ))
 
+    # Most borrowed books - using Python Counter to avoid Oracle NCLOB issues
+    from collections import Counter
+    book_ids = list(BorrowingTransaction.objects.values_list('copy__book_id', flat=True))
+    borrow_counts = Counter(book_ids)
+    
+    # Get top 8 most borrowed books
+    top_book_ids = [book_id for book_id, _ in borrow_counts.most_common(8)]
+    
+    most_borrowed_books = []
+    for book_id in top_book_ids:
+        try:
+            book = Book.objects.get(pk=book_id)
+            book.borrow_count = borrow_counts[book_id]
+            most_borrowed_books.append(book)
+        except Book.DoesNotExist:
+            continue
+
     # Calculate max borrows for percentage
     max_borrows = max(monthly_borrows.values()) if monthly_borrows else 1
     monthly_borrows_with_pct = {}
@@ -145,6 +162,7 @@ def librarian_dashboard_view(request):
         'monthly_borrows': monthly_borrows_with_pct,
         'category_stats': category_stats,
         'copy_type_stats': copy_type_stats,
+        'most_borrowed_books': most_borrowed_books,
     }
     return render(request, 'catalog/librarian_dashboard.html', context)
 

@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.http import JsonResponse
 
 from catalog.models import Book, BookCopy, ExternalLibrary, News, Category, Course, MediaSlide, Footer
+from circulation.models import BorrowingTransaction
 
 
 # API ya utambuzi wa haraka wa vitabu (inaitwa kwa AJAX wakati unaandika kwenye kisanduku cha tafuta)
@@ -124,6 +125,24 @@ def home_view(request):
     # Vitabu 10 vya hivi karibuni — vinaonekana kwenye carousel ya 3D
     latest_books = Book.objects.select_related('category').prefetch_related('copies').order_by('-created_at')[:10]
 
+    # Vitabu vinavyosomwa sana — kulingana na idadi ya mikopo
+    # Simple approach: count in Python to avoid Oracle NCLOB issues
+    from collections import Counter
+    book_ids = list(BorrowingTransaction.objects.values_list('copy__book_id', flat=True))
+    borrow_counts = Counter(book_ids)
+    
+    # Get top 8 most borrowed books
+    top_book_ids = [book_id for book_id, _ in borrow_counts.most_common(8)]
+    
+    most_borrowed_books = []
+    for book_id in top_book_ids:
+        try:
+            book = Book.objects.get(pk=book_id)
+            book.borrow_count = borrow_counts[book_id]
+            most_borrowed_books.append(book)
+        except Book.DoesNotExist:
+            continue
+
     # Jumla ya vitabu vyote kwenye maktaba (inaonyeshwa kwenye takwimu)
     total_books_count = Book.objects.count()
 
@@ -135,6 +154,7 @@ def home_view(request):
         'carousel_slides': carousel_slides,
         'carousel_books': carousel_books,
         'latest_books': latest_books,
+        'most_borrowed_books': most_borrowed_books,
         'total_books_count': total_books_count,
         'softcopy_count': softcopy_count,
         'hardcopy_count': hardcopy_count,
