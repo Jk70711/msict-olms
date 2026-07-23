@@ -18,6 +18,19 @@
     {% if book.has_special_softcopy %}<span class="badge bg-warning text-dark">Special</span>{% endif %}
   </td>
   <td class="text-end">
+    {% if book.has_special_softcopy %}
+      {% if book.special_softcopy_fee > 0 %}
+        <span class="text-warning fw-semibold">TZS {{ book.special_softcopy_fee|floatformat:0 }}</span>
+      {% else %}
+        <span class="text-warning">Fee not set</span>
+      {% endif %}
+    {% elif book.has_free_softcopy %}
+      <span class="text-success fw-semibold">Free</span>
+    {% else %}
+      <span class="text-muted">—</span>
+    {% endif %}
+  </td>
+  <td class="text-end">
     {% if book.lost_fine %}
       <span class="text-danger fw-semibold">{{ book.lost_fine|floatformat:0 }}</span>
     {% else %}
@@ -38,5 +51,5 @@
   </td>
 </tr>
 {% empty %}
-<tr><td colspan="10" class="text-center py-4 text-muted">No books found.</td></tr>
+<tr><td colspan="11" class="text-center py-4 text-muted">No books found.</td></tr>
 {% endfor %}

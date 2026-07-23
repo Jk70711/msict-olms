@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+{% block title %}Login Page Content — MSICT OLMS{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-window-sidebar me-2"></i>Login Page Content</h4>
+  </div>
+
+  <div class="alert alert-info">
+    <i class="bi bi-info-circle me-1"></i>
+    Manage the text and images shown on the login page. Content updates appear immediately.
+  </div>
+
+  {# ── Slideshow Images Section ── #}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <span class="fw-bold"><i class="bi bi-images me-2"></i>Login Slideshow Images</span>
+      <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#uploadModal">
+        <i class="bi bi-plus-circle me-1"></i>Upload Image
+      </button>
+    </div>
+    <div class="card-body">
+      {% if slideshow_slides %}
+      <div class="row g-3">
+        {% for slide in slideshow_slides %}
+        <div class="col-md-3 col-sm-6">
+          <div class="card h-100 border">
+            <img src="{{ slide.image.url }}" class="card-img-top" alt="{{ slide.title }}" style="height: 120px; object-fit: cover;">
+            <div class="card-body p-2">
+              <p class="small fw-semibold mb-1">{{ slide.title }}</p>
+              <p class="small text-muted mb-1">Order: {{ slide.display_order }}</p>
+              <form method="post" action="{% url 'login_slideshow_delete' slide.pk %}" class="d-inline" onsubmit="return confirm('Delete this slideshow image?')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                  <i class="bi bi-trash me-1"></i>Delete
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="text-center text-muted py-4">
+        <i class="bi bi-images" style="font-size: 2rem;"></i>
+        <p class="mt-2 mb-0">No slideshow images yet. Click "Upload Image" to add.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Text Content Sections ── #}
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-light">
+      <span class="fw-bold"><i class="bi bi-card-text me-2"></i>Login Page Text Sections</span>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 30%;">Section</th>
+              <th>Title</th>
+              <th>Body (preview)</th>
+              <th>Font</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in sections %}
+            <tr>
+              <td>
+                <span class="fw-semibold">{{ item.get_section_display }}</span>
+                {% if item.icon %}<i class="bi {{ item.icon }} ms-1 text-muted"></i>{% endif %}
+              </td>
+              <td><small>{{ item.title|truncatechars:40 }}</small></td>
+              <td><small class="text-muted">{{ item.body|truncatechars:60 }}</small></td>
+              <td><span class="badge bg-info">{{ item.font_size }}px</span></td>
+              <td>
+                {% if item.is_active %}
+                <span class="badge bg-success">Active</span>
+                {% else %}
+                <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              <td><small class="text-muted">{{ item.updated_at|date:"d M Y" }}</small></td>
+              <td class="text-end">
+                <a href="{% url 'login_content_edit' item.pk %}" class="btn btn-sm btn-outline-primary">
+                  <i class="bi bi-pencil"></i> Edit
+                </a>
+                <form method="post" action="{% url 'login_content_toggle' item.pk %}" class="d-inline">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm {% if item.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}">
+                    {% if item.is_active %}<i class="bi bi-pause"></i>{% else %}<i class="bi bi-play"></i>{% endif %}
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Upload Modal ── #}
+<div class="modal fade" id="uploadModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" enctype="multipart/form-data" action="{% url 'login_slideshow_create' %}">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title"><i class="bi bi-plus-circle me-2"></i>Upload Slideshow Image</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+            <input type="text" name="title" class="form-control" required placeholder="e.g. Students reading in library">
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Image <span class="text-danger">*</span></label>
+            <input type="file" name="image" class="form-control" accept="image/*" required>
+            <div class="form-text">Recommended: 800x600px or larger. JPG/PNG/WebP.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Display Order</label>
+            <input type="number" name="display_order" class="form-control" value="0" min="0">
+            <div class="form-text">Lower numbers appear first.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Description (optional)</label>
+            <textarea name="description" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary"><i class="bi bi-upload me-1"></i>Upload</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

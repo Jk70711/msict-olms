@@ -30,25 +30,12 @@
         {# ── Special soft copies ──────────────────── #}
         {% if special_copies %}
           {% if user_active_softcopy_tx %}
-            {# User already has active borrow – show Read + Return #}
+            {# User already has active borrow – show Read link #}
             {% if user_active_softcopy_tx.is_link_active %}
-            <a href="{% url 'serve_softcopy' user_active_softcopy_tx.copy.pk %}"
+            <a href="{% url 'softcopy_access' user_active_softcopy_tx.access_token %}"
                class="btn btn-primary" target="_blank">
-              <i class="bi bi-file-pdf"></i> Read Soft Copy Online
+              <i class="bi bi-file-pdf"></i> Read Now
             </a>
-            {% endif %}
-            {% if not user_active_softcopy_tx.is_overdue %}
-            <form method="post" action="{% url 'return_early' user_active_softcopy_tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-return-left"></i> Return Soft Copy
-              </button>
-            </form>
-            {% else %}
-            {# Overdue - block return until fines paid #}
-            <button class="btn btn-outline-danger btn-sm" disabled title="Pay fines before returning">
-              <i class="bi bi-cash-coin"></i> Pay Fines to Return
-            </button>
             {% endif %}
           {% elif user_pending_softcopy_req %}
             <button class="btn btn-outline-warning" disabled>
@@ -74,6 +61,11 @@
             {% with copy=special_copies.first %}
             <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-warning">
               <i class="bi bi-file-earmark-lock"></i> Request Special Soft Copy
+              {% if copy.prepaid_fee > 0 %}
+                <span class="badge bg-light text-dark ms-1">TZS {{ copy.prepaid_fee|floatformat:0 }}</span>
+              {% else %}
+                <span class="badge bg-light text-dark ms-1">Fee not set</span>
+              {% endif %}
             </a>
             {% endwith %}
           {% endif %}
@@ -110,6 +102,17 @@
       {% if book.book_type == 'both' %}<span class="badge bg-info text-dark border"><i class="bi bi-layers"></i> Both Formats</span>
       {% elif book.book_type == 'softcopy' %}<span class="badge bg-success border"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
       {% else %}<span class="badge bg-primary border"><i class="bi bi-book"></i> Hardcopy</span>{% endif %}
+      {% if special_copies %}
+        {% with copy=special_copies.first %}
+          {% if copy.prepaid_fee > 0 %}
+            <span class="badge bg-warning text-dark border"><i class="bi bi-cash-coin"></i> Fee: TZS {{ copy.prepaid_fee|floatformat:0 }}</span>
+          {% else %}
+            <span class="badge bg-warning text-dark border"><i class="bi bi-cash-coin"></i> Fee not set</span>
+          {% endif %}
+        {% endwith %}
+      {% elif free_copies %}
+        <span class="badge bg-success border"><i class="bi bi-check-circle"></i> Free Access</span>
+      {% endif %}
     </div>
     {% if book.summary %}
     <div class="mb-3">
@@ -160,6 +163,18 @@
           <div class="small text-muted">Loss Fine</div>
         </div>
       </div>
+      {% if special_copies %}
+      <div class="col-6 col-md-3">
+        <div class="card p-2 text-center border-warning">
+          <div class="fs-5 fw-bold text-warning">
+            {% with copy=special_copies.first %}
+              {% if copy.prepaid_fee > 0 %}TZS {{ copy.prepaid_fee|floatformat:0 }}{% else %}—{% endif %}
+            {% endwith %}
+          </div>
+          <div class="small text-muted">Borrowing Fee</div>
+        </div>
+      </div>
+      {% endif %}
     </div>
     {% if copies %}
     <h6 class="fw-bold">Copies</h6>

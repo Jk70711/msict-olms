@@ -10,6 +10,8 @@
 # ============================================================
 
 import re
+import logging
+from decimal import Decimal
 from datetime import timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
@@ -23,11 +25,13 @@ from django.views.decorators.http import require_POST
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP
-from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user
+from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, GuestSession, BulkMessage, BulkMessageRecipient
+from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user, log_credentials_fallback
 from .forms import LoginForm
 from .security_utils import safe_redirect, build_content_disposition
 from .models import Rank
+
+logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------
@@ -82,6 +86,10 @@ def public_register_view(request):
             messages.error(request, 'Email already registered.')
             return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
 
+        if not re.match(r'^0\d{9}$', phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
+
         # Registration number only required for students
         if member_type == 'student' and not registration_no:
             messages.error(request, 'Registration number is required for students.')
@@ -91,17 +99,19 @@ def public_register_view(request):
             registration_no = None
 
         # Generate username and initial password
-        username = OLMSUser.generate_username('member', member_type, surname, registration_no)
+        username = OLMSUser.generate_username('member', member_type, surname, registration_no, first_name, middle_name)
         initial_password = OLMSUser.generate_initial_password(army_no)
 
-        # Handle duplicate username
+        # Handle duplicate username by adding random variations
         if OLMSUser.objects.filter(username=username).exists():
-            username = f"{username}_{army_no.replace(' ', '').replace('MT', '').lower()}"
+            import random
+            import string
+            while OLMSUser.objects.filter(username=username).exists():
+                suffix = ''.join(random.choices(string.ascii_lowercase, k=2))
+                username = f"{username}{suffix}"
 
-        # Get rank object if provided
         rank_obj = Rank.objects.filter(rank_name=rank_name).first() if rank_name else None
 
-        # Create user with pending status
         user = OLMSUser.objects.create_user(
             username=username,
             password=initial_password,
@@ -116,38 +126,33 @@ def public_register_view(request):
             registration_no=registration_no,
             rank=rank_obj,
             last_password_change=timezone.now(),
-            registration_status='pending',  # Default to pending
-            is_active=False,  # Cannot login until approved
+            registration_status='pending',
+            is_active=False,
         )
 
-        # Log audit (use None for public registration since user is not authenticated yet)
         log_audit(None, f"Self-registration submitted by {user.get_full_name()} (Army No: {army_no})", request)
 
-        # Send registration notification (email + SMS)
         login_url = request.build_absolute_uri('/login/')
         subject = "MSICT OLMS — Registration Request Received"
         body = (
             f"Dear {user.get_full_name()},\n\n"
             f"Thank you for registering with the MSICT Library (OLMS).\n\n"
-            f"Your registration request has been received and is pending librarian approval.\n\n"
+            f"Your registration request has been received and is now pending librarian review.\n\n"
             f"  Full Name    : {user.get_full_name()}\n"
             f"  Army No      : {army_no}\n"
             f"  Member Type  : {dict(OLMSUser.MEMBER_TYPE_CHOICES).get(member_type, member_type).title()}\n"
             f"  Email        : {email}\n"
             f"  Phone        : {phone}\n\n"
-            f"You will receive another notification once your account is approved with your login credentials.\n\n"
-            f"Login URL: {login_url}\n\n"
+            f"You will receive a separate SMS and email with your login credentials once approved.\n\n"
+            f"Login URL : {login_url}\n\n"
             f"Regards,\nMSICT Library Administration"
         )
         sms_body = (
-            f"MSICT OLMS: Registration received.\n"
-            f"Name: {user.get_full_name()}\n"
-            f"ArmyNo: {army_no}\n"
-            f"Status: Pending approval.\n"
-            f"You will be notified once approved."
+            f"MSICT OLMS: Reg received, {user.get_full_name()}. Pending approval. "
+            f"Credentials sent via SMS/email after approval."
         )
 
-        sms_ok = notify_user(user, sms_body, 'sms')
+        sms_ok = notify_user(user, sms_body, 'sms', priority='high')
         email_ok = notify_user(user, body, 'email', subject=subject)
 
         if sms_ok.status == 'sent' and email_ok.status == 'sent':
@@ -161,6 +166,128 @@ def public_register_view(request):
         return redirect('login')
 
     return render(request, 'accounts/register.html', {'rank_list': Rank.RANK_LIST})
+
+
+def guest_register_view(request):
+    """Public quick registration for walk-in guest accounts."""
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+
+    if request.method == 'POST':
+        first_name = request.POST.get('first_name', '').strip()
+        middle_name = request.POST.get('middle_name', '').strip()
+        surname = request.POST.get('surname', '').strip()
+        email = request.POST.get('email', '').strip().lower()
+        phone = request.POST.get('phone', '').strip()
+        password = request.POST.get('password', '')
+        confirm_password = request.POST.get('confirm_password', '')
+
+        if not first_name or not surname:
+            messages.error(request, 'First name and surname are required.')
+            return render(request, 'accounts/guest_register.html')
+
+        if not email or not phone:
+            messages.error(request, 'Email and phone are required for guest access.')
+            return render(request, 'accounts/guest_register.html')
+
+        if not re.match(r'^0\d{9}$', phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return render(request, 'accounts/guest_register.html')
+
+        if OLMSUser.objects.filter(email=email).exists():
+            messages.error(request, 'Email already registered. Please sign in.')
+            return redirect('login')
+
+        if password != confirm_password:
+            messages.error(request, 'Password and confirm password do not match.')
+            return render(request, 'accounts/guest_register.html')
+
+        complexity_errors = []
+        if len(password) < 8:
+            complexity_errors.append('at least 8 characters')
+        if not re.search(r'[A-Z]', password):
+            complexity_errors.append('an uppercase letter')
+        if not re.search(r'[a-z]', password):
+            complexity_errors.append('a lowercase letter')
+        if not re.search(r'\d', password):
+            complexity_errors.append('a number')
+        if not re.search(r'[^A-Za-z0-9]', password):
+            complexity_errors.append('a special character')
+
+        if complexity_errors:
+            messages.error(request, f"Password must include {', '.join(complexity_errors)}.")
+            return render(request, 'accounts/guest_register.html')
+
+        pw_err = _validate_password(password)
+        if pw_err:
+            messages.error(request, pw_err)
+            return render(request, 'accounts/guest_register.html')
+
+        username = email
+        if OLMSUser.objects.filter(username=username).exists():
+            username = phone
+        if OLMSUser.objects.filter(username=username).exists():
+            username = f"guest_{timezone.now().strftime('%y%m%d%H%M%S')}"
+
+        user = OLMSUser.objects.create_user(
+            username=username,
+            password=password,
+            first_name=first_name,
+            middle_name=middle_name,
+            surname=surname,
+            email=email,
+            phone=phone,
+            role='guest',
+            is_guest=True,
+            last_password_change=timezone.now(),
+        )
+
+        login_url = request.build_absolute_uri('/login/')
+        subject = 'MSICT OLMS — Guest Account Created'
+        body = (
+            f"Dear {user.get_full_name()},\n\n"
+            f"Your guest account for MSICT Library (OLMS) has been created successfully.\n\n"
+            f"  Full Name : {user.get_full_name()}\n"
+            f"  Email     : {user.email}\n"
+            f"  Phone     : {user.phone}\n"
+            f"  Username  : {user.username}\n"
+            f"  Password  : {password}\n"
+            f"  Login URL : {login_url}\n\n"
+            f"Use this account for walk-in guest sessions only. Keep your credentials confidential.\n"
+            f"Pay session fees at the circulation desk before starting a session.\n\n"
+            f"Regards,\nMSICT Library Administration"
+        )
+        sms_body = (
+            f"MSICT OLMS: Guest acct created. "
+            f"User:{user.username} Pwd:{password}. "
+            f"Login at /login/ Check email for details."
+        )
+        sms_notif = notify_user(user, sms_body, 'sms', priority='high')
+        email_notif = notify_user(user, body, 'email', subject=subject)
+
+        log_audit(None, f"Guest account created: {user.username}", request)
+
+        delivery_warnings = []
+        if sms_notif and sms_notif.status != 'sent':
+            delivery_warnings.append('SMS')
+            logger.warning(f"Guest SMS failed for {user.username} (phone={user.phone})")
+        if email_notif and email_notif.status != 'sent':
+            delivery_warnings.append('email')
+            logger.warning(f"Guest email failed for {user.username} (email={user.email})")
+
+        if delivery_warnings:
+            log_credentials_fallback(user, password, login_url)
+            warn_msg = (
+                f"Account created, but {' and '.join(delivery_warnings)} delivery failed. "
+                f"Please note your username: {user.username}. "
+                f"Use the password you set during registration to sign in."
+            )
+            messages.warning(request, warn_msg)
+        else:
+            messages.success(request, 'Guest account created successfully. Credentials sent via SMS and email. Please sign in to start your session.')
+        return redirect('login')
+
+    return render(request, 'accounts/guest_register.html')
 
 
 # ----------------------------------------------------------------------
@@ -192,13 +319,16 @@ def login_view(request):
         form = LoginForm(request.POST)
         if form.is_valid():
             username = form.cleaned_data['username']
+            identifier = username
             password = form.cleaned_data['password']
             ip = get_client_ip(request)
             
             try:
                 db_user = OLMSUser.objects.get(username=username)
             except OLMSUser.DoesNotExist:
-                db_user = None
+                db_user = OLMSUser.objects.filter(Q(email=identifier) | Q(phone=identifier)).first()
+                if db_user:
+                    username = db_user.username
 
             # ── Gate check before attempting authentication ─────────────
             if db_user:
@@ -219,12 +349,15 @@ def login_view(request):
                     return render(request, 'accounts/login.html', {'form': form})
 
                 # Second login restriction: user must change password via forgot password if they haven't changed after first login
-                if db_user.last_login and not db_user.password_changed_after_first_login:
+                # Guests are exempt — librarians set their passwords explicitly
+                if db_user.last_login and not db_user.password_changed_after_first_login and not db_user.is_guest:
                     messages.error(request, 'You must change your password via "Forgot Password" before your second login.')
                     return redirect('forgot_password')
 
-                # Group-1 suspension: active when failed_attempts == 3 and within 10-min window
-                if db_user.failed_attempts == 3:
+                # Suspension gate-check: dynamic threshold from preferences
+                _lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
+                _suspend_at = max(1, _lock_at // 2)
+                if db_user.failed_attempts == _suspend_at:
                     last_fail = LoginAttempt.objects.filter(
                         username=username, status='failed'
                     ).order_by('-timestamp').first()
@@ -265,7 +398,8 @@ def login_view(request):
                 log_audit(user, f'Logged in from {ip} — previous sessions invalidated', request)
                 
                 if user.password_is_old():
-                    messages.warning(request, 'Your password is 30 days old. Please change it now.')
+                    _expiry_days = int(SystemPreference.get('PASSWORD_EXPIRY_DAYS', 90) or 90)
+                    messages.warning(request, f'Your password is over {_expiry_days} days old. Please change it now.')
                 
                 return redirect('dashboard')
             else:
@@ -284,19 +418,27 @@ def login_view(request):
                     admins = OLMSUser.objects.filter(role='admin', is_active=True)
                     admin_phones = ', '.join(a.phone for a in admins if a.phone)
 
-                    # ── GROUP 2: failures 4-6 — counting toward permanent lock ──
-                    if total >= 6:
-                        # ── Failure 6: PERMANENT LOCK ─────────────────────────
+                    # Read dynamic thresholds from system preferences
+                    auto_lockout = SystemPreference.get('ENABLE_AUTO_LOCKOUT', '1') != '0'
+                    lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
+                    suspend_at = max(1, lock_at // 2)  # suspension at midpoint
+
+                    if not auto_lockout:
+                        # Lockout disabled — just warn the user
+                        messages.error(request, 'Invalid credentials.')
+
+                    # ── PERMANENT LOCK at lock_at failures ────────────────────
+                    elif total >= lock_at:
                         db_user.is_active = False
                         db_user.save(update_fields=['is_active'])
                         lock_msg_user = (
                             f"MSICT OLMS SECURITY ALERT: Your account '{username}' has been "
-                            f"permanently LOCKED after 6 consecutive failed login attempts from IP {ip}. "
+                            f"permanently LOCKED after {lock_at} consecutive failed login attempts from IP {ip}. "
                             f"Contact admin to restore access. Admin phone(s): {admin_phones}."
                         )
                         lock_msg_admin = (
                             f"SECURITY ALERT: Account '{username}' permanently LOCKED after "
-                            f"6 failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
+                            f"{lock_at} failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
                         notify_user(db_user, lock_msg_user, 'sms', priority='high', is_security_alert=True, message_type='account_lock')
                         notify_user(db_user, lock_msg_user, 'email', subject='MSICT OLMS – Account Locked', priority='high', is_security_alert=True, message_type='account_lock')
@@ -305,40 +447,33 @@ def login_view(request):
                             notify_user(admin, lock_msg_admin, 'email', subject='SECURITY ALERT – Account Locked', priority='high', is_security_alert=True, message_type='account_lock')
                         messages.error(request, 'YOUR ACCOUNT HAS BEEN LOCKED. CONTACT ADMIN FOR UNLOCKING.')
 
-                    elif total == 5:
-                        # ── Failure 5: 1 attempt left before lock ─────────────
-                        messages.error(request, 'Invalid credentials. 1 attempt remaining before your account is permanently locked.')
+                    # ── Approaching permanent lock (> suspend_at, < lock_at) ──
+                    elif total > suspend_at:
+                        remaining = lock_at - total
+                        messages.error(request, f'Invalid credentials. {remaining} attempt(s) remaining before your account is permanently locked.')
 
-                    elif total == 4:
-                        # ── Failure 4: 2 attempts left before lock ────────────
-                        messages.error(request, 'Invalid credentials. 2 attempts remaining before your account is permanently locked.')
-
-                    # ── GROUP 1: failures 1-3 — counting toward suspension ───
-                    elif total == 3:
-                        # ── Failure 3: SUSPEND for 10 minutes ─────────────────
+                    # ── SUSPENSION at suspend_at failures ─────────────────────
+                    elif total == suspend_at:
                         susp_msg_user = (
                             f"MSICT OLMS: Your account '{username}' has been temporarily "
-                            f"SUSPENDED for 10 minutes after 3 failed login attempts from IP {ip}. "
-                            f"After 10 minutes, you may try again (3 more attempts before permanent lock)."
+                            f"SUSPENDED for 10 minutes after {suspend_at} failed login attempts from IP {ip}. "
+                            f"After 10 minutes, you may try again ({lock_at - suspend_at} more attempts before permanent lock)."
                         )
                         susp_msg_admin = (
                             f"Security Notice: Account '{username}' temporarily suspended (10 min) "
-                            f"after 3 failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
+                            f"after {suspend_at} failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
                         notify_user(db_user, susp_msg_user, 'sms', priority='high', is_security_alert=True, message_type='suspended')
                         notify_user(db_user, susp_msg_user, 'email', subject='MSICT OLMS – Account Suspended', priority='high', is_security_alert=True, message_type='suspended')
                         for admin in admins:
                             notify_user(admin, susp_msg_admin, 'sms', priority='high', is_security_alert=True, message_type='suspended')
                             notify_user(admin, susp_msg_admin, 'email', subject='Security Notice – Account Suspended', priority='high', is_security_alert=True, message_type='suspended')
-                        messages.error(request, 'Account suspended for 10 minutes after 3 failed attempts. You will be notified. Try again after 10 minutes.')
+                        messages.error(request, f'Account suspended for 10 minutes after {suspend_at} failed attempts. Try again after 10 minutes.')
 
-                    elif total == 2:
-                        # ── Failure 2: 1 attempt left before suspension ────────
-                        messages.error(request, 'Invalid credentials. 1 attempt remaining before account suspension.')
-
+                    # ── Before suspension: count down ─────────────────────────
                     else:
-                        # ── Failure 1: 2 attempts left before suspension ───────
-                        messages.error(request, 'Invalid credentials. 2 attempts remaining before account suspension.')
+                        remaining = suspend_at - total
+                        messages.error(request, f'Invalid credentials. {remaining} attempt(s) remaining before account suspension.')
 
                 else:
                     LoginAttempt.objects.create(username=username, ip_address=ip, status='failed', attempt_count=1)
@@ -346,9 +481,18 @@ def login_view(request):
     else:
         form = LoginForm()
 
-    from catalog.models import MediaSlide
+    from catalog.models import MediaSlide, LoginContent
     logo = MediaSlide.get_active_logo()
-    return render(request, 'accounts/login.html', {'form': form, 'logo': logo})
+    login_content = LoginContent.get_active_content()
+    slideshow_images = MediaSlide.objects.filter(
+        slide_type='login_slideshow', is_active=True
+    ).order_by('display_order', '-created_at')
+    return render(request, 'accounts/login.html', {
+        'form': form,
+        'logo': logo,
+        'login_content': login_content,
+        'slideshow_images': slideshow_images,
+    })
 
 
 # ----------------------------------------------------------------------
@@ -525,7 +669,668 @@ def dashboard_redirect(request):
         return redirect('admin_dashboard')
     elif role == 'librarian':
         return redirect('librarian_dashboard')
+    elif role == 'guest' or request.user.is_guest:
+        has_active = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).exists()
+        if has_active:
+            return redirect('guest_dashboard')
+        return redirect('guest_start_session')
     return redirect('member_dashboard')
+
+
+@login_required
+def guest_dashboard_view(request):
+    if request.user.role != 'guest' and not request.user.is_guest:
+        return redirect('dashboard')
+
+    active_session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).order_by('-sign_in_time').first()
+
+    # Server-side auto-expiry enforcement
+    if active_session:
+        now = timezone.now()
+        expiry = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
+        if now >= expiry:
+            duration_hours = max(0.01, (now - active_session.sign_in_time).total_seconds() / 3600)
+            active_session.sign_out_time = now
+            active_session.duration_hours = round(duration_hours, 2)
+            active_session.status = 'expired'
+            # amount_paid already set at payment time — no refund
+            active_session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
+            request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(active_session.duration_hours))
+            request.user.save(update_fields=['total_guest_hours'])
+            # Revenue already recorded at payment time — no new RevenueTransaction
+            log_audit(request.user, f"Guest session auto-expired ({active_session.duration_hours}h, TZS {active_session.amount_paid} already paid)", request)
+            messages.warning(request, f'Your previous session has expired. Duration: {active_session.duration_hours} hour(s). Amount paid: TZS {active_session.amount_paid:,.0f}.')
+            active_session = None
+
+    # No active session → redirect to standalone start-session page
+    if not active_session:
+        return redirect('guest_start_session')
+
+    recent_sessions = GuestSession.objects.filter(user=request.user).order_by('-sign_in_time')[:10]
+    return render(request, 'accounts/guest_dashboard.html', {
+        'active_session': active_session,
+        'recent_sessions': recent_sessions,
+    })
+
+
+@login_required
+def guest_start_session_page_view(request):
+    """GET page: standalone start-session form (no nav, no sidebar).
+    Guest must fill hours and pay before accessing the dashboard."""
+    if request.user.role != 'guest' and not request.user.is_guest:
+        return redirect('dashboard')
+
+    existing = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
+    if existing:
+        return redirect('guest_dashboard')
+
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
+
+    return render(request, 'accounts/guest_start_session.html', {
+        'hourly_rate': hourly_rate,
+        'max_hours': max_hours,
+        'show_payment': False,
+    })
+
+
+@login_required
+@require_POST
+def start_guest_session_view(request):
+    """Guest fills hours → render payment form on standalone page (no session created yet)."""
+    if request.user.role != 'guest' and not request.user.is_guest:
+        messages.error(request, 'Only guest accounts can start guest sessions.')
+        return redirect('dashboard')
+
+    existing = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
+    if existing:
+        messages.info(request, 'You already have an active session. End it or renew it.')
+        return redirect('guest_dashboard')
+
+    try:
+        paid_hours = float(request.POST.get('paid_hours', '1') or '1')
+    except ValueError:
+        paid_hours = 1.0
+
+    paid_hours = max(1.0, paid_hours)
+    max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
+
+    # Enforce daily limit: max 12h total per day
+    hours_used_today = float(_guest_hours_used_today(request.user))
+    available_today = float(max_hours) - hours_used_today
+    if available_today <= 0:
+        messages.error(request, f'You have reached the daily limit of {max_hours}h. Try again tomorrow.')
+        return redirect('guest_start_session')
+    paid_hours = min(paid_hours, available_today)
+
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    total_amount = paid_hours * hourly_rate
+
+    return render(request, 'accounts/guest_start_session.html', {
+        'paid_hours': paid_hours,
+        'hourly_rate': hourly_rate,
+        'total_amount': total_amount,
+        'show_payment': True,
+    })
+
+
+@login_required
+@require_POST
+def guest_payment_view(request):
+    """Process guest payment, create session, and record revenue immediately."""
+    if request.user.role != 'guest' and not request.user.is_guest:
+        messages.error(request, 'Only guest accounts can start guest sessions.')
+        return redirect('dashboard')
+
+    existing = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
+    if existing:
+        messages.info(request, 'You already have an active session. End it or renew it.')
+        return redirect('guest_dashboard')
+
+    try:
+        paid_hours = float(request.POST.get('paid_hours', '1') or '1')
+    except ValueError:
+        paid_hours = 1.0
+
+    paid_hours = max(1.0, paid_hours)
+    max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+
+    # Enforce daily limit: max 12h total per day
+    hours_used_today = float(_guest_hours_used_today(request.user))
+    available_today = float(max_hours) - hours_used_today
+    if available_today <= 0:
+        messages.error(request, f'Daily limit of {max_hours}h reached. Try again tomorrow.')
+        return redirect('guest_start_session')
+    paid_hours = min(paid_hours, available_today)
+    total_amount = paid_hours * hourly_rate
+
+    payment_method = request.POST.get('payment_method', '').strip()
+    if not payment_method:
+        messages.error(request, 'Please select a payment method.')
+        return render(request, 'accounts/guest_start_session.html', {
+            'paid_hours': paid_hours,
+            'hourly_rate': hourly_rate,
+            'total_amount': total_amount,
+            'show_payment': True,
+        })
+
+    # Collect payment details based on method
+    phone_number = request.POST.get('phone_number', '').strip()
+    bank_name = request.POST.get('bank_name', '').strip()
+    bank_account_no = request.POST.get('bank_account_no', '').strip()
+    card_holder = request.POST.get('card_holder', '').strip()
+    card_last4 = request.POST.get('card_last4', '').strip()
+    card_expiry = request.POST.get('card_expiry', '').strip()
+    receipt_ref = request.POST.get('receipt_no', '').strip()
+
+    # Validate required fields per payment method
+    is_mobile = payment_method in ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']
+    is_bank = payment_method == 'bank_transfer'
+    is_card = payment_method in ['visa', 'mastercard']
+
+    if is_mobile and not phone_number:
+        messages.error(request, 'Phone number is required for mobile money payment.')
+        return render(request, 'accounts/guest_start_session.html', {
+            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
+            'show_payment': True,
+        })
+    if is_mobile and phone_number and not re.match(r'^0\d{9}$', phone_number):
+        messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+        return render(request, 'accounts/guest_start_session.html', {
+            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
+            'show_payment': True,
+        })
+    if is_bank and (not bank_name or not bank_account_no):
+        messages.error(request, 'Bank name and account number are required for bank transfer.')
+        return render(request, 'accounts/guest_start_session.html', {
+            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
+            'show_payment': True,
+        })
+    if is_card and (not card_holder or not card_last4):
+        messages.error(request, 'Cardholder name and last 4 digits are required for card payment.')
+        return render(request, 'accounts/guest_start_session.html', {
+            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
+            'show_payment': True,
+        })
+
+    # Create session with payment already recorded
+    session = GuestSession.objects.create(
+        user=request.user,
+        paid_hours=paid_hours,
+        amount_paid=total_amount,
+        payment_status='paid',
+        payment_method=payment_method,
+        ip_address=get_client_ip(request),
+        device_info=request.META.get('HTTP_USER_AGENT', '')[:400],
+        status='active',
+    )
+
+    # Record revenue immediately
+    try:
+        from circulation.models import RevenueTransaction
+        RevenueTransaction.objects.create(
+            user=request.user,
+            account_type='guest_fee',
+            amount=total_amount,
+            description=f'Guest session fee ({paid_hours:.0f}h) — {payment_method.upper()}',
+            reference_id=session.id,
+            reference_table='accounts_guestsession',
+            recorded_by=request.user,
+        )
+    except Exception:
+        pass
+
+    # Update user totals
+    request.user.total_guest_hours = (request.user.total_guest_hours or 0) + Decimal(str(paid_hours))
+    request.user.total_guest_paid = (request.user.total_guest_paid or 0) + Decimal(str(total_amount))
+    request.user.save(update_fields=['total_guest_hours', 'total_guest_paid'])
+
+    log_audit(request.user, f"Guest session started ({paid_hours}h, TZS {total_amount:,.0f} paid via {payment_method})", request)
+
+    # Compute expiry time for notifications
+    expiry_dt = session.sign_in_time + timedelta(hours=float(paid_hours))
+    expiry_str = expiry_dt.strftime('%d %b %Y, %H:%M')
+
+    # SMS + Email notification
+    try:
+        sms_msg = (f"MSICT OLMS: Session started — {paid_hours:.0f}h at TZS {hourly_rate:,.0f}/h. "
+                   f"Total paid: TZS {total_amount:,.0f} via {payment_method.upper()}. "
+                   f"Expires at: {expiry_str}. Session #{session.id}.")
+        notify_user(request.user, sms_msg, 'sms', message_type='guest_session_start')
+    except Exception:
+        pass
+    try:
+        email_body = (
+            f"Dear {request.user.get_full_name()},\n\n"
+            f"Your guest session has started successfully.\n\n"
+            f"  Duration   : {paid_hours:.0f} hour(s)\n"
+            f"  Rate       : TZS {hourly_rate:,.0f}/hour\n"
+            f"  Total      : TZS {total_amount:,.0f}\n"
+            f"  Method     : {payment_method.upper()}\n"
+            f"  Session #  : {session.id}\n"
+            f"  Expires at : {expiry_str}\n\n"
+            f"Enjoy your library access!"
+        )
+        notify_user(request.user, email_body, 'email', subject='MSICT OLMS — Guest Session Started', message_type='guest_session_start')
+    except Exception:
+        pass
+
+    try:
+        from circulation.receipt_utils import email_guest_receipt
+        email_guest_receipt(session, is_renewal=False)
+    except Exception:
+        pass
+
+    messages.success(request, f'Payment successful! Session started for {paid_hours:.0f} hour(s). TZS {total_amount:,.0f} paid via {payment_method.upper()}.')
+    return redirect('guest_dashboard')
+
+
+@login_required
+@require_POST
+def end_guest_session_view(request):
+    if request.user.role != 'guest' and not request.user.is_guest:
+        messages.error(request, 'Only guest accounts can end guest sessions.')
+        return redirect('dashboard')
+
+    session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).order_by('-sign_in_time').first()
+    if not session:
+        messages.info(request, 'No active guest session found.')
+        return redirect('guest_dashboard')
+
+    now = timezone.now()
+    duration_hours = max(0.01, (now - session.sign_in_time).total_seconds() / 3600)
+
+    auto_expired = request.POST.get('auto_expire') == '1'
+    session.sign_out_time = now
+    session.duration_hours = round(duration_hours, 2)
+    # amount_paid already set at payment time — no refund on early sign-out
+    session.status = 'expired' if auto_expired else 'ended'
+    session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
+
+    request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(session.duration_hours))
+    request.user.save(update_fields=['total_guest_hours'])
+
+    # Revenue already recorded at payment time — no new RevenueTransaction here
+
+    log_audit(request.user, f"Guest session {'auto-expired' if auto_expired else 'ended'} ({session.duration_hours}h, TZS {session.amount_paid} already paid)", request)
+
+    # SMS + Email notification
+    event_label = 'expired' if auto_expired else 'ended'
+    try:
+        sms_msg = (f"MSICT OLMS: Session {event_label}. Duration: {session.duration_hours}h. "
+                   f"Amount paid: TZS {session.amount_paid:,.0f}. No refund for unused time. Session #{session.id}.")
+        notify_user(request.user, sms_msg, 'sms', message_type='guest_session_end')
+    except Exception:
+        pass
+    try:
+        email_body = (
+            f"Dear {request.user.get_full_name()},\n\n"
+            f"Your guest session has {event_label}.\n\n"
+            f"  Duration    : {session.duration_hours} hour(s)\n"
+            f"  Amount paid : TZS {session.amount_paid:,.0f}\n"
+            f"  Session #   : {session.id}\n\n"
+            f"Note: Payment is non-refundable. Unused time is not carried over.\n"
+            f"You can start a new session anytime if daily limit allows."
+        )
+        notify_user(request.user, email_body, 'email', subject=f'MSICT OLMS — Guest Session {event_label.title()}', message_type='guest_session_end')
+    except Exception:
+        pass
+
+    if auto_expired:
+        messages.warning(request, f'Your session has expired. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}.')
+    else:
+        messages.success(request, f'Session ended. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}. No refund for unused time.')
+    return redirect('guest_dashboard')
+
+
+@login_required
+@require_POST
+def guest_session_delete_view(request, session_id):
+    """Guest deletes a non-active session from their history."""
+    session = get_object_or_404(GuestSession, pk=session_id, user=request.user)
+    if session.status in ('active', 'renewed'):
+        messages.error(request, 'Cannot delete an active session. End it first.')
+        return redirect('guest_dashboard')
+    session.delete()
+    log_audit(request.user, f"Deleted guest session #{session_id}", request)
+    messages.success(request, 'Session record deleted.')
+    return redirect('guest_dashboard')
+
+
+def _guest_hours_used_today(user):
+    """Calculate total paid hours for sessions started today by this user."""
+    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    sessions_today = GuestSession.objects.filter(
+        user=user,
+        sign_in_time__gte=today_start,
+    ).exclude(status__in=['active', 'renewed'])  # active/renewed session handled separately
+    used = Decimal('0')
+    for s in sessions_today:
+        used += s.paid_hours
+    # Add active session's paid_hours if exists
+    active = GuestSession.objects.filter(user=user, status__in=['active', 'renewed']).first()
+    if active:
+        used += active.paid_hours
+    return used
+
+
+@login_required
+@require_POST
+def guest_session_renew_view(request):
+    """Show renewal payment form — user adds hours to active session.
+    Max 12h per day total (including current session + past sessions today).
+    """
+    if request.user.role != 'guest' and not request.user.is_guest:
+        messages.error(request, 'Only guest accounts can renew sessions.')
+        return redirect('dashboard')
+
+    active_session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
+    if not active_session:
+        messages.error(request, 'No active session to renew. Start a new session first.')
+        return redirect('guest_dashboard')
+
+    try:
+        renew_hours = float(request.POST.get('renew_hours', '1') or '1')
+    except ValueError:
+        renew_hours = 1.0
+
+    renew_hours = max(1.0, renew_hours)
+
+    max_daily = float(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
+    hours_used_today = float(_guest_hours_used_today(request.user))
+    available_today = max_daily - hours_used_today
+
+    if available_today <= 0:
+        messages.error(request, f'You have reached the daily limit of {max_daily:.0f}h. Try again tomorrow.')
+        return redirect('guest_dashboard')
+
+    renew_hours = min(renew_hours, available_today)
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    total_amount = renew_hours * hourly_rate
+
+    # Remaining time in current session
+    now = timezone.now()
+    expiry = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
+    remaining_seconds = max(0, (expiry - now).total_seconds())
+    remaining_hours = remaining_seconds / 3600
+
+    return render(request, 'accounts/guest_renew_payment.html', {
+        'active_session': active_session,
+        'renew_hours': renew_hours,
+        'hourly_rate': hourly_rate,
+        'total_amount': total_amount,
+        'remaining_hours': round(remaining_hours, 2),
+        'available_today': available_today,
+        'max_daily': max_daily,
+    })
+
+
+@login_required
+@require_POST
+def guest_session_renew_pay_view(request):
+    """Process renewal payment and extend active session hours."""
+    if request.user.role != 'guest' and not request.user.is_guest:
+        messages.error(request, 'Only guest accounts can renew sessions.')
+        return redirect('dashboard')
+
+    active_session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
+    if not active_session:
+        messages.error(request, 'No active session to renew.')
+        return redirect('guest_dashboard')
+
+    try:
+        renew_hours = float(request.POST.get('renew_hours', '1') or '1')
+    except ValueError:
+        renew_hours = 1.0
+
+    renew_hours = max(1.0, renew_hours)
+
+    max_daily = float(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
+    hours_used_today = float(_guest_hours_used_today(request.user))
+    available_today = max_daily - hours_used_today
+
+    if available_today <= 0:
+        messages.error(request, f'Daily limit of {max_daily:.0f}h reached. Try again tomorrow.')
+        return redirect('guest_dashboard')
+
+    renew_hours = min(renew_hours, available_today)
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    total_amount = renew_hours * hourly_rate
+
+    payment_method = request.POST.get('payment_method', '').strip()
+    if not payment_method:
+        messages.error(request, 'Please select a payment method.')
+        return render(request, 'accounts/guest_renew_payment.html', {
+            'active_session': active_session,
+            'renew_hours': renew_hours,
+            'hourly_rate': hourly_rate,
+            'total_amount': total_amount,
+            'remaining_hours': 0,
+            'available_today': available_today,
+            'max_daily': max_daily,
+        })
+
+    # Validate payment fields (same logic as guest_payment_view)
+    phone_number = request.POST.get('phone_number', '').strip()
+    bank_name = request.POST.get('bank_name', '').strip()
+    bank_account_no = request.POST.get('bank_account_no', '').strip()
+    card_holder = request.POST.get('card_holder', '').strip()
+    card_last4 = request.POST.get('card_last4', '').strip()
+
+    is_mobile = payment_method in ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']
+    is_bank = payment_method == 'bank_transfer'
+    is_card = payment_method in ['visa', 'mastercard']
+
+    if is_mobile and not phone_number:
+        messages.error(request, 'Phone number is required for mobile money payment.')
+        return redirect('guest_dashboard')
+    if is_mobile and phone_number and not re.match(r'^0\d{9}$', phone_number):
+        messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+        return redirect('guest_dashboard')
+    if is_bank and (not bank_name or not bank_account_no):
+        messages.error(request, 'Bank name and account number are required.')
+        return redirect('guest_dashboard')
+    if is_card and (not card_holder or not card_last4):
+        messages.error(request, 'Cardholder name and last 4 digits are required.')
+        return redirect('guest_dashboard')
+
+    # Extend the session: add renew_hours to paid_hours (same row, no new session)
+    old_paid = float(active_session.paid_hours)
+    active_session.paid_hours = Decimal(str(old_paid + renew_hours))
+    active_session.amount_paid = Decimal(str(float(active_session.amount_paid) + total_amount))
+    active_session.payment_method = payment_method
+    active_session.status = 'renewed'
+    active_session.renewed = True
+    active_session.save(update_fields=['paid_hours', 'amount_paid', 'payment_method', 'status', 'renewed'])
+
+    # Record revenue for renewal
+    try:
+        from circulation.models import RevenueTransaction
+        RevenueTransaction.objects.create(
+            user=request.user,
+            account_type='guest_fee',
+            amount=total_amount,
+            description=f'Guest session renewal (+{renew_hours:.0f}h) — {payment_method.upper()} — Session #{active_session.id}',
+            reference_id=active_session.id,
+            reference_table='accounts_guestsession',
+            recorded_by=request.user,
+        )
+    except Exception:
+        pass
+
+    # Update user totals
+    request.user.total_guest_paid = (request.user.total_guest_paid or Decimal('0')) + Decimal(str(total_amount))
+    request.user.save(update_fields=['total_guest_paid'])
+
+    log_audit(request.user, f"Guest session renewed (+{renew_hours}h, TZS {total_amount:,.0f} via {payment_method}) — Session #{active_session.id}", request)
+
+    # Compute new expiry time for notifications
+    renew_expiry_dt = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
+    renew_expiry_str = renew_expiry_dt.strftime('%d %b %Y, %H:%M')
+
+    # SMS + Email notification
+    try:
+        sms_msg = (f"MSICT OLMS: Session renewed — +{renew_hours:.0f}h added. "
+                   f"Total paid: TZS {total_amount:,.0f} via {payment_method.upper()}. "
+                   f"New total: {float(active_session.paid_hours):.0f}h. "
+                   f"Expires at: {renew_expiry_str}. Session #{active_session.id}.")
+        notify_user(request.user, sms_msg, 'sms', message_type='guest_session_renew')
+    except Exception:
+        pass
+    try:
+        email_body = (
+            f"Dear {request.user.get_full_name()},\n\n"
+            f"Your guest session has been renewed successfully.\n\n"
+            f"  Added Hours : {renew_hours:.0f}\n"
+            f"  Amount Paid : TZS {total_amount:,.0f}\n"
+            f"  Method      : {payment_method.upper()}\n"
+            f"  Total Hours : {float(active_session.paid_hours):.0f}\n"
+            f"  Session #   : {active_session.id}\n"
+            f"  Expires at  : {renew_expiry_str}\n\n"
+            f"Enjoy your extended library access!"
+        )
+        notify_user(request.user, email_body, 'email', subject='MSICT OLMS — Session Renewed', message_type='guest_session_renew')
+    except Exception:
+        pass
+
+    try:
+        from circulation.receipt_utils import email_guest_receipt
+        email_guest_receipt(active_session, is_renewal=True)
+    except Exception:
+        pass
+
+    messages.success(request, f'Session renewed! +{renew_hours:.0f}h added. TZS {total_amount:,.0f} paid via {payment_method.upper()}. Total: {float(active_session.paid_hours):.0f}h.')
+    return redirect('guest_dashboard')
+
+
+@login_required
+def guest_session_receipt_pdf_view(request, session_id):
+    """Generate a PDF receipt for a guest session payment (start or renewal)."""
+    from circulation.receipt_utils import generate_receipt_pdf
+
+    session = get_object_or_404(GuestSession, pk=session_id, user=request.user)
+    if session.payment_status != 'paid':
+        messages.error(request, 'No payment record found for this session.')
+        return redirect('guest_dashboard')
+
+    receipt_id = f"RCPT-GUEST-{session.pk}-{session.sign_in_time.strftime('%Y%m%d%H%M')}"
+    expiry_dt = session.sign_in_time + timedelta(hours=float(session.paid_hours))
+    is_renewed = session.renewed
+
+    title = 'Guest Session Receipt' + (' (Renewed)' if is_renewed else '')
+    items = [
+        ('Session #', f'#{session.pk}'),
+        ('Signed In', session.sign_in_time.strftime('%d %b %Y, %H:%M')),
+        ('Total Hours', f'{float(session.paid_hours):.0f}h'),
+        ('Expires At', expiry_dt.strftime('%d %b %Y, %H:%M')),
+    ]
+
+    qr_data = (
+        f"MSICT-OLMS|GUEST-RECEIPT|{receipt_id}|{request.user.username}|"
+        f"TZS {session.amount_paid:,.0f}|Session #{session.pk}"
+    )
+
+    return generate_receipt_pdf(
+        receipt_id=receipt_id,
+        title=title,
+        user=request.user,
+        items=items,
+        qr_data=qr_data,
+        payment_method=session.payment_method,
+        amount_label='Total Paid',
+        amount_value=f"TZS {float(session.amount_paid):,.0f}",
+        filename=f'guest_receipt_{session.pk}',
+        extra_notes=[
+            'Payment is non-refundable. Unused time is not carried over.',
+            f'Session status: {session.get_status_display()}',
+        ],
+    )
+
+
+@login_required
+def upgrade_to_member_view(request):
+    """Guest submits a request to upgrade to a full member (pending librarian approval)."""
+    if request.user.role != 'guest' and not request.user.is_guest:
+        messages.info(request, 'Only guest accounts can upgrade to membership.')
+        return redirect('dashboard')
+
+    prefill = {
+        'first_name': request.user.first_name,
+        'middle_name': request.user.middle_name,
+        'surname': request.user.surname,
+        'email': request.user.email,
+        'phone': request.user.phone,
+        'army_no': '',
+    }
+
+    if request.method == 'POST':
+        army_no = request.POST.get('army_no', '').strip()
+        member_type = request.POST.get('member_type', '').strip()
+        registration_no = request.POST.get('registration_no', '').strip() or None
+        rank_name = request.POST.get('rank', '').strip() or None
+        first_name = request.POST.get('first_name', '').strip() or request.user.first_name
+        middle_name = request.POST.get('middle_name', '').strip()
+        surname = request.POST.get('surname', '').strip() or request.user.surname
+        phone = request.POST.get('phone', '').strip() or request.user.phone
+
+        ctx = {'rank_list': Rank.RANK_LIST, 'upgrade': True, 'prefill': prefill}
+
+        if not re.match(r'^(MTM|MT|PW|P)\s?\d+$', army_no):
+            messages.error(request, 'Army number must start with MT, MTM, P, or PW followed by digits.')
+            return render(request, 'accounts/register.html', ctx)
+
+        if OLMSUser.objects.filter(army_no=army_no).exclude(pk=request.user.pk).exists():
+            messages.error(request, 'Army number already registered.')
+            return render(request, 'accounts/register.html', ctx)
+
+        if not re.match(r'^0\d{9}$', phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return render(request, 'accounts/register.html', ctx)
+
+        if member_type == 'student' and not registration_no:
+            messages.error(request, 'Registration number is required for students.')
+            return render(request, 'accounts/register.html', ctx)
+        if member_type != 'student':
+            registration_no = None
+
+        rank_obj = Rank.objects.filter(rank_name=rank_name).first() if rank_name else None
+
+        user = request.user
+        user.army_no = army_no
+        user.member_type = member_type
+        user.registration_no = registration_no
+        user.rank = rank_obj
+        user.first_name = first_name
+        user.middle_name = middle_name
+        user.surname = surname
+        user.phone = phone
+        # Convert to a pending member — must clear is_guest so model.save() does
+        # not force the account back to guest_auto/active state.
+        user.is_guest = False
+        user.role = 'member'
+        user.registration_status = 'pending'
+        user.is_active = False
+        user.save()
+
+        log_audit(None, f"Guest {user.username} submitted member upgrade (Army No: {army_no})", request)
+
+        # Notify librarians (non-blocking)
+        try:
+            send_account_status_update(user, 'pending')
+        except Exception:
+            pass
+
+        from django.contrib.auth import logout as _logout
+        _logout(request)
+        messages.success(request, 'Upgrade request submitted! It is now pending librarian approval. You will receive your member credentials once approved.')
+        return redirect('login')
+
+    return render(request, 'accounts/register.html', {
+        'rank_list': Rank.RANK_LIST,
+        'upgrade': True,
+        'prefill': prefill,
+    })
 
 
 @login_required
@@ -600,8 +1405,13 @@ def profile_view(request):
     from accounts.models import Rank
     if request.method == 'POST':
         user = request.user
+        is_admin = user.role == 'admin'
+        new_phone = request.POST.get('phone', user.phone).strip()
+        if not re.match(r'^0\d{9}$', new_phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return redirect('profile')
+        user.phone = new_phone
         user.email = request.POST.get('email', user.email)
-        user.phone = request.POST.get('phone', user.phone)
         rank_id = request.POST.get('rank_id')
         if rank_id:
             user.rank_id = rank_id
@@ -620,11 +1430,41 @@ def profile_view(request):
             except _VErr as _exc:
                 messages.error(request, f'Profile photo: {_exc.messages[0]}')
                 return redirect('profile')
-        user.save(update_fields=['email', 'phone', 'photo', 'rank_id'])
+
+        # Role editing — only admins can change their own role (but not remove admin from themselves)
+        new_role = request.POST.get('role', '').strip()
+        if new_role and is_admin:
+            if new_role in dict(OLMSUser.ROLE_CHOICES).keys():
+                if new_role != 'admin':
+                    messages.warning(request, 'You cannot remove your own admin role. Ask another admin.')
+                else:
+                    user.role = new_role
+        elif new_role and not is_admin:
+            messages.warning(request, 'Only admins can change roles.')
+
+        # Member type editing — all users can change their own member type (if they are members)
+        new_member_type = request.POST.get('member_type', '').strip() or None
+        if user.role == 'member':
+            if new_member_type and new_member_type in dict(OLMSUser.MEMBER_TYPE_CHOICES).keys():
+                user.member_type = new_member_type
+            elif not new_member_type:
+                user.member_type = None
+
+        update_fields = ['email', 'phone', 'photo', 'rank_id', 'member_type']
+        if is_admin and new_role:
+            update_fields.append('role')
+        user.save(update_fields=update_fields)
         messages.success(request, 'Profile updated successfully.')
         return redirect('profile')
+
     ranks = Rank.objects.all()
-    return render(request, 'accounts/profile.html', {'user_obj': request.user, 'ranks': ranks})
+    return render(request, 'accounts/profile.html', {
+        'user_obj': request.user,
+        'ranks': ranks,
+        'is_admin': request.user.role == 'admin',
+        'role_choices': OLMSUser.ROLE_CHOICES,
+        'member_type_choices': OLMSUser.MEMBER_TYPE_CHOICES,
+    })
 
 
 # Onyesha kadi ya maktaba ya kidijitali (QR code + barcode)
@@ -660,6 +1500,265 @@ def librarian_required(func):
             return redirect('dashboard')
         return func(request, *args, **kwargs)
     return wrapper
+
+
+# ----------------------------------------------------------------------
+# Librarian Guest Management — active sessions, history, mark-paid, suspend
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+def guest_manage_view(request):
+    """Librarian view: see all active guest sessions and recent history."""
+    active_sessions = GuestSession.objects.filter(
+        status__in=['active', 'renewed']
+    ).select_related('user').order_by('-sign_in_time')
+
+    # Auto-expire any sessions past their paid hours
+    now = timezone.now()
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    for s in active_sessions:
+        expiry = s.sign_in_time + timedelta(hours=float(s.paid_hours))
+        if now >= expiry:
+            duration_hours = max(0.01, (now - s.sign_in_time).total_seconds() / 3600)
+            s.sign_out_time = now
+            s.duration_hours = round(duration_hours, 2)
+            s.status = 'expired'
+            # amount_paid already set at payment time — no refund
+            s.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
+            s.user.total_guest_hours = (s.user.total_guest_hours or Decimal('0')) + Decimal(str(s.duration_hours))
+            s.user.save(update_fields=['total_guest_hours'])
+            # Revenue already recorded at payment time
+            log_audit(request.user, f"Auto-expired guest session #{s.id} for {s.user.username}", request)
+
+    # Re-query after auto-expiry
+    active_sessions = GuestSession.objects.filter(
+        status__in=['active', 'renewed']
+    ).select_related('user').order_by('-sign_in_time')
+
+    history = GuestSession.objects.exclude(
+        status__in=['active', 'renewed']
+    ).select_related('user').order_by('-sign_in_time')[:50]
+
+    # Guest users
+    guest_users = OLMSUser.objects.filter(is_guest=True).order_by('-created_at')
+
+    return render(request, 'accounts/guest_manage.html', {
+        'active_sessions': active_sessions,
+        'history': history,
+        'guest_users': guest_users,
+        'hourly_rate': hourly_rate,
+    })
+
+
+@login_required
+@librarian_required
+@require_POST
+def guest_mark_paid_view(request, session_id):
+    """Librarian marks a guest session as paid."""
+    session = get_object_or_404(GuestSession, pk=session_id)
+    session.payment_status = 'paid'
+    session.save(update_fields=['payment_status'])
+    log_audit(request.user, f"Marked guest session #{session.id} as paid (TZS {session.amount_paid})", request)
+    messages.success(request, f'Session #{session.id} marked as paid.')
+    return redirect('guest_manage')
+
+
+@login_required
+@librarian_required
+@require_POST
+def guest_session_end_view(request, session_id):
+    """Librarian force-ends an active guest session."""
+    session = get_object_or_404(GuestSession, pk=session_id, status__in=['active', 'renewed'])
+    now = timezone.now()
+    duration_hours = max(0.01, (now - session.sign_in_time).total_seconds() / 3600)
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    billed_hours = max(1, int(duration_hours) + (0 if duration_hours.is_integer() else 1))
+    session.sign_out_time = now
+    session.duration_hours = round(duration_hours, 2)
+    session.status = 'ended'
+    # amount_paid already set at payment time — no refund
+    session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
+    session.user.total_guest_hours = (session.user.total_guest_hours or Decimal('0')) + Decimal(str(session.duration_hours))
+    session.user.save(update_fields=['total_guest_hours'])
+    # Revenue already recorded at payment time
+    log_audit(request.user, f"Force-ended guest session #{session.id} for {session.user.username}", request)
+    messages.success(request, f'Session #{session.id} ended. Amount paid: TZS {session.amount_paid:,.0f}.')
+    return redirect('guest_manage')
+
+
+@login_required
+@librarian_required
+@require_POST
+def guest_suspend_view(request, user_id):
+    """Librarian suspends a guest account."""
+    user = get_object_or_404(OLMSUser, pk=user_id, is_guest=True)
+    user.is_active = False
+    user.save(update_fields=['is_active'])
+    # End any active sessions
+    GuestSession.objects.filter(user=user, status__in=['active', 'renewed']).update(
+        sign_out_time=timezone.now(),
+        status='ended'
+    )
+    log_audit(request.user, f"Suspended guest account {user.username}", request)
+    messages.success(request, f'Guest {user.username} has been suspended.')
+    return redirect('guest_manage')
+
+
+@login_required
+@librarian_required
+@require_POST
+def guest_reactivate_view(request, user_id):
+    """Librarian reactivates a suspended guest account."""
+    user = get_object_or_404(OLMSUser, pk=user_id, is_guest=True)
+    user.is_active = True
+    user.save(update_fields=['is_active'])
+    log_audit(request.user, f"Reactivated guest account {user.username}", request)
+    messages.success(request, f'Guest {user.username} has been reactivated.')
+    return redirect('guest_manage')
+
+
+@login_required
+@librarian_required
+def bulk_message_view(request):
+    """Enhanced bulk messaging: target by role/member_type, send via email+sms, track delivery, save drafts, view history."""
+    import json
+
+    # ── Build recipient queryset from filters ──────────────────────
+    def _build_recipient_qs(roles, member_types, custom_user_ids=None):
+        qs = OLMSUser.objects.filter(is_active=True).exclude(role='admin')
+        if roles:
+            qs = qs.filter(role__in=roles)
+        if member_types:
+            qs = qs.filter(member_type__in=member_types)
+        if custom_user_ids:
+            qs = qs.filter(pk__in=custom_user_ids)
+        return qs.distinct()
+
+    # ── Handle POST: send or save draft ────────────────────────────
+    if request.method == 'POST':
+        action = request.POST.get('action', 'send')
+        roles = request.POST.getlist('roles')
+        member_types = request.POST.getlist('member_types')
+        channels = request.POST.getlist('channels')
+        subject = request.POST.get('subject', '').strip()
+        body = request.POST.get('message', '').strip()
+        custom_user_ids = request.POST.getlist('custom_users')
+
+        if not body:
+            messages.error(request, 'Message body cannot be empty.')
+            return redirect('bulk_message')
+        if not channels:
+            messages.error(request, 'Select at least one channel (Email and/or SMS).')
+            return redirect('bulk_message')
+
+        target_qs = _build_recipient_qs(roles, member_types, custom_user_ids if custom_user_ids else None)
+        recipient_count = target_qs.count()
+
+        if recipient_count == 0:
+            messages.error(request, 'No recipients match the selected filters.')
+            return redirect('bulk_message')
+
+        # Create BulkMessage record
+        bm = BulkMessage.objects.create(
+            subject=subject,
+            body=body,
+            target_roles=roles,
+            target_member_types=member_types or None,
+            send_via=channels,
+            sent_by=request.user,
+            status='draft' if action == 'draft' else 'sent',
+            total_recipients=recipient_count,
+        )
+
+        if action == 'draft':
+            messages.info(request, f'Draft saved — {recipient_count} recipients will receive when sent.')
+            return redirect('bulk_message')
+
+        # ── Send: iterate recipients × channels ─────────────────────
+        sent_count = 0
+        failed_count = 0
+        now = timezone.now()
+
+        for user in target_qs:
+            # Substitute placeholders
+            personalized = body.replace('{name}', user.get_full_name())
+            personalized = personalized.replace('{army_no}', user.army_no or '')
+            personalized = personalized.replace('{username}', user.username)
+
+            for ch in channels:
+                recipient_row = BulkMessageRecipient.objects.create(
+                    message=bm,
+                    user=user,
+                    delivered_via='email' if ch == 'email' else 'sms',
+                    status='pending',
+                )
+                try:
+                    if ch == 'email':
+                        notify_user(user, personalized, 'email',
+                                    subject=subject or 'MSICT OLMS Notice',
+                                    message_type='bulk_message')
+                    else:
+                        notify_user(user, personalized, 'sms',
+                                    message_type='bulk_message')
+                    recipient_row.status = 'sent'
+                    recipient_row.delivered_at = timezone.now()
+                    recipient_row.save(update_fields=['status', 'delivered_at'])
+                    sent_count += 1
+                except Exception as e:
+                    recipient_row.status = 'failed'
+                    recipient_row.error_message = str(e)[:500]
+                    recipient_row.save(update_fields=['status', 'error_message'])
+                    failed_count += 1
+
+        bm.sent_at = now
+        bm.total_sent = sent_count
+        bm.total_failed = failed_count
+        bm.save(update_fields=['sent_at', 'total_sent', 'total_failed'])
+
+        log_audit(request.user,
+                  f"Bulk message sent: {sent_count}/{recipient_count} delivered, {failed_count} failed — '{subject or '(no subject)'}'",
+                  request)
+        messages.success(request,
+                         f'Message sent to {recipient_count} users. {sent_count} delivered, {failed_count} failed.')
+        return redirect('bulk_message')
+
+    # ── GET: show form + history ───────────────────────────────────
+    # Preview count based on GET filters
+    roles_get = request.GET.getlist('roles')
+    member_types_get = request.GET.getlist('member_types')
+
+    preview_qs = _build_recipient_qs(roles_get, member_types_get)
+    preview_count = preview_qs.count()
+
+    # Build user lists grouped by role for custom selection
+    members_list = OLMSUser.objects.filter(
+        is_active=True, role='member'
+    ).exclude(role='admin').order_by('first_name', 'surname')
+    guests_list = OLMSUser.objects.filter(
+        is_active=True, role='guest'
+    ).order_by('first_name', 'surname')
+    librarians_list = OLMSUser.objects.filter(
+        is_active=True, role='librarian'
+    ).order_by('first_name', 'surname')
+
+    # Message history
+    message_history = BulkMessage.objects.filter(
+        status__in=['sent', 'failed']
+    ).select_related('sent_by').order_by('-sent_at')[:20]
+
+    # Drafts
+    drafts = BulkMessage.objects.filter(status='draft').select_related('sent_by').order_by('-created_at')[:10]
+
+    return render(request, 'accounts/bulk_message.html', {
+        'preview_count': preview_count,
+        'roles_get': roles_get,
+        'member_types_get': member_types_get,
+        'message_history': message_history,
+        'drafts': drafts,
+        'members_list': members_list,
+        'guests_list': guests_list,
+        'librarians_list': librarians_list,
+    })
 
 
 # ----------------------------------------------------------------------
@@ -705,7 +1804,7 @@ def approve_account_view(request, user_id):
     
     # Send approval notification with credentials
     login_url = request.build_absolute_uri('/login/')
-    subject = "MSICT OLMS — Account Approved"
+    subject = "MSICT OLMS — Account Approved – Your Credentials"
     body = (
         f"Dear {user.get_full_name()},\n\n"
         f"Your MSICT Library (OLMS) account has been approved. Below are your login credentials:\n\n"
@@ -716,22 +1815,18 @@ def approve_account_view(request, user_id):
         f"  Password     : {initial_password}\n"
         f"  Library Card : {card_no}\n"
         f"  Login URL    : {login_url}\n\n"
-        f"IMPORTANT: You must change your password immediately on first login for security.\n"
+        f"IMPORTANT: Change your password immediately on first login.\n"
         f"  Steps: Login → Dashboard → Change Password\n\n"
-        f"Keep this message confidential. Do not share your credentials.\n\n"
+        f"Keep this message confidential. Do not share your credentials with anyone.\n\n"
         f"Regards,\nMSICT Library Administration"
     )
     sms_body = (
-        f"MSICT OLMS: Account approved.\n"
-        f"Name: {user.get_full_name()}\n"
-        f"ArmyNo: {user.army_no}\n"
-        f"Username: {user.username}\n"
-        f"Pwd: {initial_password}\n"
-        f"Card: {card_no}\n"
-        f"Login: {login_url}"
+        f"MSICT OLMS: Approved! "
+        f"User:{user.username} Pwd:{initial_password} Card:{card_no}. "
+        f"Change pwd on 1st login. /login/"
     )
     
-    sms_ok = notify_user(user, sms_body, 'sms')
+    sms_ok = notify_user(user, sms_body, 'sms', priority='high', is_security_alert=True)
     email_ok = notify_user(user, body, 'email', subject=subject)
     
     if sms_ok.status == 'sent' and email_ok.status == 'sent':
@@ -764,35 +1859,35 @@ def reject_account_view(request, user_id):
         messages.error(request, 'Cancellation reason is required.')
         return redirect('public_registrations')
     
-    # Update account status
-    user.registration_status = 'cancelled'
+    # Update account status to rejected (not cancelled)
+    user.registration_status = 'rejected'
     user.cancelled_reason = cancelled_reason
     user.save()
     
     # Log audit
-    log_audit(request.user, f"Cancelled account for {user.get_full_name()} (Army No: {user.army_no}). Reason: {cancelled_reason}", request)
+    log_audit(request.user, f"Rejected account for {user.get_full_name()} (Army No: {user.army_no}). Reason: {cancelled_reason}", request)
     
     # Send websocket notification to librarians (non-blocking)
     try:
-        send_account_status_update(user, 'cancelled')
+        send_account_status_update(user, 'rejected')
     except Exception as e:
         print(f"WebSocket notification error: {e}")
     
-    # Send cancellation notification
-    subject = "MSICT OLMS — Registration Request Cancelled"
+    # Send rejection notification
+    subject = "MSICT OLMS — Registration Request Rejected"
     body = (
         f"Dear {user.get_full_name()},\n\n"
-        f"Your MSICT Library (OLMS) registration request has been cancelled.\n\n"
+        f"Your MSICT Library (OLMS) registration request has been rejected.\n\n"
+        f"  Full Name    : {user.get_full_name()}\n"
         f"  Army No      : {user.army_no}\n"
-        f"  Cancellation Reason: {cancelled_reason}\n\n"
-        f"If you believe this is an error, please contact the library administration.\n\n"
+        f"  Reason       : {cancelled_reason}\n\n"
+        f"If you believe this is an error, please visit the library administration for assistance.\n\n"
         f"Regards,\nMSICT Library Administration"
     )
     sms_body = (
-        f"MSICT OLMS: Registration cancelled.\n"
-        f"Name: {user.get_full_name()}\n"
-        f"ArmyNo: {user.army_no}\n"
-        f"Reason: {cancelled_reason}"
+        f"MSICT OLMS: Reg rejected ({user.army_no}). "
+        f"Reason: {cancelled_reason[:60]}{'...' if len(cancelled_reason) > 60 else ''}. "
+        f"Visit library for info."
     )
     
     sms_ok = notify_user(user, sms_body, 'sms')
@@ -815,20 +1910,151 @@ def reject_account_view(request, user_id):
 # View ya Usajili wa Umma — Mtunzaji anaona orodha ya waliyosajili
 # ----------------------------------------------------------------------
 def public_registrations_view(request):
-    """View all public self-registrations — only pending users shown. Cancelled/approved disappear."""
-    
-    # Only show pending registrations — cancelled users disappear, approved go to members page
-    qs = OLMSUser.objects.filter(role='member', registration_status='pending').select_related('rank').order_by('-created_at')
-    
+    """View all public self-registrations — pending and rejected users shown together."""
+
+    qs = OLMSUser.objects.filter(
+        role='member', registration_status__in=['pending', 'rejected']
+    ).select_related('rank').order_by('-created_at')
+
     # Count for stats
-    pending_count = qs.count()
+    pending_count = OLMSUser.objects.filter(role='member', registration_status='pending').count()
+    rejected_count = OLMSUser.objects.filter(role='member', registration_status='rejected').count()
     approved_count = OLMSUser.objects.filter(role='member', registration_status='approved').count()
-    
+
     return render(request, 'accounts/public_registrations.html', {
         'registrations': qs,
         'pending_count': pending_count,
+        'rejected_count': rejected_count,
         'approved_count': approved_count,
     })
+
+
+# ----------------------------------------------------------------------
+# Rejected Applications View — Librarian manages rejected registrations
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+def rejected_registrations_view(request):
+    """View all rejected registrations with rollback, edit, and delete options."""
+    
+    qs = OLMSUser.objects.filter(role='member', registration_status='rejected').select_related('rank').order_by('-created_at')
+    
+    return render(request, 'accounts/rejected_registrations.html', {
+        'rejected_users': qs,
+    })
+
+
+# ----------------------------------------------------------------------
+# Rollback Registration View — Librarian can rollback rejected to approved
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+def rollback_registration_view(request, user_id):
+    """Rollback a rejected registration to approved (acts exactly like approve)."""
+    if request.method != 'POST':
+        messages.error(request, 'Invalid request. Use the Rollback button to approve a rejected application.')
+        return redirect('public_registrations')
+
+    user = get_object_or_404(OLMSUser, pk=user_id, role='member', registration_status='rejected')
+    
+    # Generate initial password from army number
+    initial_password = OLMSUser.generate_initial_password(user.army_no)
+    user.set_password(initial_password)
+    
+    # Update account status to approved
+    user.registration_status = 'approved'
+    user.is_active = True
+    user.approved_by = request.user
+    user.approved_at = timezone.now()
+    user.cancelled_reason = ''  # Clear rejection reason
+    
+    # Generate card number if not exists
+    if not user.card_no:
+        user.card_no = VirtualCard.generate_card_no()
+    user.save()
+    
+    # Generate virtual card (QR, barcode) if not exists
+    if not hasattr(user, 'virtual_card'):
+        card = generate_virtual_card(user)
+    card_no = user.card_no
+    
+    # Log audit
+    log_audit(request.user, f"Rolled back and approved account for {user.get_full_name()} (Army No: {user.army_no})", request)
+    
+    # Send approval notification with credentials
+    login_url = request.build_absolute_uri('/login/')
+    subject = "MSICT OLMS — Account Approved – Your Credentials"
+    body = (
+        f"Dear {user.get_full_name()},\n\n"
+        f"Your MSICT Library (OLMS) account has been approved after review. Below are your login credentials:\n\n"
+        f"  Full Name    : {user.get_full_name()}\n"
+        f"  Army No      : {user.army_no}\n"
+        f"  Member Type  : {dict(OLMSUser.MEMBER_TYPE_CHOICES).get(user.member_type, user.member_type).title() if user.member_type else 'Member'}\n"
+        f"  Username     : {user.username}\n"
+        f"  Password     : {initial_password}\n"
+        f"  Library Card : {card_no}\n"
+        f"  Login URL    : {login_url}\n\n"
+        f"IMPORTANT: Change your password immediately on first login.\n"
+        f"  Steps: Login → Dashboard → Change Password\n\n"
+        f"Keep this message confidential. Do not share your credentials with anyone.\n\n"
+        f"Regards,\nMSICT Library Administration"
+    )
+    sms_body = (
+        f"MSICT OLMS: Approved! "
+        f"User:{user.username} Pwd:{initial_password} Card:{card_no}. "
+        f"Change pwd on 1st login. /login/"
+    )
+    
+    sms_ok = notify_user(user, sms_body, 'sms')
+    email_ok = notify_user(user, body, 'email', subject=subject)
+    
+    if sms_ok.status == 'sent' and email_ok.status == 'sent':
+        messages.success(request, f'Account for {user.get_full_name()} rolled back and approved. Credentials sent.')
+    else:
+        messages.warning(request, f'Account rolled back and approved, but notification delivery failed.')
+    
+    return redirect('public_registrations')
+
+
+# ----------------------------------------------------------------------
+# Delete Registration View — Librarian permanently deletes a pending or rejected registration
+# ----------------------------------------------------------------------
+@login_required
+@librarian_required
+def delete_user_view(request, user_id):
+    """Permanently delete a registration or approved member account."""
+    if request.method != 'POST':
+        messages.error(request, 'Invalid request. Use the delete button.')
+        return redirect('public_registrations')
+
+    user = get_object_or_404(OLMSUser, pk=user_id)
+    full_name = user.get_full_name()
+    army_no = user.army_no
+    reg_status = user.registration_status
+
+    # Librarians can delete members and guest accounts (not admins/librarians)
+    target_is_guest = getattr(user, 'is_guest', False) or user.role == 'guest'
+    if request.user.role == 'librarian' and user.role not in ('member',) and not target_is_guest:
+        messages.error(request, 'Librarians can only delete member or guest accounts.')
+        return redirect('user_list')
+
+    # Delete virtual card if exists
+    try:
+        if hasattr(user, 'virtual_card'):
+            user.virtual_card.delete()
+    except Exception:
+        pass
+
+    user.delete()
+    log_audit(request.user, f"Deleted {reg_status} account for {full_name} (Army No: {army_no})", request)
+    messages.success(request, f'Account for {full_name} has been permanently deleted.')
+
+    # Redirect based on original status / role
+    if target_is_guest:
+        return redirect('guest_manage')
+    if reg_status in ('pending', 'rejected'):
+        return redirect('public_registrations')
+    return redirect('user_list')
 
 
 # Decorator: inazuia ufikiaji kwa watu ambao si admin peke yake
@@ -852,6 +2078,7 @@ def user_list_view(request):
         messages.error(request, 'Access denied.')
         return redirect('dashboard')
         
+    from django.core.paginator import Paginator
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
     role_filter = request.GET.get('role', '')
@@ -872,11 +2099,20 @@ def user_list_view(request):
     if role_filter:
         users = users.filter(role=role_filter)
 
-    return render(request, 'accounts/user_list.html', {'users': users, 'query': query, 'status': status})
+    paginator = Paginator(users, 25)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    return render(request, 'accounts/user_list.html', {
+        'users': page_obj,
+        'page_obj': page_obj,
+        'query': query,
+        'status': status,
+    })
 
 
 @login_required
 @librarian_required
+@require_POST
 # ----------------------------------------------------------------------
 # View ya Hatua za Mtumiaji — Zuia/fungua akaunti (lock/unlock)
 # ----------------------------------------------------------------------
@@ -885,9 +2121,12 @@ def user_action_view(request, user_id, action):
     is_admin = request.user.role == 'admin'
     is_librarian = request.user.role == 'librarian'
 
+    # Librarians may lock/unlock guest accounts; only admins for members/staff
+    target_is_guest = getattr(user_obj, 'is_guest', False) or user_obj.role == 'guest'
+
     if action == 'lock':
-        if not is_admin:
-            messages.error(request, 'Only admins can lock accounts.')
+        if not is_admin and not (is_librarian and target_is_guest):
+            messages.error(request, 'Only admins can lock non-guest accounts.')
             return redirect('user_list')
         user_obj.is_active = False
         user_obj.save(update_fields=['is_active'])
@@ -895,8 +2134,8 @@ def user_action_view(request, user_id, action):
         messages.warning(request, f"Account '{user_obj.username}' locked.")
 
     elif action == 'unlock':
-        if not is_admin:
-            messages.error(request, 'Only admins can unlock accounts.')
+        if not is_admin and not (is_librarian and target_is_guest):
+            messages.error(request, 'Only admins can unlock non-guest accounts.')
             return redirect('user_list')
         user_obj.is_active = True
         user_obj.failed_attempts = 0
@@ -909,18 +2148,6 @@ def user_action_view(request, user_id, action):
         notify_user(user_obj, unlock_msg, 'email', subject='MSICT OLMS – Account Unlocked')
         log_audit(request.user, f"{request.user.role.capitalize()} manually unlocked account '{user_obj.username}'", request)
         messages.success(request, f"Account '{user_obj.username}' unlocked. User notified via SMS and email.")
-
-    elif action == 'delete':
-        if is_librarian and user_obj.role != 'member':
-            messages.error(request, 'Librarians can only delete member accounts.')
-            return redirect('user_list')
-        if user_obj.role == 'admin':
-            messages.error(request, 'Admin accounts cannot be deleted here.')
-            return redirect('user_list')
-        username = user_obj.username
-        user_obj.delete()
-        log_audit(request.user, f"{request.user.role.capitalize()} deleted account '{username}'", request)
-        messages.success(request, f"Account '{username}' deleted successfully.")
 
     return redirect('user_list')
 
@@ -983,11 +2210,21 @@ def create_user_view(request):
             messages.error(request, 'Army number already exists.')
             return render(request, 'accounts/create_user.html')
 
-        username = OLMSUser.generate_username(role, member_type, surname, registration_no)
+        if not re.match(r'^0\d{9}$', phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return render(request, 'accounts/create_user.html')
+
+        username = OLMSUser.generate_username(role, member_type, surname, registration_no, first_name, middle_name)
         initial_password = OLMSUser.generate_initial_password(army_no)
 
+        # Handle duplicate username by adding random variations
         if OLMSUser.objects.filter(username=username).exists():
-            username = f"{username}_{army_no.replace(' ', '').replace('MT', '').lower()}"
+            import random
+            import string
+            # Add random suffix until unique
+            while OLMSUser.objects.filter(username=username).exists():
+                suffix = ''.join(random.choices(string.ascii_lowercase, k=2))
+                username = f"{username}{suffix}"
 
         from accounts.models import Rank as RankModel
         rank_obj = RankModel.objects.filter(pk=rank_id).first() if rank_id else None
@@ -1024,7 +2261,7 @@ def create_user_view(request):
         subject = "MSICT OLMS — Your Account Credentials"
         body = (
             f"Dear {user.get_full_name()},\n\n"
-            f"Your MSICT Library (OLMS) account has been created. Below are your login details:\n\n"
+            f"Your MSICT Library (OLMS) account has been created by the librarian. Below are your login details:\n\n"
             f"  Full Name    : {user.get_full_name()}\n"
             f"  Army No      : {army_no}\n"
             f"  Role         : {role_label}{(' — ' + type_label) if type_label else ''}\n"
@@ -1032,22 +2269,17 @@ def create_user_view(request):
             f"  Password     : {initial_password}\n"
             f"  Library Card : {card_no}\n"
             f"  Login URL    : {login_url}\n\n"
-            f"IMPORTANT: You must change your password immediately on first login for security.\n"
+            f"IMPORTANT: Change your password immediately on first login for security.\n"
             f"  Steps: Login → Dashboard → Change Password\n\n"
-            f"Keep this message confidential. Do not share your credentials.\n\n"
+            f"Keep this message confidential. Do not share your credentials with anyone.\n\n"
             f"Regards,\nMSICT Library Administration"
         )
         sms_body = (
-            f"MSICT OLMS: Account created.\n"
-            f"Name: {user.get_full_name()}\n"
-            f"ArmyNo: {army_no}\n"
-            f"Username: {username}\n"
-            f"Pwd: {initial_password}\n"
-            f"Card: {card_no}\n"
-            f"Login: {login_url}\n"
-            f"IMPORTANT: Change your password on first login!"
+            f"MSICT OLMS: Acct created. "
+            f"User:{username} Pwd:{initial_password} Card:{card_no}. "
+            f"Change pwd on 1st login. /login/"
         )
-        sms_ok = notify_user(user, sms_body, 'sms')
+        sms_ok = notify_user(user, sms_body, 'sms', priority='high', is_security_alert=True)
         email_ok = notify_user(user, body, 'email', subject=subject)
         log_audit(request.user, f"Librarian '{request.user.username}' created user '{username}' (email={'sent' if email_ok.status == 'sent' else 'FAILED'}, sms={'sent' if sms_ok.status == 'sent' else 'FAILED'})", request)
         log_audit(request.user, f"Librarian '{request.user.username}' created user '{username}'", request)
@@ -1067,9 +2299,15 @@ def create_user_view(request):
 # ----------------------------------------------------------------------
 def edit_user_view(request, user_id):
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
+    is_admin = request.user.role == 'admin'
+
     if request.method == 'POST':
+        new_phone = request.POST.get('phone', user_obj.phone).strip()
+        if not re.match(r'^0\d{9}$', new_phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return redirect('edit_user', user_id=user_obj.pk)
+        user_obj.phone = new_phone
         user_obj.email = request.POST.get('email', user_obj.email)
-        user_obj.phone = request.POST.get('phone', user_obj.phone)
         user_obj.first_name = request.POST.get('first_name', user_obj.first_name)
         user_obj.middle_name = request.POST.get('middle_name', user_obj.middle_name)
         user_obj.surname = request.POST.get('surname', user_obj.surname)
@@ -1078,6 +2316,29 @@ def edit_user_view(request, user_id):
         from accounts.models import Rank as RankModel
         user_obj.rank = RankModel.objects.filter(pk=rank_id).first() if rank_id else None
 
+        # Role editing — only admins can change roles
+        new_role = request.POST.get('role', '').strip()
+        if new_role and is_admin:
+            if new_role in dict(OLMSUser.ROLE_CHOICES).keys():
+                # Prevent admin from removing their own admin role (avoid lockout)
+                if user_obj.pk == request.user.pk and new_role != 'admin':
+                    messages.warning(request, 'You cannot change your own admin role.')
+                else:
+                    user_obj.role = new_role
+                    # Non-members don't have member_type
+                    if new_role != 'member':
+                        user_obj.member_type = None
+        elif new_role and not is_admin:
+            messages.warning(request, 'Only admins can change user roles.')
+
+        # Member type editing — admins and librarians can change
+        new_member_type = request.POST.get('member_type', '').strip() or None
+        if user_obj.role == 'member':
+            if new_member_type and new_member_type in dict(OLMSUser.MEMBER_TYPE_CHOICES).keys():
+                user_obj.member_type = new_member_type
+            elif not new_member_type:
+                user_obj.member_type = None
+
         new_reg_no = request.POST.get('registration_no', '').strip() or None
         # Update username for students if registration_no changed
         if user_obj.member_type == 'student' and new_reg_no and new_reg_no != user_obj.registration_no:
@@ -1085,11 +2346,18 @@ def edit_user_view(request, user_id):
         user_obj.registration_no = new_reg_no
 
         user_obj.save()
-        log_audit(request.user, f"Edited user '{user_obj.username}'", request)
+        log_audit(request.user, f"Edited user '{user_obj.username}' (Role: {user_obj.role}, MemberType: {user_obj.member_type or '—'})", request)
         messages.success(request, 'User updated successfully.')
         return redirect('user_list')
+
     from accounts.models import Rank as RankModel
-    return render(request, 'accounts/edit_user.html', {'user_obj': user_obj, 'ranks': RankModel.objects.all()})
+    return render(request, 'accounts/edit_user.html', {
+        'user_obj': user_obj,
+        'ranks': RankModel.objects.all(),
+        'is_admin': is_admin,
+        'role_choices': OLMSUser.ROLE_CHOICES,
+        'member_type_choices': OLMSUser.MEMBER_TYPE_CHOICES,
+    })
 
 
 @login_required
@@ -1131,6 +2399,8 @@ def reset_user_password_view(request, user_id):
     send_sms(user_obj.phone, f"MSICT OLMS: New password: {new_pw}. Change it on next login.")
     log_audit(request.user, f"Reset password for user '{user_obj.username}'", request)
     messages.success(request, f"Password reset to: {new_pw} — sent to user by SMS and email.")
+    if getattr(user_obj, 'is_guest', False) or user_obj.role == 'guest':
+        return redirect('guest_manage')
     return redirect('user_list')
 
 
@@ -1158,7 +2428,11 @@ def admin_dashboard_view(request):
     # Locked = inactive OR unapproved (pending registration can't login either)
     locked_users = _all_users.filter(Q(is_active=False) | Q(registration_status='pending')).distinct().count()
 
-    overdue_count = BorrowingTransaction.objects.filter(status='overdue').count()
+    overdue_count = BorrowingTransaction.objects.filter(
+        status='overdue'
+    ).exclude(
+        copy__copy_type='softcopy', copy__access_type='borrow'
+    ).count()
     currently_borrowed = BorrowingTransaction.objects.filter(status='borrowed').count()
     # Total active loans = borrowed + overdue (denominator for overdue rate)
     total_borrows = currently_borrowed + overdue_count
@@ -1281,6 +2555,89 @@ def admin_dashboard_view(request):
     total_fines_amount = sum(fine.amount for fine in Fine.objects.all())
     paid_fines_amount = sum(fine.amount_paid for fine in Fine.objects.all())
 
+    # Guest analytics
+    guest_sessions_qs = GuestSession.objects.all()
+    guest_total_visits = guest_sessions_qs.count()
+    guest_total_revenue = guest_sessions_qs.aggregate(
+        total=Sum('amount_paid')
+    )['total'] or 0
+    guest_avg_duration = guest_sessions_qs.aggregate(
+        avg=Sum('duration_hours')
+    )['avg'] or 0
+    if guest_total_visits > 0:
+        guest_avg_duration = round(float(guest_avg_duration) / guest_total_visits, 2)
+    else:
+        guest_avg_duration = 0
+    guest_active_sessions = guest_sessions_qs.filter(status__in=['active', 'renewed']).count()
+    guest_total_users = OLMSUser.objects.filter(is_guest=True).count()
+    guest_recent_sessions = guest_sessions_qs.select_related('user').order_by('-sign_in_time')[:10]
+
+    # Revenue / Financial summary
+    from reports.views import _revenue_summary
+    revenue = _revenue_summary()
+
+    # ── Chart data (JSON for Chart.js) ───────────────────────────────
+    import json as _json
+
+    # Security: login attempts last 7 days (success vs failed)
+    from accounts.models import LoginAttempt
+    login_chart_labels = []
+    login_success = []
+    login_failed = []
+    for i in range(6, -1, -1):
+        day = datetime.now() - timedelta(days=i)
+        day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        login_chart_labels.append(day.strftime('%a'))
+        login_success.append(LoginAttempt.objects.filter(
+            status='success', timestamp__gte=day_start, timestamp__lt=day_end
+        ).count())
+        login_failed.append(LoginAttempt.objects.filter(
+            status='failed', timestamp__gte=day_start, timestamp__lt=day_end
+        ).count())
+
+    security_chart_data = _json.dumps({
+        'labels': login_chart_labels,
+        'success': login_success,
+        'failed': login_failed,
+    })
+
+    # User role doughnut
+    role_chart_data = _json.dumps({
+        'labels': [r['role'].title() for r in users_by_role],
+        'values': [r['count'] for r in users_by_role],
+    })
+
+    # Revenue breakdown doughnut
+    revenue_chart_data = _json.dumps({
+        'labels': ['Overdue', 'Link Fee', 'Guest Fee', 'Damage', 'Loss'],
+        'values': [
+            float(revenue['overdue']),
+            float(revenue['link_fee']),
+            float(revenue['guest_fee']),
+            float(revenue.get('damage', 0)),
+            float(revenue['loss']),
+        ],
+    })
+
+    # Monthly borrowing bar chart
+    borrow_chart_data = _json.dumps({
+        'labels': list(monthly_borrows_with_pct.keys()),
+        'values': [v['count'] for v in monthly_borrows_with_pct.values()],
+    })
+
+    # Copy status distribution
+    copy_status_data = _json.dumps({
+        'labels': ['Available', 'Borrowed', 'Reserved', 'Lost', 'Damaged'],
+        'values': [
+            BookCopy.objects.filter(status='available').count(),
+            BookCopy.objects.filter(status='borrowed').count(),
+            BookCopy.objects.filter(status='reserved').count(),
+            BookCopy.objects.filter(status='lost').count(),
+            BookCopy.objects.filter(status='damaged').count(),
+        ],
+    })
+
     context = {
         'total_users': total_users,
         'active_users': active_users,
@@ -1306,6 +2663,24 @@ def admin_dashboard_view(request):
         'available_copies': available_copies,
         'total_fines_amount': total_fines_amount,
         'paid_fines_amount': paid_fines_amount,
+        'guest_total_visits': guest_total_visits,
+        'guest_total_revenue': guest_total_revenue,
+        'guest_avg_duration': guest_avg_duration,
+        'guest_active_sessions': guest_active_sessions,
+        'guest_total_users': guest_total_users,
+        'guest_recent_sessions': guest_recent_sessions,
+        'revenue_overdue': revenue['overdue'],
+        'revenue_link_fee': revenue['link_fee'],
+        'revenue_guest_fee': revenue['guest_fee'],
+        'revenue_damage': revenue.get('damage', 0),
+        'revenue_loss': revenue['loss'],
+        'revenue_total': revenue['total_revenue'],
+        'revenue_net': revenue['net_revenue'],
+        'security_chart_data': security_chart_data,
+        'role_chart_data': role_chart_data,
+        'revenue_chart_data': revenue_chart_data,
+        'borrow_chart_data': borrow_chart_data,
+        'copy_status_data': copy_status_data,
     }
     return render(request, 'accounts/admin_dashboard.html', context)
 
@@ -1384,6 +2759,12 @@ def suspicious_activity_view(request):
         .order_by('-failed_attempts', '-created_at')
     )
 
+    blocked_ips = set(BlockedIP.objects.values_list('ip_address', flat=True))
+    for ip in suspicious_ips:
+        ip['is_blocked'] = ip['ip_address'] in blocked_ips
+
+    all_blocked_ips = BlockedIP.objects.select_related('blocked_by').order_by('-blocked_at')[:50]
+
     return render(request, 'accounts/suspicious_activity.html', {
         'failed_logins': enriched_logins,
         'suspicious_ips': suspicious_ips,
@@ -1392,6 +2773,7 @@ def suspicious_activity_view(request):
         'known_usernames': known_usernames,
         'security_alerts': security_alerts,
         'users_with_failed_attempts': users_with_failed_attempts,
+        'all_blocked_ips': all_blocked_ips,
     })
 
 
@@ -1426,6 +2808,7 @@ def suspended_members_view(request):
 
 @login_required
 @admin_required
+@require_POST
 # ----------------------------------------------------------------------
 # View ya Fungua Akaunti — Msimamizi anafungua akaunti iliyozuiwa
 # ----------------------------------------------------------------------
@@ -1591,23 +2974,112 @@ def system_appearance_view(request):
 # View ya Mipangilio ya Mfumo — Msimamizi anabadilisha mipangilio
 # ----------------------------------------------------------------------
 def system_preferences_view(request):
-    # Ensure all core preferences exist with defaults
+    # Full set of system preference keys with defaults, units, and descriptions
     DEFAULTS = [
-        ('LOAN_PERIOD_DAYS',          '7',   'Loan period for all books (days)'),
-        ('MAX_RENEWALS',              '2',   'Maximum number of renewals per borrow'),
-        ('MAX_COPIES_PER_BORROW',     '3',   'Maximum active borrows per member'),
-        ('FINE_PER_DAY',              '1000', 'Overdue fine per day (TZS)'),
-        ('RESERVATION_EXPIRY_DAYS',   '7',   'Days before a reservation expires'),
+        # ── Borrowing ─────────────────────────────────────────────────────────
+        ('LOAN_PERIOD_DAYS',           '7',     'integer', 'How long members can borrow a book (days)'),
+        ('MAX_COPIES_PER_BORROW',      '3',     'integer', 'Maximum books a member can borrow at once'),
+        # ── Renewals ──────────────────────────────────────────────────────────
+        ('MAX_RENEWALS',               '2',     'integer', 'Maximum number of renewals allowed per borrowing'),
+        ('RENEWAL_WINDOW_DAYS',        '2',     'integer', 'Days before due date that a renewal is allowed'),
+        # ── Fines ─────────────────────────────────────────────────────────────
+        ('FINE_PER_DAY',               '1000',  'decimal', 'Overdue fine per day (TZS)'),
+        # ── Reservations ──────────────────────────────────────────────────────
+        ('RESERVATION_EXPIRY_DAYS',    '7',     'integer', 'Days before an unconfirmed reservation expires'),
+        # ── Guest Sessions ────────────────────────────────────────────────────
+        ('GUEST_MAX_HOURS',            '12',    'integer', 'Maximum hours per guest session'),
+        ('GUEST_HOURLY_RATE',          '500',   'decimal', 'Guest session fee per hour (TZS)'),
+        ('SOFTCOPY_PREPAID_FEE',       '0',     'decimal', 'Default prepaid fee for softcopy access (0 = free)'),
+        # ── Security ──────────────────────────────────────────────────────────
+        ('ENABLE_AUTO_LOCKOUT',        '1',     'boolean', 'Lock account after max failed login attempts (1=yes, 0=no)'),
+        ('MAX_LOGIN_ATTEMPTS',         '5',     'integer', 'Failed login attempts before account lockout'),
+        ('OTP_VALIDITY_MINUTES',       '10',    'minutes', 'OTP validity period (minutes)'),
+        # ── Sessions & Passwords ──────────────────────────────────────────────
+        ('SESSION_TIMEOUT_MINUTES',    '30',    'minutes', 'Inactivity timeout before session expires (minutes)'),
+        ('PASSWORD_EXPIRY_DAYS',       '90',    'days',    'Days before password change is prompted'),
+        # ── Notifications ─────────────────────────────────────────────────────
+        ('NEW_ARRIVAL_NOTIFY_ENABLED', '1',     'boolean', 'Send automatic new arrival notifications (1=yes, 0=no)'),
+        ('NEW_ARRIVAL_NOTIFY_CHANNEL', 'sms',   'text',    'Notification channel for new arrivals: sms or email'),
     ]
-    for key, value, description in DEFAULTS:
-        SystemPreference.objects.get_or_create(key=key, defaults={'value': value, 'description': description})
+
+    for key, value, unit, description in DEFAULTS:
+        pref, created = SystemPreference.objects.get_or_create(
+            key=key,
+            defaults={'value': value, 'unit': unit, 'description': description}
+        )
+        if not created:
+            update_fields = []
+            if not pref.description:
+                pref.description = description
+                update_fields.append('description')
+            if not pref.unit:
+                pref.unit = unit
+                update_fields.append('unit')
+            if update_fields:
+                pref.save(update_fields=update_fields)
 
     if request.method == 'POST':
-        for post_key, value in request.POST.items():
-            if post_key.startswith('pref_'):
-                pref_key = post_key[5:]
-                SystemPreference.objects.filter(key=pref_key).update(value=value.strip())
-        messages.success(request, 'Preferences updated successfully.')
+        changed = []
+        for post_key, raw_value in request.POST.items():
+            if not post_key.startswith('pref_'):
+                continue
+            pref_key = post_key[5:]
+            new_value = raw_value.strip()
+            try:
+                pref_obj = SystemPreference.objects.get(key=pref_key)
+            except SystemPreference.DoesNotExist:
+                continue
+            if pref_obj.value != new_value:
+                old_value = pref_obj.value
+                pref_obj.value = new_value
+                pref_obj.updated_by = request.user
+                pref_obj.save(update_fields=['value', 'updated_by', 'updated_at'])
+                changed.append(f"{pref_key}: {old_value} → {new_value}")
+                log_audit(request.user, f"System preference changed — {pref_key}: '{old_value}' → '{new_value}'", request)
+        if changed:
+            messages.success(request, f'Saved {len(changed)} change(s): ' + ', '.join(changed[:3]) + ('…' if len(changed) > 3 else ''))
+        else:
+            messages.info(request, 'No changes detected.')
         return redirect('system_preferences')
-    prefs = SystemPreference.objects.exclude(key__startswith='APP_').order_by('key')
-    return render(request, 'accounts/system_preferences.html', {'prefs': prefs})
+
+    prefs = {p.key: p for p in SystemPreference.objects.exclude(key__startswith='APP_')}
+    return render(request, 'accounts/system_preferences.html', {
+        'prefs': prefs,
+        'defaults': DEFAULTS,
+    })
+
+
+@login_required
+@admin_required
+def block_ip_view(request):
+    if request.method == 'POST':
+        ip_address = request.POST.get('ip_address', '').strip()
+        reason = request.POST.get('reason', '').strip()
+        if ip_address:
+            obj, created = BlockedIP.objects.get_or_create(
+                ip_address=ip_address,
+                defaults={'blocked_by': request.user, 'reason': reason or 'Blocked via suspicious activity page'},
+            )
+            if not created:
+                messages.warning(request, f'IP {ip_address} is already blocked.')
+            else:
+                log_audit(request.user, f'Blocked IP {ip_address}: {reason}', request)
+                messages.success(request, f'IP {ip_address} blocked successfully.')
+        else:
+            messages.error(request, 'Invalid IP address.')
+    return redirect('suspicious_activity')
+
+
+@login_required
+@admin_required
+@require_POST
+def unblock_ip_view(request, ip_id):
+    try:
+        blocked = BlockedIP.objects.get(pk=ip_id)
+        ip = blocked.ip_address
+        blocked.delete()
+        log_audit(request.user, f'Unblocked IP {ip}', request)
+        messages.success(request, f'IP {ip} unblocked.')
+    except BlockedIP.DoesNotExist:
+        messages.error(request, 'IP not found in blocked list.')
+    return redirect('suspicious_activity')

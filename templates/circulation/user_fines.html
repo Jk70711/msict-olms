@@ -148,8 +148,16 @@
               <a href="{% url 'record_fine_payment' fine.pk %}" class="btn btn-sm btn-success">
                 <i class="bi bi-cash-stack"></i> Pay
               </a>
+              {% if fine.amount_paid > 0 %}
+              <a href="{% url 'fine_receipt_pdf' fine.pk %}" class="btn btn-sm btn-outline-secondary ms-1" title="Print Receipt" target="_blank">
+                <i class="bi bi-receipt"></i>
+              </a>
+              {% endif %}
               {% else %}
               <span class="text-success"><i class="bi bi-check-circle-fill"></i> Done</span>
+              <a href="{% url 'fine_receipt_pdf' fine.pk %}" class="btn btn-sm btn-outline-primary ms-1" title="Print Receipt" target="_blank">
+                <i class="bi bi-printer"></i>
+              </a>
               {% endif %}
             </td>
           </tr>

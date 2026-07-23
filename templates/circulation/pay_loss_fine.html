@@ -57,7 +57,7 @@
       <div class="card mb-3">
         <div class="card-body">
           <h6 class="fw-bold mb-3">Payment Method</h6>
-          <p class="text-muted small">Select your preferred payment method to record your payment request.</p>
+          <p class="text-muted small">Select your preferred payment method to complete your payment.</p>
 
           <div class="row g-2 mb-3">
             <div class="col-4">
@@ -111,7 +111,7 @@
                 <div class="mb-3">
                   <label class="form-label">Phone Number used to pay</label>
                   <input type="tel" name="reference" class="form-control"
-                         id="mm-phone" placeholder="e.g., 255712345678">
+                         id="mm-phone" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678">
                 </div>
               </div>
 
@@ -170,7 +170,7 @@
               </div>
 
               <button type="submit" class="btn btn-primary w-100 btn-lg" id="confirm-payment-btn">
-                <i class="bi bi-check-circle"></i> Submit Loss Fine Payment Request
+                <i class="bi bi-check-circle"></i> Confirm Payment
               </button>
             </div>
           </div>
@@ -183,11 +183,11 @@
         <h6 class="fw-bold mb-2"><i class="bi bi-info-circle"></i> Payment Instructions</h6>
         <ol class="small mb-0">
           <li>Select your preferred payment method above</li>
-          <li>Enter the amount you want to pay</li>
+          <li>Enter the amount you want to pay (up to remaining balance)</li>
           <li>Fill in the required payment details</li>
           <li>Click "Confirm Payment" to complete the transaction</li>
-          <li>Your payment will be automatically recorded in the system</li>
-          <li>Bring proof of payment to the librarian for verification</li>
+          <li>Your payment will be processed and recorded in the system instantly</li>
+          <li>A printable receipt will be generated after successful payment</li>
         </ol>
       </div>
     </div>

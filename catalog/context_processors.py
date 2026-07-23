@@ -1,5 +1,6 @@
 def security_badges(request):
-    """Pass security counts for admin sidebar badges (available on every page)."""
+    """Pass accurate counts for sidebar badges (available on every page).
+    Each count matches the actual query used by the corresponding list view."""
     security_alerts_count = 0
     suspicious_users_count = 0
     locked_accounts_count = 0
@@ -12,56 +13,93 @@ def security_badges(request):
     member_unpaid_fines = 0
     try:
         if request.user.is_authenticated:
-            from circulation.models import Notification, BorrowRequest, Reservation, BorrowingTransaction, Fine
-            from accounts.models import OLMSUser
-            from django.db.models import Q
+            from circulation.models import (
+                Notification, BorrowRequest, Reservation,
+                BorrowingTransaction, Fine, LossReport,
+            )
+            from accounts.models import OLMSUser, LoginAttempt
+            from django.db.models import Q, Count, Sum
             from datetime import timedelta
             from django.utils import timezone
+            from django.db.models import F
 
-            # Admin-specific counts
+            # ── Admin-specific counts (match actual page queries) ──
             if request.user.role == 'admin':
+                # Security Alerts: match security_alerts_view (ALL is_security_alert=True)
                 security_alerts_count = Notification.objects.filter(
                     is_security_alert=True
-                ).exclude(message__icontains='OTP').exclude(
-                    message__icontains='password reset'
                 ).count()
+
+                # Suspicious/Suspended Members: match suspended_members_view
+                # (failed_attempts >= 3, role='member')
                 suspicious_users_count = OLMSUser.objects.filter(
-                    failed_attempts__gte=1
-                ).exclude(role='admin').count()
-                locked_accounts_count = OLMSUser.objects.exclude(role='admin').filter(
+                    failed_attempts__gte=3, role='member'
+                ).count()
+
+                # Locked Accounts: match user_list?status=locked
+                # (non-admin, inactive OR pending registration)
+                locked_accounts_count = OLMSUser.objects.exclude(
+                    role='admin'
+                ).filter(
                     Q(is_active=False) | Q(registration_status='pending')
                 ).distinct().count()
-                # Suspicious IPs in last 1 hour with >=5 fails
-                from accounts.models import LoginAttempt
+
+                # Suspicious IPs: last 1h with >=5 failed attempts (match suspicious_activity_view)
                 window_1h = timezone.now() - timedelta(hours=1)
                 suspicious_ips_count = LoginAttempt.objects.filter(
                     status='failed', timestamp__gte=window_1h
                 ).values('ip_address').annotate(
-                    total=Count('attempt_count')
+                    total=Sum('attempt_count')
                 ).filter(total__gte=5).count()
-                # Recent failed logins in last 1 hour (individual attempts)
+
+                # Recent failed logins: match suspicious_activity_view (last 24h)
+                window_24h = timezone.now() - timedelta(days=1)
                 recent_failed_logins_count = LoginAttempt.objects.filter(
-                    status='failed', timestamp__gte=window_1h
+                    status='failed', timestamp__gte=window_24h
                 ).count()
+
+                # Pending Registrations: match public_registrations_view
+                # (role='member', registration_status='pending')
                 pending_registrations_count = OLMSUser.objects.filter(
-                    registration_status='pending'
+                    role='member', registration_status='pending'
                 ).count()
 
-            # Librarian-specific counts
+            # ── Librarian/Admin counts ──
             if request.user.role in ('admin', 'librarian'):
-                pending_requests_count = BorrowRequest.objects.filter(status='pending').count()
-
-            # Member-specific counts
-            if request.user.role == 'member':
-                member_active_borrowings = BorrowingTransaction.objects.filter(
-                    user=request.user, status__in=['borrowed', 'overdue']
+                # Pending Borrow Requests: match all_requests_view with status='pending'
+                pending_requests_count = BorrowRequest.objects.filter(
+                    status='pending'
                 ).count()
+
+            # ── Member-specific counts (match actual page queries) ──
+            if request.user.role == 'member':
+                # Active Borrowings: match member_msict_borrowings_view
+                # (borrowed/overdue/lost, exclude expired special softcopies)
+                now = timezone.now()
+                member_active_borrowings = BorrowingTransaction.objects.filter(
+                    user=request.user,
+                    status__in=['borrowed', 'overdue', 'lost'],
+                    copy__book__isnull=False,
+                ).exclude(
+                    copy__copy_type='softcopy',
+                    copy__access_type='borrow',
+                    due_date__lt=now,
+                ).count()
+
+                # Reservations: match my_reservations_view
                 member_reservations = Reservation.objects.filter(
                     user=request.user, status__in=['pending', 'notified']
                 ).count()
+
+                # Unpaid Fines: match my_fines_view (exclude loss fines)
+                loss_fine_ids = set(
+                    LossReport.objects.filter(
+                        user=request.user, loss_fine__isnull=False
+                    ).values_list('loss_fine_id', flat=True)
+                )
                 member_unpaid_fines = Fine.objects.filter(
                     user=request.user, paid=False
-                ).count()
+                ).exclude(id__in=loss_fine_ids).count()
     except Exception:
         pass
     return {
@@ -79,12 +117,31 @@ def security_badges(request):
 
 
 def overdue_counter(request):
-    """Pass overdue count to templates for sidebar badge."""
+    """Pass overdue count to templates for sidebar badge.
+    Matches overdue_list_view: status='overdue' with unpaid fine or no fine,
+    excluding special softcopies (they auto-expire, never overdue)."""
     count = 0
     try:
         if request.user.is_authenticated and request.user.role in ('admin', 'librarian'):
-            from circulation.models import BorrowingTransaction
-            count = BorrowingTransaction.objects.filter(status='overdue').count()
+            from circulation.models import BorrowingTransaction, Fine
+            from django.db.models import Exists, OuterRef, F
+            has_unpaid_fine = Exists(
+                Fine.objects.filter(
+                    transaction=OuterRef('pk'), paid=False,
+                    amount__gt=F('amount_paid')
+                )
+            )
+            has_no_fine = ~Exists(
+                Fine.objects.filter(transaction=OuterRef('pk'))
+            )
+            count = BorrowingTransaction.objects.filter(
+                status='overdue'
+            ).exclude(
+                copy__copy_type='softcopy',
+                copy__access_type='borrow'
+            ).filter(
+                has_unpaid_fine | has_no_fine
+            ).count()
     except Exception:
         pass
     return {'overdue_count': count}

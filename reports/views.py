@@ -1,4 +1,5 @@
 import io
+import re
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
@@ -344,6 +345,185 @@ def report_fines_view(request):
     })
 
 
+def _parse_custom_period(raw):
+    """Parse natural-language period like '6 days', '3 months', '9 years' into a since datetime.
+    Uses .lower() so input is case-insensitive. Returns None if unparseable."""
+    s = raw.strip().lower()
+    m = re.match(r'(\d+)\s*(day|days|week|weeks|month|months|year|years)', s)
+    if not m:
+        return None, None
+    n = int(m.group(1))
+    unit = m.group(2)
+    if unit in ('day', 'days'):
+        delta = timedelta(days=n)
+        label = f'{n} day{"s" if n != 1 else ""}'
+    elif unit in ('week', 'weeks'):
+        delta = timedelta(weeks=n)
+        label = f'{n} week{"s" if n != 1 else ""}'
+    elif unit in ('month', 'months'):
+        delta = timedelta(days=n * 30)
+        label = f'{n} month{"s" if n != 1 else ""}'
+    elif unit in ('year', 'years'):
+        delta = timedelta(days=n * 365)
+        label = f'{n} year{"s" if n != 1 else ""}'
+    else:
+        return None, None
+    return timezone.now() - delta, label
+
+
+ALL_ACCOUNT_TYPES = ['overdue', 'link_fee', 'guest_fee', 'damage', 'loss']
+
+
+def _revenue_summary(since=None, account_types=None):
+    """Compute revenue aggregates from RevenueTransaction. Returns a dict.
+    account_types: list of account_type values to include; None = all."""
+    from circulation.models import RevenueTransaction
+    from decimal import Decimal
+    qs = RevenueTransaction.objects.all()
+    if since:
+        qs = qs.filter(recorded_at__gte=since)
+    if account_types:
+        qs = qs.filter(account_type__in=account_types)
+
+    def _sum(**kw):
+        return qs.filter(**kw).aggregate(t=Sum('amount'))['t'] or Decimal('0')
+
+    overdue    = _sum(account_type='overdue')
+    link_fee   = _sum(account_type='link_fee')
+    guest_fee  = _sum(account_type='guest_fee')
+    loss       = _sum(account_type='loss')  # usually negative (loss/refund)
+    damage     = _sum(account_type='damage')
+
+    total_revenue = overdue + link_fee + guest_fee + damage  # positive income streams
+    total_loss = loss
+    net_revenue = total_revenue + total_loss
+    return {
+        'overdue': overdue,
+        'link_fee': link_fee,
+        'guest_fee': guest_fee,
+        'loss': total_loss,
+        'damage': damage,
+        'total_revenue': total_revenue,
+        'net_revenue': net_revenue,
+        'qs': qs,
+    }
+
+
+@login_required
+@librarian_required
+def report_revenue_view(request):
+    """Revenue accounting overview — overdue, link, guest fees, loss and net revenue."""
+    period = request.GET.get('period', 'all')
+    custom_input = request.GET.get('custom', '').strip()
+    account_types = request.GET.getlist('account_type')  # empty list = all
+
+    since = None
+    period_label = 'All Time'
+    custom_error = None
+
+    if custom_input:
+        since, lbl = _parse_custom_period(custom_input)
+        if since is None:
+            custom_error = f'Could not parse "{custom_input}". Try e.g. "6 days", "3 months", "9 years".'
+        else:
+            period_label = f'Last {lbl}'
+            period = 'custom'
+    elif period != 'all' and period.isdigit():
+        since = timezone.now() - timedelta(days=int(period))
+        period_label = f'Last {period} days'
+
+    if custom_error:
+        messages.error(request, custom_error)
+
+    active_types = account_types if account_types else None
+    data = _revenue_summary(since=since, account_types=active_types)
+    qs = data['qs'].select_related('user', 'recorded_by').order_by('-recorded_at')
+
+    total_income = data['total_revenue'] or 1
+    def _pct(v):
+        try:
+            return int((float(v) / float(total_income)) * 100)
+        except Exception:
+            return 0
+
+    breakdown = [
+        {'label': 'Overdue Fees',  'amount': data['overdue'],   'pct': _pct(data['overdue']),   'color': '#f59e0b'},
+        {'label': 'Link Fees',     'amount': data['link_fee'],  'pct': _pct(data['link_fee']),  'color': '#3b82f6'},
+        {'label': 'Guest Fees',    'amount': data['guest_fee'], 'pct': _pct(data['guest_fee']), 'color': '#10b981'},
+        {'label': 'Damage Fines',  'amount': data['damage'],    'pct': _pct(data['damage']),    'color': '#ea580c'},
+    ]
+
+    return render(request, 'reports/report_revenue.html', {
+        'overdue':        data['overdue'],
+        'link_fee':       data['link_fee'],
+        'guest_fee':      data['guest_fee'],
+        'damage':         data['damage'],
+        'loss':           data['loss'],
+        'total_revenue':  data['total_revenue'],
+        'net_revenue':    data['net_revenue'],
+        'breakdown':      breakdown,
+        'transactions':   qs[:100],
+        'txn_count':      qs.count(),
+        'period':         period,
+        'period_label':   period_label,
+        'custom_input':   custom_input,
+        'account_types':  account_types,
+    })
+
+
+@login_required
+@librarian_required
+def export_revenue_pdf_view(request):
+    """Export the revenue accounting report to PDF — respects custom period and account_type filters."""
+    period = request.GET.get('period', 'all')
+    custom_input = request.GET.get('custom', '').strip()
+    account_types = request.GET.getlist('account_type')
+
+    since = None
+    period_label = 'All Time'
+
+    if custom_input:
+        since, lbl = _parse_custom_period(custom_input)
+        if since is not None:
+            period_label = f'Last {lbl}'
+    elif period != 'all' and period.isdigit():
+        since = timezone.now() - timedelta(days=int(period))
+        period_label = f'Last {period} days'
+
+    active_types = account_types if account_types else None
+    data = _revenue_summary(since=since, account_types=active_types)
+    qs = data['qs'].select_related('user').order_by('-recorded_at')
+
+    type_label = ', '.join(account_types) if account_types else 'All Types'
+    rows = [
+        [i + 1,
+         t.recorded_at.strftime('%d %b %Y %H:%M'),
+         (t.user.get_full_name() if t.user else 'System'),
+         t.get_account_type_display(),
+         f'TZS {t.amount:,.2f}',
+         (t.description or '')[:60]]
+        for i, t in enumerate(qs[:300])
+    ]
+
+    return _render_report_pdf(
+        filename=f'revenue_report_{period}.pdf',
+        report_title='Revenue Accounting Report',
+        subtitle=f'{period_label}  |  {type_label}  |  {timezone.now().strftime("%d %b %Y")}',
+        summary_pairs=[
+            ('Overdue Fees',  f'TZS {data["overdue"]:,.2f}'),
+            ('Link Fees',     f'TZS {data["link_fee"]:,.2f}'),
+            ('Guest Fees',    f'TZS {data["guest_fee"]:,.2f}'),
+            ('Damage Fines',  f'TZS {data["damage"]:,.2f}'),
+            ('Total Revenue', f'TZS {data["total_revenue"]:,.2f}'),
+            ('Total Loss',    f'TZS {data["loss"]:,.2f}'),
+            ('Net Revenue',   f'TZS {data["net_revenue"]:,.2f}'),
+        ],
+        table_headers=['#', 'Date', 'User', 'Account Type', 'Amount', 'Description'],
+        table_rows=rows,
+        landscape=True,
+    )
+
+
 @login_required
 @librarian_required
 def export_members_csv_view(request):
@@ -611,6 +791,29 @@ def export_fines_pdf_view(request):
     )
 
 
+def _validate_select_sql(sql):
+    """Validate that SQL is a safe read-only SELECT query.
+    Returns (is_valid, error_message)."""
+    if not sql:
+        return False, 'Empty query.'
+    sql_lower = sql.lower().strip()
+    if not sql_lower.startswith('select'):
+        return False, 'Only SELECT queries are allowed.'
+    # Block dangerous keywords that could modify data
+    dangerous = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate',
+                 'create', 'grant', 'revoke', 'exec', 'execute', 'merge',
+                 'into', 'call']
+    # Check for semicolons (statement injection)
+    if ';' in sql.rstrip(';').strip():
+        return False, 'Multiple statements are not allowed.'
+    # Check for dangerous keywords as whole words
+    import re as _re
+    for kw in dangerous:
+        if _re.search(r'\b' + kw + r'\b', sql_lower):
+            return False, f'Keyword "{kw.upper()}" is not allowed in SELECT queries.'
+    return True, None
+
+
 @login_required
 @admin_required
 def sql_report_view(request):
@@ -620,7 +823,8 @@ def sql_report_view(request):
     sql = ''
     if request.method == 'POST':
         sql = request.POST.get('sql', '').strip()
-        if sql.lower().startswith('select'):
+        is_valid, err_msg = _validate_select_sql(sql)
+        if is_valid:
             try:
                 from django.db import connection
                 with connection.cursor() as cursor:
@@ -630,7 +834,7 @@ def sql_report_view(request):
             except Exception as e:
                 error = str(e)
         else:
-            error = 'Only SELECT queries are allowed.'
+            error = err_msg
     return render(request, 'reports/sql_report.html', {
         'result': result, 'columns': columns, 'error': error, 'sql': sql
     })
@@ -642,8 +846,9 @@ def export_sql_pdf_view(request):
     """Export SQL query results to PDF"""
     from django.db import connection
     sql = request.GET.get('sql', '').strip()
-    if not sql or not sql.lower().startswith('select'):
-        return HttpResponse('Invalid SQL query', status=400)
+    is_valid, err_msg = _validate_select_sql(sql)
+    if not is_valid:
+        return HttpResponse(f'Invalid SQL query: {err_msg}', status=400)
 
     try:
         with connection.cursor() as cursor:
@@ -677,8 +882,9 @@ def export_sql_csv_view(request):
     """Export SQL query results to CSV"""
     from django.db import connection
     sql = request.GET.get('sql', '').strip()
-    if not sql or not sql.lower().startswith('select'):
-        return HttpResponse('Invalid SQL query', status=400)
+    is_valid, err_msg = _validate_select_sql(sql)
+    if not is_valid:
+        return HttpResponse(f'Invalid SQL query: {err_msg}', status=400)
 
     try:
         with connection.cursor() as cursor:

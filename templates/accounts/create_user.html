@@ -65,7 +65,7 @@
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Phone <span class="text-danger">*</span></label>
-            <input type="text" name="phone" class="form-control" placeholder="255XXXXXXXXX" required>
+            <input type="tel" name="phone" class="form-control" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678" required>
           </div>
           <div class="col-md-4" id="regNoGroup">
             <label class="form-label">Registration No <small class="text-muted">(students)</small></label>

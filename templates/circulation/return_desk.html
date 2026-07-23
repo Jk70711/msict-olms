@@ -24,9 +24,12 @@
                        class="form-control form-control-lg"
                        placeholder="Scan or type e.g. MSICT/000001"
                        autofocus>
+                <button type="button" class="btn btn-outline-primary" id="btnStartCamera" title="Scan with camera">
+                  <i class="bi bi-camera-video"></i>
+                </button>
               </div>
               <div class="form-text text-muted">
-                <i class="bi bi-info-circle"></i> Accepts: Barcode scan OR Accession No (e.g. MSICT/000001)
+                <i class="bi bi-info-circle"></i> Accepts: Barcode scan OR Accession No (e.g. MSICT/000001). Click <i class="bi bi-camera-video"></i> to use camera.
               </div>
             </div>
             <div class="d-grid">
@@ -123,14 +126,61 @@
             </table>
           </div>
           <div class="col-md-4 text-center mt-3 mt-md-0">
-            <form method="post"
-                  onsubmit="return confirm('Confirm return of \'{{ lookup_tx.copy.book.title|truncatechars:35 }}\' for {{ lookup_tx.user.get_full_name }}?');">
+
+            {# ── Normal Return Button ── #}
+            <form method="post" class="mb-2"
+                  onsubmit="return confirm('Confirm NORMAL return of this book?');">
               {% csrf_token %}
               <input type="hidden" name="copy_pk" value="{{ lookup_tx.copy.pk }}">
               <button type="submit" class="btn btn-success btn-lg fw-semibold w-100">
-                <i class="bi bi-check-circle-fill"></i><br>Confirm Return
+                <i class="bi bi-check-circle-fill"></i><br>Normal Return
               </button>
             </form>
+
+            <div class="text-muted small my-2">— OR —</div>
+
+            {# ── Damaged Return Button (toggles damage form) ── #}
+            <button type="button" class="btn btn-outline-danger fw-semibold w-100"
+                    onclick="toggleDamageSection()">
+              <i class="bi bi-exclamation-triangle-fill"></i> Mark as Damaged
+            </button>
+
+            {# ── Damage Form (hidden by default) ── #}
+            <div id="damageSection-single" style="display:none;" class="mt-2 text-start">
+              <form method="post"
+                    onsubmit="return confirm('Confirm: this book is DAMAGED. A damage fine will be raised and payment must be completed before the return is finalized.');">
+                {% csrf_token %}
+                <input type="hidden" name="copy_pk" value="{{ lookup_tx.copy.pk }}">
+                <input type="hidden" name="damage_action" value="create_damage">
+                <input type="hidden" name="barcode" value="{{ barcode_input }}">
+                <div class="mb-2">
+                  <label class="form-label small fw-bold">Damage Type <span class="text-danger">*</span></label>
+                  <select name="damage_type" class="form-select form-select-sm" required>
+                    <option value="">-- Select Damage Type --</option>
+                    <option value="pages_torn">Pages Torn</option>
+                    <option value="cover_damaged">Cover Damaged</option>
+                    <option value="water_damage">Water Damage</option>
+                    <option value="spine_broken">Spine Broken</option>
+                    <option value="writing_marking">Writing / Marking</option>
+                    <option value="missing_pages">Missing Pages</option>
+                    <option value="other">Other</option>
+                  </select>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label small fw-bold">Description</label>
+                  <textarea name="damage_description" class="form-control form-control-sm"
+                            placeholder="Describe the damage..." rows="2"></textarea>
+                </div>
+                <div class="small text-muted mb-2">
+                  Damage fine: TZS {{ lookup_tx.copy.book.lost_fine|floatformat:0|default:"0" }}<br>
+                  <i class="bi bi-info-circle"></i> Payment must be completed before return is finalized.
+                </div>
+                <button type="submit" class="btn btn-danger btn-sm fw-semibold w-100">
+                  <i class="bi bi-exclamation-triangle-fill"></i> Submit Damage Report
+                </button>
+              </form>
+            </div>
+
             <div class="text-muted small mt-2">
               <i class="bi bi-info-circle"></i>
               {% if lookup_tx.status == 'overdue' %}
@@ -199,7 +249,9 @@
                   <span class="badge bg-primary"><i class="bi bi-file-earmark-pdf"></i> Soft</span>
                   {% endif %}
                 </td>
-                <td><code class="small">{{ tx.copy.accession_no }}</code></td>
+                <td>
+                  {% if tx.copy.copy_type == 'hardcopy' %}<code class="small">{{ tx.copy.accession_no }}</code>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
                 <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y" }}</small></td>
                 <td><small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% else %}text-muted{% endif %}">{{ tx.due_date|date:"d M Y H:i" }}</small></td>
                 <td>
@@ -233,6 +285,58 @@
                         <i class="bi bi-exclamation-triangle"></i> Blocked
                       </button>
                       {% elif tid == tx.id and fine_info.remaining == 0 %}
+                      <div class="d-flex flex-column align-items-center gap-1">
+                        <label class="form-check-label small text-danger">
+                          <input class="form-check-input" type="checkbox" name="mark_damaged" value="1"
+                                 onchange="toggleDamageForm('damageFields-{{ tx.pk }}', this.checked)">
+                          Damaged?
+                        </label>
+                        <div id="damageFields-{{ tx.pk }}" style="display:none;" class="text-start">
+                          <select name="damage_type" class="form-select form-select-sm mb-1" style="width:140px;">
+                            <option value="">-- Type --</option>
+                            <option value="pages_torn">Pages Torn</option>
+                            <option value="cover_damaged">Cover Damaged</option>
+                            <option value="water_damage">Water Damage</option>
+                            <option value="spine_broken">Spine Broken</option>
+                            <option value="writing_marking">Writing / Marking</option>
+                            <option value="missing_pages">Missing Pages</option>
+                            <option value="other">Other</option>
+                          </select>
+                          <input type="text" name="damage_description" class="form-control form-control-sm"
+                                 placeholder="Describe..." style="width:140px;">
+                        </div>
+                        <form method="post" class="d-inline"
+                              onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
+                          {% csrf_token %}
+                          <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                          <input type="hidden" name="return_card_no" value="{{ card_input }}">
+                          <button type="submit" class="btn btn-sm btn-success fw-semibold">
+                            <i class="bi bi-check-circle"></i> Return
+                          </button>
+                        </form>
+                      </div>
+                      {% endif %}
+                    {% empty %}
+                    <div class="d-flex flex-column align-items-center gap-1">
+                      <label class="form-check-label small text-danger">
+                        <input class="form-check-input" type="checkbox" name="mark_damaged" value="1"
+                               onchange="toggleDamageForm('damageFields-{{ tx.pk }}', this.checked)">
+                        Damaged?
+                      </label>
+                      <div id="damageFields-{{ tx.pk }}" style="display:none;" class="text-start">
+                        <select name="damage_type" class="form-select form-select-sm mb-1" style="width:140px;">
+                          <option value="">-- Type --</option>
+                          <option value="pages_torn">Pages Torn</option>
+                          <option value="cover_damaged">Cover Damaged</option>
+                          <option value="water_damage">Water Damage</option>
+                          <option value="spine_broken">Spine Broken</option>
+                          <option value="writing_marking">Writing / Marking</option>
+                          <option value="missing_pages">Missing Pages</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input type="text" name="damage_description" class="form-control form-control-sm"
+                               placeholder="Describe..." style="width:140px;">
+                      </div>
                       <form method="post" class="d-inline"
                             onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
                         {% csrf_token %}
@@ -242,28 +346,39 @@
                           <i class="bi bi-check-circle"></i> Return
                         </button>
                       </form>
-                      {% endif %}
-                    {% empty %}
-                    <form method="post" class="d-inline"
-                          onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
-                      {% csrf_token %}
-                      <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
-                      <input type="hidden" name="return_card_no" value="{{ card_input }}">
-                      <button type="submit" class="btn btn-sm btn-success fw-semibold">
-                        <i class="bi bi-check-circle"></i> Return
-                      </button>
-                    </form>
+                    </div>
                     {% endfor %}
                   {% else %}
-                    <form method="post" class="d-inline"
-                          onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
-                      {% csrf_token %}
-                      <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
-                      <input type="hidden" name="return_card_no" value="{{ card_input }}">
-                      <button type="submit" class="btn btn-sm btn-success fw-semibold">
-                        <i class="bi bi-check-circle"></i> Return
-                      </button>
-                    </form>
+                    <div class="d-flex flex-column align-items-center gap-1">
+                      <label class="form-check-label small text-danger">
+                        <input class="form-check-input" type="checkbox" name="mark_damaged" value="1"
+                               onchange="toggleDamageForm('damageFields-{{ tx.pk }}', this.checked)">
+                        Damaged?
+                      </label>
+                      <div id="damageFields-{{ tx.pk }}" style="display:none;" class="text-start">
+                        <select name="damage_type" class="form-select form-select-sm mb-1" style="width:140px;">
+                          <option value="">-- Type --</option>
+                          <option value="pages_torn">Pages Torn</option>
+                          <option value="cover_damaged">Cover Damaged</option>
+                          <option value="water_damage">Water Damage</option>
+                          <option value="spine_broken">Spine Broken</option>
+                          <option value="writing_marking">Writing / Marking</option>
+                          <option value="missing_pages">Missing Pages</option>
+                          <option value="other">Other</option>
+                        </select>
+                        <input type="text" name="damage_description" class="form-control form-control-sm"
+                               placeholder="Describe..." style="width:140px;">
+                      </div>
+                      <form method="post" class="d-inline"
+                            onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                        <input type="hidden" name="return_card_no" value="{{ card_input }}">
+                        <button type="submit" class="btn btn-sm btn-success fw-semibold">
+                          <i class="bi bi-check-circle"></i> Return
+                        </button>
+                      </form>
+                    </div>
                   {% endif %}
                 </td>
               </tr>
@@ -322,7 +437,9 @@
             <td><small>{{ tx.user.get_full_name }}</small></td>
             <td><small class="text-muted">{{ tx.user.army_no|default:"—" }}</small></td>
             <td><small class="badge bg-dark">{{ tx.user.rank.rank_name|default:"—" }}</small></td>
-            <td><code class="small">{{ tx.copy.accession_no }}</code></td>
+            <td>
+              {% if tx.borrow_type == 'hardcopy' %}<code class="small">{{ tx.copy.accession_no }}</code>{% else %}<span class="text-muted">—</span>{% endif %}
+            </td>
             <td>
               {% if tx.borrow_type == 'hardcopy' %}
               <span class="badge bg-secondary"><i class="bi bi-book"></i> Hard</span>
@@ -352,5 +469,88 @@
 {% endif %}
 {% endblock %}
 {% block extra_js %}
-<script>document.getElementById('barcode_input').focus();</script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+document.getElementById('barcode_input').focus();
+
+(function() {
+  const btn = document.getElementById('btnStartCamera');
+  const input = document.getElementById('barcode_input');
+  let scanner = null;
+  let scanning = false;
+
+  /* Create modal dynamically */
+  const modalHtml = `
+    <div class="modal fade" id="cameraScanModal" tabindex="-1">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title"><i class="bi bi-camera-video"></i> Scan Barcode</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="qr-reader" style="width:100%"></div>
+            <p class="text-muted small mt-2 mb-0">Point the camera at the book barcode.</p>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  const modalEl = document.getElementById('cameraScanModal');
+  const modal = new bootstrap.Modal(modalEl);
+
+  function stopScanner() {
+    if (scanner && scanning) {
+      scanner.stop().then(() => { scanner.clear(); scanning = false; }).catch(() => { scanning = false; });
+    }
+  }
+
+  modalEl.addEventListener('hidden.bs.modal', stopScanner);
+
+  if (btn) {
+    btn.addEventListener('click', function() {
+      if (typeof Html5Qrcode === 'undefined') {
+        alert('Scanner library failed to load. Check your internet connection.');
+        return;
+      }
+      modal.show();
+      setTimeout(() => {
+        scanner = new Html5Qrcode('qr-reader');
+        scanner.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 150 } },
+          (decodedText) => {
+            input.value = decodedText;
+            stopScanner();
+            modal.hide();
+            input.focus();
+          },
+          (err) => { /* ignore per-frame errors */ }
+        ).then(() => { scanning = true; })
+         .catch((e) => {
+           alert('Cannot access camera: ' + e);
+           modal.hide();
+         });
+      }, 300);
+    });
+  }
+})();
+</script>
+<script>
+function toggleDamageForm(fieldId, show) {
+  const el = document.getElementById(fieldId);
+  if (el) el.style.display = show ? 'block' : 'none';
+}
+function toggleDamageSection() {
+  const el = document.getElementById('damageSection-single');
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+function confirmReturnSingle() {
+  const chk = document.getElementById('chkDamaged-single');
+  if (chk && chk.checked) {
+    return confirm('Confirm return AND mark this book as DAMAGED? A damage fine will be raised.');
+  }
+  return confirm('Confirm return of this book?');
+}
+</script>
 {% endblock %}

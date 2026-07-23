@@ -76,10 +76,23 @@
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>S/N</th><th>Title</th><th>Author</th><th>ISBN</th><th>Category</th><th>Copies</th><th>Available</th><th>Softcopy</th><th class="text-end">Loss Fine (TZS)</th><th>Actions</th></tr>
+        <tr><th>S/N</th><th>Title</th><th>Author</th><th>ISBN</th><th>Category</th><th>Copies</th><th>Available</th><th>Softcopy</th><th class="text-end">Fee (TZS)</th><th class="text-end">Loss Fine (TZS)</th><th>Actions</th></tr>
       </thead>
       <tbody id="bookTableBody">{% include 'catalog/partials/book_table_rows.html' %}</tbody>
     </table>
+    {% if page_obj.has_other_pages %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+      <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)</span>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">&laquo;</a></li>{% endif %}
+        {% for n in page_obj.paginator.page_range %}
+          {% if n == page_obj.number %}<li class="page-item active"><span class="page-link">{{ n }}</span></li>
+          {% elif n > page_obj.number|add:'-3' and n < page_obj.number|add:'3' %}<li class="page-item"><a class="page-link" href="?page={{ n }}{% if query %}&q={{ query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">{{ n }}</a></li>{% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if selected_category %}&category={{ selected_category }}{% endif %}">&raquo;</a></li>{% endif %}
+      </ul>
+    </nav>
+    {% endif %}
   </div>
 </div>
 

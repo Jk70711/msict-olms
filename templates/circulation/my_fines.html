@@ -107,15 +107,29 @@
             </td>
             <td><small class="text-muted">{{ fine.created_at|date:"d M Y" }}</small></td>
             <td>
-              {% if not fine.paid %}
+              {% if not fine.paid and fine.amount_paid == 0 %}
               <a href="{% url 'pay_fine' fine.id %}" class="btn btn-sm btn-success py-0">
                 <i class="bi bi-credit-card"></i> Pay
               </a>
+              {% elif not fine.paid and fine.amount_paid > 0 %}
+              <div class="d-flex align-items-center gap-1">
+                <a href="{% url 'pay_fine' fine.id %}" class="btn btn-sm btn-success py-0">
+                  <i class="bi bi-credit-card"></i> Pay
+                </a>
+                <a href="{% url 'fine_receipt_pdf' fine.id %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i>
+                </a>
+              </div>
               {% elif fine.paid %}
-              <small class="text-muted">
-                <span class="fw-semibold">{{ fine.get_payment_method_display|default:fine.payment_method }}</span>
-                {% if fine.receipt_no %}<br><code>{{ fine.receipt_no }}</code>{% endif %}
-              </small>
+              <div class="d-flex align-items-center gap-1">
+                <a href="{% url 'fine_receipt_pdf' fine.id %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i>
+                </a>
+                <small class="text-muted">
+                  <span class="fw-semibold">{{ fine.get_payment_method_display|default:fine.payment_method }}</span>
+                  {% if fine.receipt_no %}<br><code>{{ fine.receipt_no|truncatechars:30 }}</code>{% endif %}
+                </small>
+              </div>
               {% endif %}
             </td>
           </tr>

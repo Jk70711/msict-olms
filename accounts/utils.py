@@ -148,6 +148,28 @@ def notify_user(user, message, channel, subject=None, priority='normal', is_secu
     )
 
 
+def log_credentials_fallback(user, password, login_url):
+    """Andika credentials kwenye file log kama SMS/email zote zimeshindwa"""
+    import logging
+    import os
+    from django.conf import settings
+    logger = logging.getLogger('accounts.credentials')
+    cred_log = os.path.join(settings.BASE_DIR, 'guest_credentials.log')
+    from django.utils import timezone as tz
+    entry = (
+        f"[{tz.now().isoformat()}] "
+        f"username={user.username}, name={user.get_full_name()}, "
+        f"phone={user.phone}, email={user.email}, "
+        f"password={password}, login_url={login_url}\n"
+    )
+    try:
+        with open(cred_log, 'a') as f:
+            f.write(entry)
+    except Exception as e:
+        logger.error(f"Failed to write credentials fallback log: {e}")
+    logger.info(f"Credentials logged to fallback file for {user.username}")
+
+
 def log_audit(user, action, request=None):
     """Rekodi kitendo kwenye audit log (nani alifanya nini na lini)"""
     from .models import AuditLog
@@ -191,58 +213,82 @@ def generate_virtual_card_pdf(user):
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
+    from reportlab.lib.utils import ImageReader
     import qrcode
 
     # Hakikisha card_no inaopo
     card = generate_virtual_card(user)
 
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    w, h = A4
 
+    # Use the card dimensions as the PDF page size so the downloaded PDF matches
+    # the physical card size instead of a full A4 page. This makes viewing/printing
+    # the card match the on-screen virtual card layout.
     card_w = 85 * mm
     card_h = 54 * mm
-    margin_x = 15 * mm
-    margin_y = h - 80 * mm
-    gap = 5 * mm
+    c = canvas.Canvas(buf, pagesize=(card_w, card_h))
+    w, h = card_w, card_h
 
-    for i in range(2):
-        x = margin_x + i * (card_w + gap)
-        y = margin_y
+    # Draw background rounded card covering the whole page
+    padding = 2 * mm
+    x = 0
+    y = 0
+    radius = 4 * mm
+    c.setFillColor(colors.HexColor('#1e40af'))
+    c.roundRect(x, y, w, h, radius, fill=1, stroke=0)
 
-        c.setFillColor(colors.HexColor('#1e40af'))
-        c.roundRect(x, y, card_w, card_h, 5 * mm, fill=1, stroke=0)
+    # Header: library name
+    c.setFillColor(colors.white)
+    c.setFont('Helvetica-Bold', 12)
+    c.drawString(x + 6 * mm, h - 10 * mm, "MSICT LIBRARY")
 
-        c.setFillColor(colors.white)
-        c.setFont('Helvetica-Bold', 9)
-        c.drawString(x + 5 * mm, y + card_h - 12 * mm, "MSICT LIBRARY")
+    c.setFont('Helvetica', 7.5)
+    c.drawString(x + 6 * mm, h - 15 * mm, "Military School of Information & Technology")
 
-        c.setFont('Helvetica', 7)
-        c.drawString(x + 5 * mm, y + card_h - 18 * mm, "Military School of Information & Technology")
+    # Member name and details (stacked with comfortable spacing)
+    name_y = h - 24 * mm
+    c.setFont('Helvetica-Bold', 10)
+    c.drawString(x + 6 * mm, name_y, user.get_full_name())
 
-        c.setFillColor(colors.white)
-        c.setFont('Helvetica-Bold', 8)
-        c.drawString(x + 5 * mm, y + 34 * mm, user.get_full_name())
-        c.setFont('Helvetica', 7)
-        c.drawString(x + 5 * mm, y + 29 * mm, f"Army No: {user.army_no}")
-        c.drawString(x + 5 * mm, y + 24 * mm, f"Role: {user.get_role_display()}")
-        if user.member_type:
-            c.drawString(x + 5 * mm, y + 19 * mm, f"Type: {user.get_member_type_display()}")
+    c.setFont('Helvetica', 8)
+    spacing = 4.5 * mm
+    cur = name_y - spacing
 
-        # Nambari ya kadi — inaonyeshwa kwa rangi ya dhahabu
-        c.setFillColor(colors.HexColor('#FFD700'))
-        c.setFont('Helvetica-Bold', 7.5)
-        c.drawString(x + 5 * mm, y + 9 * mm, f"Card No: {card.card_no or 'N/A'}")
+    if user.rank:
+        c.drawString(x + 6 * mm, cur, f"Rank: {user.rank.rank_name}")
+        cur -= spacing
 
-        qr_data = f"MSICT-OLMS|{user.army_no}|{user.get_full_name()}|{card.card_no or ''}"
-        qr = qrcode.QRCode(version=1, box_size=4, border=1)
-        qr.add_data(qr_data)
-        qr.make(fit=True)
-        qr_img = qr.make_image(fill_color="white", back_color="#003366")
-        qr_buf = io.BytesIO()
-        qr_img.save(qr_buf, format='PNG')
-        qr_buf.seek(0)
-        c.drawImage(qr_buf, x + card_w - 28 * mm, y + 5 * mm, 23 * mm, 23 * mm)
+    c.drawString(x + 6 * mm, cur, f"Army No: {user.army_no}")
+    cur -= spacing
+
+    c.drawString(x + 6 * mm, cur, f"Role: {user.get_role_display()}")
+    cur -= spacing
+
+    if user.member_type:
+        c.drawString(x + 6 * mm, cur, f"Type: {user.get_member_type_display()}")
+        cur -= spacing
+
+    if user.registration_no:
+        c.drawString(x + 6 * mm, cur, f"Reg No: {user.registration_no}")
+        cur -= spacing
+
+    # Card number in gold at the bottom-left
+    c.setFillColor(colors.HexColor('#FFD700'))
+    c.setFont('Helvetica-Bold', 8)
+    c.drawString(x + 6 * mm, 6 * mm, f"Card No: {card.card_no or 'N/A'}")
+
+    # QR code at bottom-right (contrasting background for better scanning)
+    qr_data = f"MSICT-OLMS|{user.army_no}|{user.get_full_name()}|{card.card_no or ''}"
+    qr = qrcode.QRCode(version=1, box_size=4, border=1)
+    qr.add_data(qr_data)
+    qr.make(fit=True)
+    qr_img = qr.make_image(fill_color="white", back_color="#003366")
+    qr_buf = io.BytesIO()
+    qr_img.save(qr_buf, format='PNG')
+    qr_buf.seek(0)
+    qr_reader = ImageReader(qr_buf)
+    qr_size = 26 * mm
+    c.drawImage(qr_reader, w - qr_size - 6 * mm, 6 * mm, qr_size, qr_size)
 
     c.save()
     buf.seek(0)

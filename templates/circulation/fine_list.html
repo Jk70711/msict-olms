@@ -114,6 +114,9 @@
             </a>
             {% else %}
             <small class="text-muted">{{ fine.payment_method }}<br>{{ fine.paid_at|date:"d M Y" }}</small>
+            <a href="{% url 'fine_receipt_pdf' fine.pk %}" class="btn btn-sm btn-outline-primary ms-1" title="Print Receipt" target="_blank">
+              <i class="bi bi-printer"></i>
+            </a>
             {% endif %}
           </td>
         </tr>
@@ -127,6 +130,19 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if page_obj.has_other_pages %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+      <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)</span>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}">&laquo;</a></li>{% endif %}
+        {% for n in page_obj.paginator.page_range %}
+          {% if n == page_obj.number %}<li class="page-item active"><span class="page-link">{{ n }}</span></li>
+          {% elif n > page_obj.number|add:'-3' and n < page_obj.number|add:'3' %}<li class="page-item"><a class="page-link" href="?page={{ n }}">{{ n }}</a></li>{% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}">&raquo;</a></li>{% endif %}
+      </ul>
+    </nav>
+    {% endif %}
   </div>
 </div>
 

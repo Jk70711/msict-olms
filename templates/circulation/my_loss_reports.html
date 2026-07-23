@@ -124,10 +124,15 @@
                 <i class="bi bi-credit-card"></i> Pay
               </a>
               {% elif report.loss_fine and report.loss_fine.paid %}
-              <small class="text-muted">
-                <span class="fw-semibold">{{ report.loss_fine.get_payment_method_display|default:report.loss_fine.payment_method }}</span>
-                {% if report.loss_fine.receipt_no %}<br><code>{{ report.loss_fine.receipt_no }}</code>{% endif %}
-              </small>
+              <div class="d-flex align-items-center gap-1">
+                <a href="{% url 'loss_fine_receipt_pdf' report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i>
+                </a>
+                <small class="text-muted">
+                  <span class="fw-semibold">{{ report.loss_fine.get_payment_method_display|default:report.loss_fine.payment_method }}</span>
+                  {% if report.loss_fine.receipt_no %}<br><code>{{ report.loss_fine.receipt_no|truncatechars:30 }}</code>{% endif %}
+                </small>
+              </div>
               {% else %}
               <small class="text-muted">No fine</small>
               {% endif %}

@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.urls import path
 from django.shortcuts import redirect
-from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession
+from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, GuestSession, BulkMessage, BulkMessageRecipient
 
 
 # ── Customise Django admin site ────────────────────────────────────────────
@@ -130,7 +130,7 @@ class AuditLogAdmin(admin.ModelAdmin):
 
 @admin.register(SystemPreference)
 class SystemPreferenceAdmin(admin.ModelAdmin):
-    list_display = ('key', 'value', 'description')
+    list_display = ('key', 'value', 'unit', 'updated_at', 'updated_by', 'description')
     search_fields = ('key',)
 
 
@@ -159,3 +159,31 @@ class UserSessionAdmin(admin.ModelAdmin):
     date_hierarchy = 'login_time'
     ordering = ('-login_time',)
     actions = ['delete_selected']
+
+
+@admin.register(GuestSession)
+class GuestSessionAdmin(admin.ModelAdmin):
+    list_display = ('user', 'sign_in_time', 'sign_out_time', 'paid_hours', 'duration_hours', 'amount_paid', 'payment_status', 'status')
+    list_filter = ('status', 'payment_status')
+    search_fields = ('user__username', 'user__email', 'user__phone', 'ip_address')
+    readonly_fields = ('sign_in_time', 'created_at')
+    date_hierarchy = 'sign_in_time'
+    ordering = ('-sign_in_time',)
+
+
+@admin.register(BulkMessage)
+class BulkMessageAdmin(admin.ModelAdmin):
+    list_display = ('subject', 'sent_by', 'sent_at', 'status', 'total_recipients', 'total_sent', 'total_failed', 'is_new_arrival')
+    list_filter = ('status', 'is_new_arrival', 'send_via')
+    search_fields = ('subject', 'body', 'sent_by__username')
+    readonly_fields = ('sent_at', 'created_at', 'total_recipients', 'total_sent', 'total_failed')
+    date_hierarchy = 'sent_at'
+    ordering = ('-sent_at',)
+
+
+@admin.register(BulkMessageRecipient)
+class BulkMessageRecipientAdmin(admin.ModelAdmin):
+    list_display = ('message', 'user', 'delivered_via', 'status', 'delivered_at')
+    list_filter = ('status', 'delivered_via')
+    search_fields = ('user__username', 'user__email', 'message__subject')
+    ordering = ('-message',)

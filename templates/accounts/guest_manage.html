@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% block title %}Guest Management - MSICT OLMS{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold mb-0"><i class="bi bi-people me-2"></i>Guest Management</h4>
+    <span class="badge bg-info text-dark">Rate: TZS {{ hourly_rate|floatformat:0 }}/hr</span>
+  </div>
+
+  {# ── Active Sessions ── #}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-light">
+      <h6 class="mb-0"><i class="bi bi-clock-history me-1"></i>Active Sessions</h6>
+    </div>
+    <div class="card-body">
+      {% if active_sessions %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Guest</th>
+              <th>Sign In</th>
+              <th>Paid Hours</th>
+              <th>Amount</th>
+              <th>Payment</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in active_sessions %}
+            <tr>
+              <td>{{ s.id }}</td>
+              <td>
+                <strong>{{ s.user.first_name }} {{ s.user.surname }}</strong><br>
+                <small class="text-muted">{{ s.user.username }}</small>
+              </td>
+              <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
+              <td>{{ s.paid_hours }}</td>
+              <td>TZS {{ s.amount_paid|floatformat:0 }}</td>
+              <td>
+                {% if s.payment_status == 'paid' %}<span class="badge bg-success">Paid</span>
+                {% elif s.payment_status == 'waived' %}<span class="badge bg-info text-dark">Waived</span>
+                {% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}
+              </td>
+              <td>
+                <div class="btn-group btn-group-sm">
+                  {% if s.payment_status != 'paid' %}
+                  <form method="post" action="{% url 'guest_mark_paid' s.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-success btn-sm" title="Mark as paid">
+                      <i class="bi bi-check-circle"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{% url 'guest_session_end' s.id %}" class="d-inline"
+                        onsubmit="return confirm('End this guest session?');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-danger btn-sm" title="End session">
+                      <i class="bi bi-stop-circle"></i>
+                    </button>
+                  </form>
+                  {% if s.payment_status == 'paid' %}
+                  <a href="{% url 'guest_session_receipt' s.id %}" target="_blank" class="btn btn-outline-secondary btn-sm" title="Print Receipt">
+                    <i class="bi bi-receipt"></i>
+                  </a>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">No active guest sessions.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Guest Accounts ── #}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-light">
+      <h6 class="mb-0"><i class="bi bi-person-badge me-1"></i>Guest Accounts</h6>
+    </div>
+    <div class="card-body">
+      {% if guest_users %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Username</th>
+              <th>Phone</th>
+              <th>Total Hours</th>
+              <th>Total Paid</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for g in guest_users %}
+            <tr>
+              <td>{{ g.first_name }} {{ g.surname }}</td>
+              <td>{{ g.username }}</td>
+              <td>{{ g.phone|default:'—' }}</td>
+              <td>{{ g.total_guest_hours|floatformat:1 }}</td>
+              <td>TZS {{ g.total_guest_paid|floatformat:0 }}</td>
+              <td>
+                {% if g.is_active %}<span class="badge bg-success">Active</span>
+                {% else %}<span class="badge bg-danger">Suspended</span>{% endif %}
+              </td>
+              <td>
+                <div class="d-flex flex-wrap gap-1">
+                  {% if g.is_active %}
+                  <form method="post" action="{% url 'guest_suspend' g.id %}" class="d-inline"
+                        onsubmit="return confirm('Suspend this guest account?');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-warning btn-sm" title="Lock / Suspend">
+                      <i class="bi bi-lock"></i>
+                    </button>
+                  </form>
+                  {% else %}
+                  <form method="post" action="{% url 'guest_reactivate' g.id %}" class="d-inline">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-success btn-sm" title="Unlock / Reactivate">
+                      <i class="bi bi-unlock"></i>
+                    </button>
+                  </form>
+                  {% endif %}
+                  <form method="post" action="{% url 'reset_user_password' g.id %}" class="d-inline"
+                        onsubmit="return confirm('Reset password for {{ g.username }}? A new password will be sent via SMS/email.');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-secondary btn-sm" title="Reset Password">
+                      <i class="bi bi-key"></i>
+                    </button>
+                  </form>
+                  <form method="post" action="{% url 'delete_user' g.id %}" class="d-inline"
+                        onsubmit="return confirm('Permanently delete guest account {{ g.username }}? This cannot be undone.');">
+                    {% csrf_token %}
+                    <button class="btn btn-outline-danger btn-sm" title="Delete Account">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">No guest accounts registered.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Session History ── #}
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-light">
+      <h6 class="mb-0"><i class="bi bi-archive me-1"></i>Session History (Last 50)</h6>
+    </div>
+    <div class="card-body">
+      {% if history %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Guest</th>
+              <th>Sign In</th>
+              <th>Sign Out</th>
+              <th>Duration (h)</th>
+              <th>Amount</th>
+              <th>Status</th>
+              <th>Payment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in history %}
+            <tr>
+              <td>{{ s.id }}</td>
+              <td>{{ s.user.first_name }} {{ s.user.surname }}</td>
+              <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
+              <td>{{ s.sign_out_time|date:"d M Y H:i"|default:'—' }}</td>
+              <td>{{ s.duration_hours|floatformat:1 }}</td>
+              <td>TZS {{ s.amount_paid|floatformat:0 }}</td>
+              <td>
+                {% if s.status == 'ended' %}<span class="badge bg-secondary">Ended</span>
+                {% elif s.status == 'expired' %}<span class="badge bg-warning text-dark">Expired</span>
+                {% else %}{{ s.status }}{% endif %}
+              </td>
+              <td>
+                {% if s.payment_status == 'paid' %}<span class="badge bg-success">Paid</span>
+                {% elif s.payment_status == 'waived' %}<span class="badge bg-info text-dark">Waived</span>
+                {% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted mb-0">No session history yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Notification, LossReport
+from .models import BorrowRequest, BorrowingTransaction, Reservation, Fine, Notification, LossReport, RevenueTransaction
 
 
 @admin.register(BorrowRequest)
@@ -116,3 +116,12 @@ class LossReportAdmin(admin.ModelAdmin):
     def get_accession(self, obj):
         return obj.transaction.copy.accession_no
     get_accession.short_description = 'Accession No'
+
+
+@admin.register(RevenueTransaction)
+class RevenueTransactionAdmin(admin.ModelAdmin):
+    list_display = ('recorded_at', 'user', 'account_type', 'amount', 'reference_table', 'reference_id', 'recorded_by')
+    list_filter = ('account_type',)
+    search_fields = ('user__username', 'description', 'reference_table')
+    date_hierarchy = 'recorded_at'
+    ordering = ('-recorded_at',)

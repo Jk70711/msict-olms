@@ -101,7 +101,7 @@ class Book(models.Model):
         return self.copies.filter(copy_type='softcopy', access_type='borrow').exists()
 
     def total_hardcopies(self):
-        return self.copies.filter(copy_type='hardcopy').count()
+        return self.copies.filter(copy_type='hardcopy').exclude(status__in=['lost', 'damaged']).count()
 
     def free_softcopy_count(self):
         return self.copies.filter(copy_type='softcopy', access_type='free').count()
@@ -111,6 +111,16 @@ class Book(models.Model):
 
     def available_special_softcopy_count(self):
         return self.copies.filter(copy_type='softcopy', access_type='borrow', status='available').count()
+
+    def special_softcopy_fee(self):
+        """Return the prepaid_fee of the first special softcopy, or 0 if none."""
+        copy = self.copies.filter(copy_type='softcopy', access_type='borrow').first()
+        return copy.prepaid_fee if copy else 0
+
+    @property
+    def softcopy(self):
+        """Return the first softcopy, or None if none exists."""
+        return self.copies.filter(copy_type='softcopy').first()
 
     @property
     def book_type(self):
@@ -154,6 +164,7 @@ class BookCopy(models.Model):
         ('borrowed', 'Borrowed'),
         ('reserved', 'Reserved'),
         ('lost', 'Lost'),
+        ('damaged', 'Damaged'),
     ]
 
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='copies')
@@ -164,6 +175,7 @@ class BookCopy(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='available')
     shelf_location = models.CharField(max_length=50, blank=True)
     barcode = models.CharField(max_length=50, unique=True, blank=True)
+    prepaid_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text='Prepaid fee for softcopy access (TZS)')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -436,6 +448,7 @@ class MediaSlide(models.Model):
         ('announcement', 'Announcement'),
         ('logo', 'System Logo'),
         ('home_bg', 'Home Page Background'),
+        ('login_slideshow', 'Login Page Slideshow'),
     ]
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -512,3 +525,42 @@ class Footer(models.Model):
     def get_active_footer(cls):
         """Get the currently active footer configuration"""
         return cls.objects.filter(is_active=True).first()
+
+
+# ----------------------------------------------------------------------
+# Model ya LoginContent — Text content for the login page
+# Librarian can manage motivational text, guest info, and AI assistant reminder
+# ----------------------------------------------------------------------
+class LoginContent(models.Model):
+    SECTION_CHOICES = [
+        ('welcome', 'Welcome Heading'),
+        ('motivational', 'Left Side — Motivational Text'),
+        ('ai_reminder', 'Left Side — AI Assistant Reminder'),
+        ('guest_how', 'Right Side — How Guest Account is Created'),
+        ('guest_session', 'Right Side — How Session is Accessed'),
+        ('guest_payment', 'Right Side — Payments & Expiration'),
+        ('guest_upgrade', 'Right Side — Upgrade to Real Member'),
+        ('guest_welcome', 'Right Side — Guest Welcome Words'),
+    ]
+    section = models.CharField(max_length=30, choices=SECTION_CHOICES, unique=True)
+    title = models.CharField(max_length=255, blank=True, help_text='Optional heading for this section')
+    body = models.TextField(help_text='Main text content (HTML allowed)')
+    icon = models.CharField(max_length=50, blank=True, default='', help_text='Bootstrap icon class, e.g. bi-robot')
+    font_size = models.PositiveIntegerField(default=18, help_text='Font size in px for the body text (10–32)')
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        db_table = 'login_content'
+        verbose_name = 'Login Page Content'
+        verbose_name_plural = 'Login Page Contents'
+        ordering = ['section']
+
+    def __str__(self):
+        return f'{self.get_section_display()}'
+
+    @classmethod
+    def get_active_content(cls):
+        """Return dict of section -> LoginContent for all active entries"""
+        return {item.section: item for item in cls.objects.filter(is_active=True)}

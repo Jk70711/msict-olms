@@ -11,11 +11,20 @@
     </form>
     {% if user.role == 'admin' %}
       {% if user_obj.is_active %}
-        <a href="{% url 'user_action' user_obj.pk 'lock' %}" class="btn btn-outline-danger btn-sm" onclick="return confirm('Lock account {{ user_obj.username }}?')"><i class="bi bi-lock-fill"></i> Lock</a>
+        <form method="post" action="{% url 'user_action' user_obj.pk 'lock' %}" class="d-inline" onsubmit="return confirm('Lock account {{ user_obj.username }}?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-lock-fill"></i> Lock</button>
+        </form>
       {% else %}
-        <a href="{% url 'user_action' user_obj.pk 'unlock' %}" class="btn btn-outline-success btn-sm" onclick="return confirm('Unlock account {{ user_obj.username }}?')"><i class="bi bi-unlock-fill"></i> Unlock</a>
+        <form method="post" action="{% url 'user_action' user_obj.pk 'unlock' %}" class="d-inline" onsubmit="return confirm('Unlock account {{ user_obj.username }}?')">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-unlock-fill"></i> Unlock</button>
+        </form>
       {% endif %}
-      <a href="{% url 'user_action' user_obj.pk 'delete' %}" class="btn btn-outline-dark btn-sm" onclick="return confirm('PERMANENTLY DELETE {{ user_obj.username }}? This cannot be undone.')"><i class="bi bi-trash"></i> Delete</a>
+      <form method="post" action="{% url 'delete_user' user_obj.pk %}" class="d-inline" onsubmit="return confirm('PERMANENTLY DELETE {{ user_obj.username }}? This cannot be undone.')">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-outline-dark btn-sm"><i class="bi bi-trash"></i> Delete</button>
+      </form>
     {% endif %}
     <a href="{% url 'user_list' %}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
   </div>

@@ -216,7 +216,7 @@
               <hr class="my-1">
               <label class="form-label fw-bold">Amount to Pay (TZS) <span class="text-danger">*</span></label>
               <input type="number" name="payment_amount" id="paymentAmount" class="form-control form-control-lg"
-                     value="{{ fine.remaining_balance }}" min="100" step="100" required>
+                     value="{{ fine.remaining_balance }}" min="1" step="1" required>
               <div class="d-flex justify-content-between mt-1">
                 <small class="text-muted">Remaining: <strong class="text-danger">TZS {{ fine.remaining_balance|floatformat:2 }}</strong></small>
                 <small>

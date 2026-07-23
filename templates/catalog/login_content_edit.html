@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}Edit {{ content.get_section_display }} — MSICT OLMS{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <h4 class="fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>Edit: {{ content.get_section_display }}</h4>
+        <a href="{% url 'login_content_list' %}" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-arrow-left me-1"></i>Back
+        </a>
+      </div>
+
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+          <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Section</label>
+              <input type="text" class="form-control" value="{{ content.get_section_display }}" disabled>
+              <div class="form-text">This identifies where the content appears on the login page.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Title / Heading</label>
+              <input type="text" name="title" class="form-control" value="{{ content.title }}" placeholder="Optional heading text">
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Body Content</label>
+              <textarea name="body" class="form-control" rows="6" required>{{ content.body }}</textarea>
+              <div class="form-text">Main text. Keep it concise and engaging.</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Bootstrap Icon Class</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-icon" id="iconPreview"></i></span>
+                <input type="text" name="icon" class="form-control" value="{{ content.icon }}" placeholder="e.g. bi-robot" oninput="updateIconPreview(this.value)">
+              </div>
+              <div class="form-text">Optional. Use Bootstrap Icons classes (e.g. bi-lightbulb, bi-robot, bi-person-plus).</div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label fw-semibold">Font Size (px)</label>
+              <div class="row align-items-center">
+                <div class="col-4">
+                  <input type="number" name="font_size" class="form-control" value="{{ content.font_size }}" min="10" max="32" id="fontSizeInput" oninput="updateFontPreview(this.value)">
+                </div>
+                <div class="col-8">
+                  <div class="border rounded p-2 bg-light" id="fontPreview" style="font-size: {{ content.font_size }}px; line-height: 1.5;">
+                    Preview text — your content will appear at this size.
+                  </div>
+                </div>
+              </div>
+              <div class="form-text">Range: 10–32px. Default 18px. Larger values are easier to read.</div>
+            </div>
+
+            <div class="mb-3 form-check">
+              <input type="checkbox" name="is_active" class="form-check-input" id="isActive" {% if content.is_active %}checked{% endif %}>
+              <label class="form-check-label" for="isActive">Active (visible on login page)</label>
+            </div>
+
+            <div class="d-flex gap-2">
+              <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-circle me-1"></i>Save Changes
+              </button>
+              <a href="{% url 'login_content_list' %}" class="btn btn-outline-secondary">Cancel</a>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function updateIconPreview(val) {
+  var p = document.getElementById('iconPreview');
+  if (p) p.className = 'bi ' + val;
+}
+function updateFontPreview(val) {
+  var p = document.getElementById('fontPreview');
+  if (p) p.style.fontSize = val + 'px';
+}
+updateIconPreview('{{ content.icon }}');
+</script>
+{% endblock %}

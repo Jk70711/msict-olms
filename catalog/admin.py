@@ -22,7 +22,7 @@ class CourseAdmin(admin.ModelAdmin):
 class BookCopyInline(admin.TabularInline):
     model = BookCopy
     extra = 1
-    fields = ('copy_type', 'access_type', 'accession_no', 'status', 'shelf_location', 'barcode')
+    fields = ('copy_type', 'access_type', 'accession_no', 'status', 'shelf_location', 'barcode', 'prepaid_fee', 'file_path')
     show_change_link = True
 
 

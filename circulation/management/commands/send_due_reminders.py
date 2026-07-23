@@ -39,7 +39,7 @@ class Command(BaseCommand):
                 lambda book, copy_type, due, fpd=fine_per_day: (
                     f"MSICT OLMS: REMINDER - '{book}' is due in 2 days "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
-                    + ("Sign in to your dashboard to read or return online before the deadline."
+                    + (f"Your softcopy access link expires in 2 days. Renew from your dashboard to keep access."
                        if copy_type == 'softcopy'
                        else f"Please return the book to the library on time to avoid fines (TZS {fpd:,.0f}/day).")
                 ),
@@ -49,9 +49,9 @@ class Command(BaseCommand):
                 now + timedelta(hours=23),
                 now + timedelta(hours=25),
                 lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: URGENT - '{book}' is due TOMORROW "
+                    f"MSICT OLMS: URGENT - '{book}' softcopy access expires TOMORROW "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
-                    + ("Return it online from your dashboard before the link expires."
+                    + (f"Renew your access link from your dashboard before it expires — no overdue fine, but access will stop."
                        if copy_type == 'softcopy'
                        else f"Bring the book to the library tomorrow to avoid a TZS {fpd:,.0f}/day overdue fine.")
                 ),
@@ -61,9 +61,9 @@ class Command(BaseCommand):
                 now - timedelta(hours=1),
                 now + timedelta(hours=1),
                 lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: DUE TODAY - '{book}' must be returned today by "
+                    f"MSICT OLMS: ACCESS EXPIRING TODAY - '{book}' softcopy link expires at "
                     f"{due.strftime('%H:%M')}. "
-                    + ("Return it now from your member dashboard to avoid overdue status."
+                    + (f"Renew now from your dashboard to keep access. No fine — link simply expires."
                        if copy_type == 'softcopy'
                        else f"Return the book to the library immediately. A TZS {fpd:,.0f}/day fine starts after the deadline.")
                 ),

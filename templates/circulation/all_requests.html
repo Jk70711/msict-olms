@@ -11,6 +11,7 @@
   <a href="{% url 'all_requests' %}?status=approved" class="btn btn-sm {% if status_filter == 'approved' %}btn-success{% else %}btn-outline-success{% endif %}"><i class="bi bi-check-circle"></i> Approved</a>
   <a href="{% url 'all_requests' %}?status=rejected" class="btn btn-sm {% if status_filter == 'rejected' %}btn-danger{% else %}btn-outline-danger{% endif %}"><i class="bi bi-x-circle"></i> Rejected</a>
   <a href="{% url 'all_requests' %}?status=cancelled" class="btn btn-sm {% if status_filter == 'cancelled' %}btn-secondary{% else %}btn-outline-secondary{% endif %}"><i class="bi bi-slash-circle"></i> Cancelled</a>
+  <a href="{% url 'all_requests' %}?status=deleted" class="btn btn-sm {% if status_filter == 'deleted' %}btn-dark{% else %}btn-outline-dark{% endif %}"><i class="bi bi-trash"></i> Deleted</a>
   <div class="input-group input-group-sm ms-auto" style="max-width:280px;">
     <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
     <input type="text" id="reqSearch" class="form-control border-start-0 ps-0"
@@ -65,6 +66,7 @@
                 <br><span class="badge bg-primary mt-1" style="font-size:.65rem"><i class="bi bi-box-arrow-in-right"></i> Awaiting Issue</span>
               {% endif %}
             {% elif req.status == 'rejected' %}<span class="badge bg-danger">Rejected</span>
+            {% elif req.status == 'deleted' %}<span class="badge bg-dark">Deleted</span>
             {% else %}<span class="badge bg-secondary">{{ req.status|title }}</span>{% endif %}
           </td>
           <td><small class="text-muted">{{ req.approved_by.get_full_name|default:"—" }}</small></td>
@@ -90,14 +92,74 @@
                 </div>
               </div>
             </div>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this pending request? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
             {% elif req.status == 'approved' and not req.copy_id %}
             <a href="{% url 'issue_copy' req.pk %}" class="btn btn-sm btn-primary py-0 px-2">
               <i class="bi bi-box-arrow-in-right me-1"></i> Issue Copy
             </a>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Delete this approved request? The member will see it as Deleted.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% elif req.status == 'approved' and req.copy_id and req.copy.copy_type == 'softcopy' and req.copy.prepaid_fee > 0 %}
+            {% if not req.borrowing_transactions.exists %}
+            <a href="{% url 'process_softcopy_payment' req.pk %}" class="btn btn-sm btn-warning py-0 px-2">
+              <i class="bi bi-credit-card me-1"></i> Process Payment
+            </a>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this payment-pending request? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% else %}
+            <small class="text-success"><i class="bi bi-check2-all"></i> Paid & Issued</small>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this issued request? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% endif %}
             {% elif req.status == 'rejected' %}
             <small class="text-muted">{{ req.rejection_reason|truncatechars:30 }}</small>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this rejected request? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
             {% elif req.status == 'approved' and req.copy_id %}
             <small class="text-success"><i class="bi bi-check2-all"></i> Issued</small>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this issued request? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% elif req.status == 'cancelled' %}
+            <small class="text-muted">Cancelled</small>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this cancelled request? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+            {% elif req.status == 'deleted' %}
+            <small class="text-muted">Deleted</small>
+            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this record? This cannot be undone.')">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete Permanently">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
             {% endif %}
           </td>
         </tr>
@@ -106,6 +168,19 @@
         {% endfor %}
       </tbody>
     </table>
+    {% if page_obj.has_other_pages %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+      <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)</span>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">&laquo;</a></li>{% endif %}
+        {% for n in page_obj.paginator.page_range %}
+          {% if n == page_obj.number %}<li class="page-item active"><span class="page-link">{{ n }}</span></li>
+          {% elif n > page_obj.number|add:'-3' and n < page_obj.number|add:'3' %}<li class="page-item"><a class="page-link" href="?page={{ n }}{% if status_filter %}&status={{ status_filter }}{% endif %}">{{ n }}</a></li>{% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">&raquo;</a></li>{% endif %}
+      </ul>
+    </nav>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

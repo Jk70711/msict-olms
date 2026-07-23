@@ -67,6 +67,7 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         ('admin', 'Admin'),
         ('librarian', 'Librarian'),
         ('member', 'Member'),
+        ('guest', 'Guest'),
     ]
     MEMBER_TYPE_CHOICES = [
         ('student', 'Student'),
@@ -76,10 +77,12 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
     REGISTRATION_STATUS_CHOICES = [
         ('pending', 'Pending'),
         ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
         ('cancelled', 'Cancelled'),
+        ('guest_auto', 'Guest Auto Approved'),
     ]
 
-    army_no = models.CharField(max_length=20, unique=True, validators=[army_no_validator])  # Nambari ya jeshi — lazima iwe ya kipekee
+    army_no = models.CharField(max_length=20, unique=True, null=True, blank=True, validators=[army_no_validator])  # Nambari ya jeshi — lazima iwe ya kipekee (si lazima kwa guest)
     registration_no = models.CharField(max_length=30, null=True, blank=True)  # Nambari ya usajili (kwa wanafunzi tu)
     first_name = models.CharField(max_length=100)   # Jina la kwanza
     middle_name = models.CharField(max_length=100, blank=True, default='')  # Jina la kati (si lazima)
@@ -102,6 +105,9 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
     photo = models.ImageField(upload_to='user_photos/', null=True, blank=True)  # Picha ya wasifu
     card_no = models.CharField(max_length=25, unique=True, null=True, blank=True, db_index=True,
                                help_text='Auto-generated card number e.g. MSICT-2026-00001')
+    is_guest = models.BooleanField(default=False)
+    total_guest_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_guest_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     rank = models.ForeignKey(
         'Rank', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='users', db_column='rank_id'
@@ -129,6 +135,14 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         if self.role in ('admin', 'librarian'):
             self.registration_status = 'approved'
             self.is_active = True
+        elif self.role == 'guest' or self.is_guest:
+            self.is_guest = True
+            self.registration_status = 'guest_auto'
+            self.is_active = True
+            self.card_no = None
+            self.rank = None
+            self.member_type = None
+            self.registration_no = None
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -152,24 +166,85 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
         return self.first_name
 
     @staticmethod
-    def generate_username(role, member_type, surname, registration_no):
+    def generate_username(role, member_type, surname, registration_no, first_name='', middle_name=''):
+        """Generate username based on role and member type.
+        - Students: use registration_no
+        - Librarians/Members (staff/instructor): use full surname + 2 random letters from first/middle names
+        """
+        import random
+        import string
+        
+        # Students use registration_no
         if member_type == 'student' and registration_no:
             return registration_no.strip()
-        return surname.strip()
+        
+        # Librarians and Members (staff/instructor) use full surname + 2 random letters
+        if role in ('librarian', 'member') and member_type in ('staff', 'instructor'):
+            # Get full surname as base
+            base_surname = surname.strip().lower() if surname else 'user'
+            
+            # Get letters from first and middle names ONLY
+            letters_pool = []
+            if first_name:
+                letters_pool.extend([c.lower() for c in first_name.strip() if c.isalpha()])
+            if middle_name:
+                letters_pool.extend([c.lower() for c in middle_name.strip() if c.isalpha()])
+            
+            # If no letters from first/middle names, use surname letters as fallback
+            if not letters_pool and base_surname:
+                letters_pool = [c for c in base_surname if c.isalpha()]
+            
+            # Pick 2 random letters from the pool (without replacement if possible)
+            if len(letters_pool) >= 2:
+                random_letters = random.sample(letters_pool, 2)
+            elif len(letters_pool) == 1:
+                random_letters = [letters_pool[0], letters_pool[0]]
+            else:
+                # Ultimate fallback: use 'aa' if no letters available at all
+                random_letters = ['a', 'a']
+            
+            # Shuffle the 2 letters for variety
+            random.shuffle(random_letters)
+            
+            # Combine: full surname + 2 random letters
+            username = base_surname + ''.join(random_letters)
+            
+            return username
+        
+        # For other member types (students without reg_no, etc.), use surname + 2 random letters
+        if surname:
+            base_surname = surname.strip().lower()
+            letters_pool = [c for c in base_surname if c.isalpha()]
+            if len(letters_pool) >= 2:
+                random_letters = random.sample(letters_pool, 2)
+            elif len(letters_pool) == 1:
+                random_letters = [letters_pool[0], letters_pool[0]]
+            else:
+                random_letters = ['a', 'a']
+            random.shuffle(random_letters)
+            return base_surname + ''.join(random_letters)
+        
+        return 'user'
 
     @staticmethod
     def generate_initial_password(army_no):
         return re.sub(r'[^0-9]', '', army_no)
 
     def has_overdue(self):
-        """Returns True only when the user has overdue books where the fine is
-        still unpaid (or no fine has been created yet).  Users who have fully
-        paid their overdue fines are NOT restricted."""
+        """Returns True when the user has overdue hardcopy items
+        where the fine is still unpaid (or no fine has been created yet).
+        Users who have fully paid their overdue fines are NOT restricted.
+        
+        IMPORTANT: Overdue hardcopies block ALL borrowing, including softcopy (Option A).
+        Softcopies never go overdue — they simply expire."""
         from circulation.models import BorrowingTransaction, Fine
         from django.db.models import Q, Exists, OuterRef, F
+        
         overdue_qs = BorrowingTransaction.objects.filter(
             Q(user=self, status='overdue') |
             Q(user=self, status='borrowed', due_date__lt=timezone.now())
+        ).exclude(
+            copy__copy_type='softcopy'
         )
         if not overdue_qs.exists():
             return False
@@ -181,15 +256,19 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
 
     def active_borrows_count(self):
         from circulation.models import BorrowingTransaction
+        from django.db.models import Q
         return BorrowingTransaction.objects.filter(
-            user=self, status__in=['borrowed', 'overdue']
+            user=self,
+            status__in=['borrowed', 'overdue'],
+        ).exclude(
+            Q(copy__copy_type='softcopy', copy__access_type='borrow', due_date__lt=timezone.now())
         ).count()
 
     def has_unpaid_fines(self):
-        from circulation.models import Fine, LossReport
+        from circulation.models import Fine, LossReport, DamageReport
         from django.db.models import F
         # Check BOTH the paid flag AND that amount_paid < amount (guards against stale flags)
-        # This includes both overdue fines AND loss fines
+        # This includes overdue fines, loss fines, and damage fines
         unpaid_overdue_fines = Fine.objects.filter(user=self, paid=False, amount__gt=F('amount_paid')).exists()
         unpaid_loss_fines = LossReport.objects.filter(
             user=self,
@@ -197,11 +276,19 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
             loss_fine__paid=False,
             loss_fine__amount__gt=F('loss_fine__amount_paid')
         ).exists()
-        return unpaid_overdue_fines or unpaid_loss_fines
+        unpaid_damage_fines = DamageReport.objects.filter(
+            user=self,
+            damage_fine__isnull=False,
+            damage_fine__paid=False,
+            damage_fine__amount__gt=F('damage_fine__amount_paid')
+        ).exists()
+        return unpaid_overdue_fines or unpaid_loss_fines or unpaid_damage_fines
 
     def password_is_old(self):
-        from django.conf import settings
-        days = getattr(settings, 'PASSWORD_CHANGE_REMINDER_DAYS', 30)
+        try:
+            days = int(SystemPreference.objects.filter(key='PASSWORD_EXPIRY_DAYS').values_list('value', flat=True).first() or 90)
+        except Exception:
+            days = 90
         if self.last_password_change:
             delta = timezone.now() - self.last_password_change
             return delta.days >= days
@@ -250,6 +337,42 @@ class UserSession(models.Model):
 
     class Meta:
         db_table = 'user_sessions'
+
+
+# Vikao vya wageni (walk-in) — ufuatiliaji wa muda, malipo na hali ya session
+class GuestSession(models.Model):
+    PAYMENT_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('paid', 'Paid'),
+        ('waived', 'Waived'),
+    ]
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('renewed', 'Renewed'),
+        ('ended', 'Ended'),
+        ('expired', 'Expired'),
+    ]
+
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='guest_sessions')
+    sign_in_time = models.DateTimeField(auto_now_add=True)
+    sign_out_time = models.DateTimeField(null=True, blank=True)
+    paid_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    duration_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUS_CHOICES, default='pending')
+    payment_method = models.CharField(max_length=20, blank=True, default='')
+    renewed = models.BooleanField(default=False)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    device_info = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'guest_sessions'
+        ordering = ['-sign_in_time']
+
+    def __str__(self):
+        return f"GuestSession #{self.pk} {self.user.username} [{self.status}]"
 
 
 # Kadi ya maktaba ya kidijitali — kila mtumiaji ana kadi moja
@@ -339,9 +462,24 @@ class PasswordHistory(models.Model):
 # Mipangilio ya mfumo — inabadilishwa kupitia /admin/preferences/
 # Mfano: LOAN_PERIOD_DAYS=7, FINE_PER_DAY=500
 class SystemPreference(models.Model):
+    UNIT_CHOICES = [
+        ('days', 'Days'),
+        ('minutes', 'Minutes'),
+        ('boolean', 'Boolean'),
+        ('text', 'Text'),
+        ('decimal', 'Decimal'),
+        ('integer', 'Integer'),
+    ]
+
     key = models.CharField(max_length=100, unique=True)
     value = models.TextField()
+    unit = models.CharField(max_length=20, choices=UNIT_CHOICES, default='text')
     description = models.CharField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='updated_preferences'
+    )
 
     class Meta:
         db_table = 'system_preferences'
@@ -369,3 +507,54 @@ class BlockedIP(models.Model):
 
     def __str__(self):
         return self.ip_address
+
+
+# ----------------------------------------------------------------------
+# Bulk Messaging — Admin/Librarian sends notifications to groups
+# ----------------------------------------------------------------------
+class BulkMessage(models.Model):
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+
+    subject = models.CharField(max_length=255, blank=True)
+    body = models.TextField()
+    target_roles = models.JSONField(default=list, blank=True, help_text='e.g. ["member","librarian"]')
+    target_member_types = models.JSONField(default=list, blank=True, null=True, help_text='e.g. ["student","lecturer"]')
+    send_via = models.JSONField(default=list, help_text='["email","sms"]')
+    sent_at = models.DateTimeField(null=True, blank=True)
+    sent_by = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_bulk_messages')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='draft')
+    total_recipients = models.IntegerField(default=0)
+    total_sent = models.IntegerField(default=0)
+    total_failed = models.IntegerField(default=0)
+    is_new_arrival = models.BooleanField(default=False, help_text='Auto-generated for new book arrivals')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'bulk_messages'
+        ordering = ['-sent_at']
+
+    def __str__(self):
+        return f"BulkMessage #{self.pk} — {self.subject or '(no subject)'} [{self.status}]"
+
+
+class BulkMessageRecipient(models.Model):
+    DELIVERED_VIA_CHOICES = [('email', 'Email'), ('sms', 'SMS')]
+    STATUS_CHOICES = [('pending', 'Pending'), ('sent', 'Sent'), ('failed', 'Failed')]
+
+    message = models.ForeignKey(BulkMessage, on_delete=models.CASCADE, related_name='recipients')
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='bulk_message_receipts')
+    delivered_via = models.CharField(max_length=10, choices=DELIVERED_VIA_CHOICES)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True, default='')
+
+    class Meta:
+        db_table = 'bulk_message_recipients'
+        ordering = ['-message']
+
+    def __str__(self):
+        return f"Recipient {self.user.username} — {self.status} via {self.delivered_via}"

@@ -1,0 +1,302 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Renewal — {{ copy.book.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="card border-0 shadow">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0"><i class="bi bi-arrow-clockwise me-2"></i>Renew Softcopy Access</h5>
+        </div>
+        <div class="card-body p-4">
+          <div class="alert alert-info">
+            <h6 class="alert-heading"><i class="bi bi-book me-2"></i>{{ copy.book.title }}</h6>
+            <p class="mb-0 small">Your current access expires on <strong>{{ tx.due_date|date:"M d, Y" }}</strong>. Renew now to get a new link valid for 7 more days.</p>
+          </div>
+
+          {% if is_free %}
+            {# ── Free renewal: no payment needed, just confirm ── #}
+            <div class="text-center mb-4">
+              <div class="display-6 fw-bold text-success">FREE</div>
+              <div class="text-muted">No renewal fee required</div>
+            </div>
+
+            <div class="alert alert-warning small">
+              <i class="bi bi-shield-lock me-2"></i>
+              <strong>Note:</strong> A new access link will be generated and sent via SMS and email. The old link will no longer work.
+            </div>
+
+            <form method="post" id="paymentForm">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-success w-100 btn-lg">
+                <i class="bi bi-arrow-clockwise me-2"></i>Confirm Renewal (Free)
+              </button>
+            </form>
+
+          {% else %}
+            {# ── Paid renewal: show payment form ── #}
+            <div class="text-center mb-4">
+              <div class="display-4 fw-bold text-success">TZS {{ amount|floatformat:0 }}</div>
+              <div class="text-muted">Renewal Fee</div>
+            </div>
+
+            <form method="post" id="paymentForm">
+              {% csrf_token %}
+              <div class="mb-4">
+                <label for="amount" class="form-label fw-semibold">Amount to Pay (TZS)</label>
+                <input type="number" step="1" min="0" name="amount" id="amount" class="form-control" required value="{{ amount|floatformat:0 }}">
+                <div class="form-text">Enter amount (must be at least the renewal fee TZS {{ amount|floatformat:0 }})</div>
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label fw-semibold">Select Payment Method <span class="text-danger">*</span></label>
+                <select name="payment_method" id="paymentMethod" class="form-select form-select-lg" required onchange="toggleFields(this.value)">
+                  <option value="">— Select Method —</option>
+                  <optgroup label="📱 Mobile Money">
+                    <option value="mpesa">M-Pesa</option>
+                    <option value="tigopesa">Tigo Pesa</option>
+                    <option value="airtel_money">Airtel Money</option>
+                    <option value="halopesa">Halopesa</option>
+                  </optgroup>
+                  <optgroup label="🏦 Bank Transfer">
+                    <option value="bank_transfer">Bank Transfer</option>
+                  </optgroup>
+                  <optgroup label="💳 Card">
+                    <option value="visa">Visa Card</option>
+                    <option value="mastercard">Mastercard</option>
+                  </optgroup>
+                </select>
+              </div>
+
+              {# ── Mobile: Phone number ── #}
+              <div class="mb-3 d-none" id="section-mobile">
+                <label class="form-label fw-semibold">Phone Number <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                  <input type="tel" name="phone_number" id="phoneNumber" class="form-control"
+                         placeholder="e.g. 0712345678" pattern="^0[67]\d{8}$" maxlength="10">
+                </div>
+                <div class="form-text">Enter the registered mobile money number (10 digits starting with 07 or 06)</div>
+              </div>
+
+              {# ── Bank: Bank name + account number ── #}
+              <div class="row g-3 mb-3">
+                <div class="col-md-6 d-none" id="section-bank-name">
+                  <label class="form-label fw-semibold">Bank Name <span class="text-danger">*</span></label>
+                  <select name="bank_name" id="bankName" class="form-select">
+                    <option value="">— Select Bank —</option>
+                    <option value="CRDB">CRDB Bank</option>
+                    <option value="NMB">NMB Bank</option>
+                    <option value="NBC">NBC (National Bank of Commerce)</option>
+                    <option value="Stanbic">Stanbic Bank Tanzania</option>
+                    <option value="Standard Chartered">Standard Chartered Bank</option>
+                    <option value="Absa">Absa Bank Tanzania</option>
+                    <option value="DTB">Diamond Trust Bank (DTB)</option>
+                    <option value="BOA">Bank of Africa (BOA)</option>
+                    <option value="Exim">Exim Bank Tanzania</option>
+                    <option value="Azania">Azania Bank</option>
+                    <option value="TPB">TPB Bank (Tanzania Postal)</option>
+                    <option value="Other">Other Bank</option>
+                  </select>
+                </div>
+                <div class="col-md-6 d-none" id="section-bank-account">
+                  <label class="form-label fw-semibold">Account Number <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-bank"></i></span>
+                    <input type="text" name="bank_account_no" id="bankAccountNo" class="form-control"
+                           placeholder="e.g. 0150123456789" maxlength="20">
+                  </div>
+                </div>
+                <div class="col-12 d-none" id="section-bank-receipt">
+                  <label class="form-label fw-semibold">Reference / Receipt No <span class="text-muted">(optional)</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-receipt"></i></span>
+                    <input type="text" name="receipt_no" id="receiptNo" class="form-control" placeholder="e.g. TRF-20240504-001" data-optional-field="true">
+                  </div>
+                </div>
+              </div>
+
+              {# ── Card: Cardholder, card number, expiry, CVV ── #}
+              <div class="row g-3 mb-3">
+                <div class="col-md-6 d-none" id="section-card-holder">
+                  <label class="form-label fw-semibold">Cardholder Name <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                    <input type="text" name="card_holder" id="cardHolder" class="form-control"
+                           placeholder="Name as on card" autocomplete="cc-name">
+                  </div>
+                </div>
+                <div class="col-md-6 d-none" id="section-card-digits">
+                  <label class="form-label fw-semibold">Card Number (last 4 digits) <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-credit-card-2-front"></i></span>
+                    <input type="text" name="card_last4" id="cardLast4" class="form-control"
+                           placeholder="e.g. 4521" maxlength="4" pattern="\d{4}" autocomplete="off">
+                  </div>
+                  <div class="form-text">Last 4 digits only (do not enter full card number)</div>
+                </div>
+                <div class="col-md-6 d-none" id="section-card-expiry">
+                  <label class="form-label fw-semibold">Expiry Date <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                    <select id="cardExpiryMonth" class="form-select" onchange="updateExpiry()">
+                      <option value="">MM</option>
+                      <option value="01">01 - January</option>
+                      <option value="02">02 - February</option>
+                      <option value="03">03 - March</option>
+                      <option value="04">04 - April</option>
+                      <option value="05">05 - May</option>
+                      <option value="06">06 - June</option>
+                      <option value="07">07 - July</option>
+                      <option value="08">08 - August</option>
+                      <option value="09">09 - September</option>
+                      <option value="10">10 - October</option>
+                      <option value="11">11 - November</option>
+                      <option value="12">12 - December</option>
+                    </select>
+                    <select id="cardExpiryYear" class="form-select" onchange="updateExpiry()">
+                      <option value="">YYYY</option>
+                    </select>
+                  </div>
+                  <input type="hidden" name="card_expiry" id="cardExpiry" data-optional-field="true">
+                  <div class="form-text">Select the month and year printed on the card (future dates only)</div>
+                </div>
+                <div class="col-md-6 d-none" id="section-card-cvv">
+                  <label class="form-label fw-semibold">CVV <span class="text-danger">*</span></label>
+                  <div class="input-group">
+                    <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+                    <input type="password" name="card_cvv" id="cardCvv" class="form-control"
+                           placeholder="3 or 4 digits" maxlength="4" pattern="\d{3,4}"
+                           autocomplete="cc-csc">
+                  </div>
+                </div>
+              </div>
+
+              <div class="alert alert-warning small">
+                <i class="bi bi-shield-lock me-2"></i>
+                <strong>Note:</strong> After payment, a new access link will be generated and sent via SMS and email. The old link will no longer work.
+              </div>
+
+              <button type="submit" class="btn btn-success w-100 btn-lg">
+                <i class="bi bi-arrow-clockwise me-2"></i>Pay TZS {{ amount|floatformat:0 }} & Renew
+              </button>
+            </form>
+          {% endif %}
+
+          <div class="mt-3 text-center">
+            <a href="{% url 'member_msict_borrowings' %}" class="text-muted small">
+              <i class="bi bi-arrow-left me-1"></i>Cancel and return to My Borrowings
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleFields(method) {
+  const isMobile  = ['mpesa','tigopesa','airtel_money','halopesa'].includes(method);
+  const isBank    = method === 'bank_transfer';
+  const isCard    = ['visa','mastercard'].includes(method);
+
+  function show(id, visible, isRequired) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('d-none', !visible);
+    el.querySelectorAll('input, select').forEach(i => {
+      if (visible && isRequired && i.dataset.optionalField !== 'true') {
+        i.setAttribute('required', '');
+      } else {
+        i.removeAttribute('required');
+      }
+      if (!visible) i.value = '';
+    });
+  }
+
+  show('section-mobile',       isMobile, true);
+  show('section-bank-name',    isBank,   true);
+  show('section-bank-account', isBank,   true);
+  show('section-bank-receipt', isBank,   false);
+  show('section-card-holder',  isCard,   true);
+  show('section-card-digits',  isCard,   true);
+  show('section-card-expiry',  isCard,   true);
+  show('section-card-cvv',     isCard,   true);
+}
+
+function updateExpiry() {
+  const m = document.getElementById('cardExpiryMonth');
+  const y = document.getElementById('cardExpiryYear');
+  const hidden = document.getElementById('cardExpiry');
+  if (!m || !y || !hidden) return;
+  if (m.value && y.value) {
+    hidden.value = `${m.value}/${y.value.slice(-2)}`;
+  } else {
+    hidden.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+  const yearSel = document.getElementById('cardExpiryYear');
+  if (yearSel) {
+    const thisYear = new Date().getFullYear();
+    for (let y = thisYear; y <= thisYear + 15; y++) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+  }
+
+  const paymentForm = document.getElementById('paymentForm');
+  if (!paymentForm) return;
+
+  const amountInput = document.getElementById('amount');
+
+  // Free renewal: just confirm
+  if (!amountInput) {
+    paymentForm.addEventListener('submit', function (event) {
+      if (!window.confirm('Confirm free renewal? A new access link will be generated valid for 7 days.')) {
+        event.preventDefault();
+      }
+    });
+    return;
+  }
+
+  // Paid renewal: validate amount and method
+  const requiredFee = parseInt('{{ amount|floatformat:0 }}', 10);
+  const methodSelect = document.getElementById('paymentMethod');
+
+  paymentForm.addEventListener('submit', function (event) {
+    const enteredAmount = parseInt(amountInput.value, 10);
+    if (Number.isNaN(enteredAmount) || enteredAmount < requiredFee) {
+      event.preventDefault();
+      alert('Please enter a valid amount that is at least TZS ' + requiredFee + '.');
+      amountInput.focus();
+      return;
+    }
+
+    if (!methodSelect.value) {
+      event.preventDefault();
+      alert('Please select a payment method before continuing.');
+      methodSelect.focus();
+      return;
+    }
+
+    const confirmMessage =
+      'Confirm renewal payment of TZS ' + enteredAmount.toLocaleString() +
+      ' via ' + methodSelect.options[methodSelect.selectedIndex].text +
+      '.\n\n' +
+      'A new access link will be generated valid for 7 days.';
+    if (!window.confirm(confirmMessage)) {
+      event.preventDefault();
+    }
+  });
+});
+</script>
+{% endblock %}

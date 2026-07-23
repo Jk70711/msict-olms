@@ -31,16 +31,24 @@ document.addEventListener('DOMContentLoaded', function() {
       row.remove();
       updateCounts();
       showNotification(`${data.full_name} has been approved and moved to Members page.`);
-    } else if (data.action === 'cancelled') {
+    } else if (data.action === 'rejected' || data.action === 'cancelled') {
       row.remove();
       updateCounts();
-      showNotification(`${data.full_name} registration has been cancelled.`);
+      showNotification(`${data.full_name} registration has been rejected.`);
     }
   }
   
   function updateCounts() {
-    // Reload page to update counts accurately
-    setTimeout(() => location.reload(), 2000);
+    // Don't reload if a modal is open (librarian may be typing a rejection reason)
+    var openModal = document.querySelector('.modal.show');
+    if (openModal) return;
+    // Update count badges without full page reload
+    var pendingBadge = document.querySelector('.badge.bg-warning');
+    var approvedBadge = document.querySelector('.badge.bg-success');
+    var visibleRows = document.querySelectorAll('tr[data-user-id]').length;
+    if (pendingBadge) {
+      pendingBadge.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + visibleRows + ' Pending Approval' + (visibleRows !== 1 ? 's' : '');
+    }
   }
   
   function showNotification(message) {
@@ -58,7 +66,10 @@ document.addEventListener('DOMContentLoaded', function() {
   
   socket.onclose = function() {
     console.log('WebSocket disconnected. Reconnecting in 5s...');
-    setTimeout(() => location.reload(), 5000);
+    var openModal = document.querySelector('.modal.show');
+    if (!openModal) {
+      setTimeout(() => location.reload(), 5000);
+    }
   };
 });
 </script>
@@ -67,15 +78,21 @@ document.addEventListener('DOMContentLoaded', function() {
   <h4 class="fw-bold mb-0">
     <i class="bi bi-person-plus text-info"></i> Public Registrations
   </h4>
+  <a href="{% url 'rejected_registrations' %}" class="btn btn-outline-danger btn-sm">
+    <i class="bi bi-x-circle"></i> Rejected Applications
+  </a>
 </div>
 
 <div class="card p-3 mb-3">
   <div class="row align-items-center">
     <div class="col-auto">
-      <span class="badge bg-warning text-dark fs-6"><i class="bi bi-hourglass-split"></i> {{ pending_count }} Pending Approval{{ pending_count|pluralize }}</span>
+      <span class="badge bg-warning text-dark fs-6"><i class="bi bi-hourglass-split"></i> {{ pending_count }} Pending</span>
     </div>
     <div class="col-auto">
-      <span class="badge bg-success fs-6"><i class="bi bi-people"></i> {{ approved_count }} Approved Member{{ approved_count|pluralize }}</span>
+      <span class="badge bg-danger fs-6"><i class="bi bi-x-circle"></i> {{ rejected_count }} Rejected</span>
+    </div>
+    <div class="col-auto">
+      <span class="badge bg-success fs-6"><i class="bi bi-people"></i> {{ approved_count }} Approved</span>
     </div>
   </div>
 </div>
@@ -84,7 +101,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead>
-        <tr><th>S/N</th><th>Full Name</th><th>Army No</th><th>Member Type</th><th>Rank</th><th>Email</th><th>Phone</th><th>Reg. No</th><th>Requested</th><th>Actions</th></tr>
+        <tr><th>S/N</th><th>Full Name</th><th>Army No</th><th>Member Type</th><th>Rank</th><th>Email</th><th>Phone</th><th>Reg. No</th><th>Status</th><th>Requested</th><th>Actions</th></tr>
       </thead>
       <tbody>
         {% for reg in registrations %}
@@ -107,14 +124,43 @@ document.addEventListener('DOMContentLoaded', function() {
           <td><small>{{ reg.email }}</small></td>
           <td><small>{{ reg.phone }}</small></td>
           <td><small>{{ reg.registration_no|default:"—" }}</small></td>
+          <td>
+            {% if reg.registration_status == 'pending' %}
+              <span class="badge bg-warning text-dark">Pending</span>
+            {% elif reg.registration_status == 'rejected' %}
+              <span class="badge bg-danger">Rejected</span>
+              {% if reg.cancelled_reason %}<br><small class="text-danger" title="{{ reg.cancelled_reason }}">{{ reg.cancelled_reason|truncatechars:30 }}</small>{% endif %}
+            {% else %}
+              <span class="badge bg-secondary">{{ reg.registration_status }}</span>
+            {% endif %}
+          </td>
           <td><small>{{ reg.created_at|date:"M d, Y" }}</small></td>
           <td>
             <div class="btn-group">
+              {% if reg.registration_status == 'pending' %}
               <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#approveModal{{ reg.pk }}" title="Approve">
                 <i class="bi bi-check-lg"></i> Approve
               </button>
-              <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#cancelModal{{ reg.pk }}" title="Cancel">
-                <i class="bi bi-x-lg"></i> Cancel
+              <a href="{% url 'edit_user' reg.pk %}" class="btn btn-sm btn-warning" title="Edit Details">
+                <i class="bi bi-pencil"></i>
+              </a>
+              <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#rejectModal{{ reg.pk }}" title="Reject">
+                <i class="bi bi-x-lg"></i> Reject
+              </button>
+              {% elif reg.registration_status == 'rejected' %}
+              <form method="post" action="{% url 'rollback_registration' reg.pk %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-success" title="Rollback to Approved"
+                  onclick="return confirm('Rollback and approve this application? Credentials will be sent to the user.')">
+                  <i class="bi bi-arrow-counterclockwise"></i> Rollback
+                </button>
+              </form>
+              <a href="{% url 'edit_user' reg.pk %}" class="btn btn-sm btn-warning" title="Edit Details">
+                <i class="bi bi-pencil"></i>
+              </a>
+              {% endif %}
+              <button class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ reg.pk }}" title="Delete">
+                <i class="bi bi-trash"></i>
               </button>
             </div>
             
@@ -137,19 +183,43 @@ document.addEventListener('DOMContentLoaded', function() {
               </div>
             </div>
             
-            <!-- Cancel Modal -->
-            <div class="modal fade" id="cancelModal{{ reg.pk }}" tabindex="-1">
-              <div class="modal-dialog modal-sm">
+            <!-- Reject Modal -->
+            <div class="modal fade" id="rejectModal{{ reg.pk }}" tabindex="-1" data-bs-backdrop="static">
+              <div class="modal-dialog">
                 <div class="modal-content">
                   <form action="{% url 'reject_account' reg.pk %}" method="post">{% csrf_token %}
-                    <div class="modal-header"><h6 class="modal-title">Cancel Account</h6></div>
+                    <div class="modal-header">
+                      <h6 class="modal-title">Reject Registration — {{ reg.get_full_name }}</h6>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
                     <div class="modal-body">
-                      <p class="small text-muted">Cancel registration for <strong>{{ reg.get_full_name }}</strong>?</p>
-                      <input type="text" name="cancelled_reason" class="form-control" placeholder="Reason..." required>
+                      <p class="small text-muted">Reject registration for <strong>{{ reg.get_full_name }}</strong> (Army No: {{ reg.army_no }})?</p>
+                      <p class="small text-muted">The user will remain in the system with <span class="badge bg-danger">Rejected</span> status and can be rolled back later.</p>
+                      <label class="form-label fw-semibold">Rejection Reason <span class="text-danger">*</span></label>
+                      <textarea name="cancelled_reason" class="form-control" rows="4" placeholder="Enter the reason for rejection. This will be sent to the user..." required></textarea>
                     </div>
                     <div class="modal-footer">
                       <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
-                      <button type="submit" class="btn btn-danger btn-sm">Cancel</button>
+                      <button type="submit" class="btn btn-danger btn-sm">Reject Registration</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Delete Modal -->
+            <div class="modal fade" id="deleteModal{{ reg.pk }}" tabindex="-1">
+              <div class="modal-dialog modal-sm">
+                <div class="modal-content">
+                  <form action="{% url 'delete_user' reg.pk %}" method="post">{% csrf_token %}
+                    <div class="modal-header"><h6 class="modal-title">Delete Registration</h6></div>
+                    <div class="modal-body">
+                      <p class="small text-muted">Permanently delete <strong>{{ reg.get_full_name }}</strong>'s registration?</p>
+                      <p class="small text-danger">This action cannot be undone.</p>
+                    </div>
+                    <div class="modal-footer">
+                      <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                      <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                     </div>
                   </form>
                 </div>
@@ -158,7 +228,7 @@ document.addEventListener('DOMContentLoaded', function() {
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="10" class="text-center text-muted py-4">No registrations found.</td></tr>
+        <tr><td colspan="11" class="text-center text-muted py-4">No registrations found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

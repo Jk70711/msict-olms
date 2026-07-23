@@ -1,0 +1,353 @@
+{% extends 'base.html' %}
+{% block title %}Damage Fine Payment — {{ report.user.get_full_name }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-7">
+
+    {% if messages %}
+    {% for message in messages %}
+    {% if message.tags == 'error' %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #ffffff; font-weight: 800; background-color: #dc2626; border: 2px solid #991b1b;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% elif message.tags == 'success' %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #ffffff; font-weight: 800; background-color: #16a34a; border: 2px solid #15803d;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% elif message.tags == 'warning' %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #000000; font-weight: 800; background-color: #facc15; border: 2px solid #ca8a04;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% else %}
+    <div class="alert alert-dismissible fade show" role="alert" style="color: #ffffff; font-weight: 800; background-color: #2563eb; border: 2px solid #1d4ed8;">
+      {{ message }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+    {% endfor %}
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0"><i class="bi bi-cash-stack"></i> Damage Fine Payment</h5>
+      {% if librarian_mode %}
+      <a href="{% url 'lost_damaged_copies' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back
+      </a>
+      {% else %}
+      <a href="{% url 'member_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Back
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-2 text-center">
+          <div class="col-4">
+            <div class="small text-muted">Member</div>
+            <div class="fw-semibold">{{ report.user.get_full_name }}</div>
+            <div class="small text-muted">{{ report.user.army_no }}</div>
+            {% if report.user.rank %}<div class="small badge bg-dark">{{ report.user.rank.rank_name }}</div>{% endif %}
+          </div>
+          <div class="col-4">
+            <div class="small text-muted">Damage Report</div>
+            <div class="fw-bold fs-5" style="color: #ea580c;">DR-{{ report.pk }}</div>
+            <div class="small text-muted">{{ report.get_status_display }}</div>
+          </div>
+          <div class="col-4">
+            <div class="small text-muted">Total Outstanding</div>
+            <div class="fw-bold text-danger fs-5">
+              TZS {{ fine.remaining_balance|floatformat:0 }}{% if overdue_fine %} + {{ overdue_fine.remaining_balance|floatformat:0 }}{% endif %}
+            </div>
+          </div>
+        </div>
+        <hr class="my-2">
+
+        <table class="table table-sm table-bordered mb-2">
+          <thead class="table-secondary">
+            <tr><th>Fine Type</th><th>Total</th><th>Paid</th><th>Remaining</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="badge" style="background-color: #ea580c;">Damage Fine</span></td>
+              <td>TZS {{ fine.amount|floatformat:0 }}</td>
+              <td>TZS {{ fine.amount_paid|floatformat:0 }}</td>
+              <td class="fw-semibold text-danger">TZS {{ fine.remaining_balance|floatformat:0 }}</td>
+              <td>{% if fine.paid %}<span class="badge bg-success">Paid</span>{% elif fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+            </tr>
+            {% if overdue_fine %}
+            <tr>
+              <td><span class="badge bg-warning text-dark">Overdue Fine</span></td>
+              <td>TZS {{ overdue_fine.amount|floatformat:0 }}</td>
+              <td>TZS {{ overdue_fine.amount_paid|floatformat:0 }}</td>
+              <td class="fw-semibold text-danger">TZS {{ overdue_fine.remaining_balance|floatformat:0 }}</td>
+              <td>{% if overdue_fine.paid %}<span class="badge bg-success">Paid</span>{% elif overdue_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
+            </tr>
+            {% endif %}
+          </tbody>
+        </table>
+
+        <div class="small text-muted">
+          <i class="bi bi-book"></i> {{ report.transaction.copy.book.title }} (Acc: {{ report.transaction.copy.accession_no }})
+          <br><i class="bi bi-exclamation-triangle"></i> Damage Type: {{ report.get_damage_type_display }}
+          {% if report.damage_description %}<br><i class="bi bi-tag"></i> {{ report.damage_description|truncatechars:80 }}{% endif %}
+        </div>
+      </div>
+    </div>
+
+    {% if fine.paid and not overdue_fine or fine.paid and overdue_fine.paid %}
+    <div class="alert alert-success">
+      <i class="bi bi-check-circle-fill"></i> All fines for this damage report have been fully paid.
+    </div>
+    {% else %}
+    <div class="card">
+      <div class="card-header bg-success text-white py-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-wallet2"></i> Payment Details</h6>
+      </div>
+      <div class="card-body">
+        <form method="post" id="paymentForm">{% csrf_token %}
+          <div class="row g-3">
+
+            <div class="col-12">
+              <label class="form-label fw-bold">Fine to Pay <span class="text-danger">*</span></label>
+              <select name="fine_type" id="detailFineType" class="form-select" required
+                onchange="detailSetAmount(
+                  '{{ fine.remaining_balance|floatformat:2 }}',
+                  '{{ overdue_fine.remaining_balance|floatformat:2|default:0 }}')">
+                <option value="">— Select —</option>
+                {% if not fine.paid %}
+                <option value="damage">Damage Fine only — TZS {{ fine.remaining_balance|floatformat:0 }} remaining</option>
+                {% endif %}
+                {% if overdue_fine and not overdue_fine.paid %}
+                <option value="overdue">Overdue Fine only — TZS {{ overdue_fine.remaining_balance|floatformat:0 }} remaining</option>
+                {% endif %}
+                {% if not fine.paid and overdue_fine and not overdue_fine.paid %}
+                {% with total=fine.remaining_balance|add:overdue_fine.remaining_balance %}
+                <option value="both">Both Fines — TZS {{ total|floatformat:0 }} total</option>
+                {% endwith %}
+                {% endif %}
+              </select>
+            </div>
+
+            <div class="col-12">
+              <label class="form-label fw-bold">Payment Method <span class="text-danger">*</span></label>
+              <select name="payment_method" id="paymentMethod" class="form-select form-select-lg" required onchange="toggleFields(this.value)">
+                <option value="">— Select Method —</option>
+                {% if librarian_mode %}
+                <optgroup label="Manual">
+                  <option value="cash" selected>Cash</option>
+                </optgroup>
+                {% endif %}
+                <optgroup label="Mobile Money">
+                  <option value="mpesa">M-Pesa</option>
+                  <option value="tigopesa">Tigo Pesa</option>
+                  <option value="airtel_money">Airtel Money</option>
+                  <option value="halopesa">Halopesa</option>
+                </optgroup>
+                <optgroup label="Bank Transfer">
+                  <option value="bank_transfer">Bank Transfer</option>
+                </optgroup>
+                <optgroup label="Card">
+                  <option value="visa">Visa Card</option>
+                  <option value="mastercard">Mastercard</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div class="col-12 d-none" id="section-mobile">
+              <label class="form-label fw-bold">Phone Number <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                <input type="tel" name="phone_number" id="phoneNumber" class="form-control"
+                       placeholder="e.g. 0712345678" pattern="^0[67]\d{8}$" maxlength="10">
+              </div>
+              <div class="form-text">Enter the registered mobile money number (10 digits starting with 07 or 06)</div>
+            </div>
+
+            <div class="col-md-6 d-none" id="section-bank-name">
+              <label class="form-label fw-bold">Bank Name <span class="text-danger">*</span></label>
+              <select name="bank_name" id="bankName" class="form-select">
+                <option value="">— Select Bank —</option>
+                <option value="CRDB">CRDB Bank</option>
+                <option value="NMB">NMB Bank</option>
+                <option value="NBC">NBC (National Bank of Commerce)</option>
+                <option value="Stanbic">Stanbic Bank Tanzania</option>
+                <option value="Standard Chartered">Standard Chartered Bank</option>
+                <option value="Absa">Absa Bank Tanzania</option>
+                <option value="DTB">Diamond Trust Bank (DTB)</option>
+                <option value="BOA">Bank of Africa (BOA)</option>
+                <option value="Exim">Exim Bank Tanzania</option>
+                <option value="Azania">Azania Bank</option>
+                <option value="TPB">TPB Bank (Tanzania Postal)</option>
+                <option value="Other">Other Bank</option>
+              </select>
+            </div>
+            <div class="col-md-6 d-none" id="section-bank-account">
+              <label class="form-label fw-bold">Account Number <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-bank"></i></span>
+                <input type="text" name="bank_account_no" id="bankAccountNo" class="form-control"
+                       placeholder="e.g. 0150123456789" maxlength="20">
+              </div>
+            </div>
+            <div class="col-12 d-none" id="section-bank-receipt">
+              <label class="form-label fw-bold">Reference / Receipt No <span class="text-muted">(optional)</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-receipt"></i></span>
+                <input type="text" name="receipt_no" id="receiptNo" class="form-control" placeholder="e.g. TRF-20240504-001" data-optional-field="true">
+              </div>
+            </div>
+
+            <div class="col-md-6 d-none" id="section-card-holder">
+              <label class="form-label fw-bold">Cardholder Name <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                <input type="text" name="card_holder" id="cardHolder" class="form-control"
+                       placeholder="Name as on card" autocomplete="cc-name">
+              </div>
+            </div>
+            <div class="col-md-6 d-none" id="section-card-digits">
+              <label class="form-label fw-bold">Card Number (last 4 digits) <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-credit-card-2-front"></i></span>
+                <input type="text" name="card_last4" id="cardLast4" class="form-control"
+                       placeholder="e.g. 4521" maxlength="4" pattern="\d{4}" autocomplete="off">
+              </div>
+              <div class="form-text">Last 4 digits only (do not enter full card number)</div>
+            </div>
+            <div class="col-md-6 d-none" id="section-card-expiry">
+              <label class="form-label fw-bold">Expiry Date <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-calendar-event"></i></span>
+                <select id="cardExpiryMonth" class="form-select" onchange="updateExpiry()">
+                  <option value="">MM</option>
+                  <option value="01">01 - January</option>
+                  <option value="02">02 - February</option>
+                  <option value="03">03 - March</option>
+                  <option value="04">04 - April</option>
+                  <option value="05">05 - May</option>
+                  <option value="06">06 - June</option>
+                  <option value="07">07 - July</option>
+                  <option value="08">08 - August</option>
+                  <option value="09">09 - September</option>
+                  <option value="10">10 - October</option>
+                  <option value="11">11 - November</option>
+                  <option value="12">12 - December</option>
+                </select>
+                <select id="cardExpiryYear" class="form-select" onchange="updateExpiry()">
+                  <option value="">YYYY</option>
+                </select>
+              </div>
+              <input type="hidden" name="card_expiry" id="cardExpiry" data-optional-field="true">
+              <div class="form-text">Select the month and year printed on the card (future dates only)</div>
+            </div>
+            <div class="col-md-6 d-none" id="section-card-cvv">
+              <label class="form-label fw-bold">CVV <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-shield-lock"></i></span>
+                <input type="password" name="card_cvv" id="cardCvv" class="form-control"
+                       placeholder="3 or 4 digits" maxlength="4" pattern="\d{3,4}"
+                       autocomplete="cc-csc">
+              </div>
+            </div>
+
+            <div class="col-12" id="section-amount">
+              <hr class="my-1">
+              <label class="form-label fw-bold">Amount to Pay (TZS) <span class="text-danger">*</span></label>
+              <input type="number" name="payment_amount" id="paymentAmount" class="form-control form-control-lg"
+                     min="1" step="1" required placeholder="Select fine type above to auto-fill">
+              <div class="form-text">Select fine type above to auto-fill. Adjust for partial payments.</div>
+            </div>
+
+          </div>
+
+          <div class="d-grid gap-2 mt-4" id="section-submit">
+            <button type="submit" class="btn btn-success btn-lg">
+              <i class="bi bi-check-circle"></i> Confirm Payment
+            </button>
+            {% if librarian_mode %}
+            <a href="{% url 'lost_damaged_copies' %}" class="btn btn-outline-secondary">Cancel</a>
+            {% else %}
+            <a href="{% url 'member_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+function detailSetAmount(damageRem, overdueRem) {
+  const sel = document.getElementById('detailFineType');
+  const inp = document.getElementById('paymentAmount');
+  if (!sel || !inp) return;
+  const v = sel.value;
+  const damage  = parseFloat(damageRem)  || 0;
+  const overdue = parseFloat(overdueRem) || 0;
+  if      (v === 'damage')  inp.value = damage.toFixed(0);
+  else if (v === 'overdue') inp.value = overdue.toFixed(0);
+  else if (v === 'both')    inp.value = (damage + overdue).toFixed(0);
+  else                      inp.value = '';
+}
+
+function toggleFields(method) {
+  const isMobile  = ['mpesa','tigopesa','airtel_money','halopesa'].includes(method);
+  const isBank    = method === 'bank_transfer';
+  const isCard    = ['visa','mastercard'].includes(method);
+
+  function show(id, visible, isRequired) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('d-none', !visible);
+    el.querySelectorAll('input, select').forEach(i => {
+      if (visible && isRequired && i.dataset.optionalField !== 'true') {
+        i.setAttribute('required', '');
+      } else {
+        i.removeAttribute('required');
+      }
+      if (!visible) i.value = '';
+    });
+  }
+
+  show('section-mobile',       isMobile, true);
+  show('section-bank-name',    isBank,   true);
+  show('section-bank-account', isBank,   true);
+  show('section-bank-receipt', isBank,   false);
+  show('section-card-holder',  isCard,   true);
+  show('section-card-digits',  isCard,   true);
+  show('section-card-expiry',  isCard,   true);
+  show('section-card-cvv',     isCard,   true);
+}
+
+function updateExpiry() {
+  const m = document.getElementById('cardExpiryMonth');
+  const y = document.getElementById('cardExpiryYear');
+  const hidden = document.getElementById('cardExpiry');
+  if (!m || !y || !hidden) return;
+  if (m.value && y.value) {
+    hidden.value = `${m.value}/${y.value.slice(-2)}`;
+  } else {
+    hidden.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const yearSel = document.getElementById('cardExpiryYear');
+  if (yearSel) {
+    const thisYear = new Date().getFullYear();
+    for (let y = thisYear; y <= thisYear + 15; y++) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+  }
+});
+</script>
+{% endblock %}

@@ -9,6 +9,7 @@ from . import views
 urlpatterns = [
     # ── Kuingia na Kutoka ────────────────────────────────────
     path('register/', views.public_register_view, name='public_register'),                   # /register/ — Usajili wa umma
+    path('guest/register/', views.guest_register_view, name='guest_register'),               # /guest/register/ — Usajili wa guest
     path('login/', views.login_view, name='login'),                                          # /login/ — Ukurasa wa kuingia
     path('logout/', views.logout_view, name='logout'),                                       # /logout/ — Kutoka nje
     path('forgot-password/', views.forgot_password_view, name='forgot_password'),            # Omba OTP kwa barua pepe
@@ -17,6 +18,21 @@ urlpatterns = [
 
     # ── Wasifu na Kadi ────────────────────────────────────
     path('dashboard/', views.dashboard_redirect, name='dashboard'),                          # Elekeza kwa dashboard sahihi
+    path('guest/dashboard/', views.guest_dashboard_view, name='guest_dashboard'),            # Dashboard ya guest
+    path('guest/session/start/', views.guest_start_session_page_view, name='guest_start_session'),  # GET: start session page
+    path('guest/session/begin/', views.start_guest_session_view, name='start_guest_session'),# POST: hours → payment form
+    path('guest/session/pay/', views.guest_payment_view, name='guest_payment'),            # Guest malipo ya session
+    path('guest/session/end/', views.end_guest_session_view, name='end_guest_session'),      # Maliza session ya guest
+    path('guest/session/<int:session_id>/delete/', views.guest_session_delete_view, name='guest_session_delete'),
+    path('guest/session/renew/', views.guest_session_renew_view, name='guest_session_renew'),          # Show renewal form
+    path('guest/session/renew/pay/', views.guest_session_renew_pay_view, name='guest_session_renew_pay'), # Process renewal payment
+    path('guest/session/<int:session_id>/receipt/', views.guest_session_receipt_pdf_view, name='guest_session_receipt'),
+    path('guest/upgrade/', views.upgrade_to_member_view, name='upgrade_to_member'),          # Guest → Member upgrade
+    path('guest/manage/', views.guest_manage_view, name='guest_manage'),                     # Librarian guest management
+    path('guest/manage/<int:session_id>/mark-paid/', views.guest_mark_paid_view, name='guest_mark_paid'),
+    path('guest/manage/<int:session_id>/end/', views.guest_session_end_view, name='guest_session_end'),
+    path('guest/manage/<int:user_id>/suspend/', views.guest_suspend_view, name='guest_suspend'),
+    path('guest/manage/<int:user_id>/reactivate/', views.guest_reactivate_view, name='guest_reactivate'),
     path('profile/', views.profile_view, name='profile'),                                    # Wasifu wa mtumiaji
     path('change-password/', views.change_password_view, name='change_password'),            # Badilisha nywila
     path('virtual-card/', views.virtual_card_view, name='virtual_card'),                     # Kadi ya maktaba
@@ -30,8 +46,12 @@ urlpatterns = [
     path('users/<int:user_id>/reset-password/', views.reset_user_password_view, name='reset_user_password'),  # Weka upya nywila
     path('users/<int:user_id>/approve/', views.approve_account_view, name='approve_account'), # Idhinisha akaunti — LAZIMA iwe kabla ya <str:action>
     path('users/<int:user_id>/reject/', views.reject_account_view, name='reject_account'),   # Kataa akaunti — LAZIMA iwe kabla ya <str:action>
+    path('users/<int:user_id>/rollback/', views.rollback_registration_view, name='rollback_registration'),  # Rudisha akaunti iliyokataliwa — kabla ya <str:action>
+    path('users/<int:user_id>/delete/', views.delete_user_view, name='delete_user'),  # Futa usajili kabisa — kabla ya <str:action>
     path('users/<int:user_id>/<str:action>/', views.user_action_view, name='user_action'),   # Zuia/fungua akaunti
     path('public-registrations/', views.public_registrations_view, name='public_registrations'),  # Orodha ya usajili wa umma
+    path('rejected-registrations/', views.rejected_registrations_view, name='rejected_registrations'),  # Orodha ya usajili uliokataliwa
+    path('communications/bulk-message/', views.bulk_message_view, name='bulk_message'),            # Tuma ujumbe wa pamoja
 
     # ── Dashboard na Mipangilio ya Msimamizi (admin) ────────────
     path('admin-dashboard/', views.admin_dashboard_view, name='admin_dashboard'),            # Dashboard ya msimamizi
@@ -47,4 +67,6 @@ urlpatterns = [
     path('superuser/dashboard/', views.superuser_dashboard_view, name='superuser_dashboard'),# Dashboard ya superuser
     path('toggle-theme/', views.toggle_theme_view, name='toggle_theme'),                     # Badilisha dark/light mode
     path('system-appearance/', views.system_appearance_view, name='system_appearance'),      # Badilisha rangi/fonti
+    path('admin/block-ip/', views.block_ip_view, name='block_ip'),                           # Zuia IP
+    path('admin/unblock-ip/<int:ip_id>/', views.unblock_ip_view, name='unblock_ip'),         # Fungua IP
 ]

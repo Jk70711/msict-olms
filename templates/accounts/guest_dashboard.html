@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% block title %}Guest Dashboard - MSICT OLMS{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold mb-0"><i class="bi bi-person-badge me-2"></i>Guest Dashboard</h4>
+    <div class="d-flex gap-2">
+      <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-arrow-up-circle"></i> Become a Member
+      </a>
+      <a href="{% url 'logout' %}" class="btn btn-outline-secondary btn-sm">Logout</a>
+    </div>
+  </div>
+
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="text-muted">Current Session</h6>
+          {% if active_session %}
+            <p class="mb-1"><strong>Status:</strong>
+              {% if active_session.status == 'renewed' %}<span class="badge bg-primary">Renewed</span>
+              {% else %}<span class="badge bg-success">Active</span>{% endif %}
+            </p>
+            <p class="mb-1"><strong>Session #:</strong> #{{ active_session.pk }}</p>
+            <p class="mb-1"><strong>Signed in:</strong> {{ active_session.sign_in_time|date:"d M Y H:i" }}</p>
+            <p class="mb-1"><strong>Total Hours:</strong> {{ active_session.paid_hours|floatformat:0 }}h</p>
+            <p class="mb-1"><strong>Expires at:</strong> <span id="expiry-time">—</span></p>
+
+            <!-- Countdown timer -->
+            <div id="countdown-box" class="my-3 p-3 rounded text-center" style="background:#f8fafc;">
+              <div class="text-muted small mb-1">Time Remaining</div>
+              <div id="countdown-display" class="fs-3 fw-bold text-primary">--:--:--</div>
+              <div id="countdown-warning" class="small mt-1" style="display:none;"></div>
+            </div>
+
+            <div class="d-flex gap-2 mb-2">
+              <form method="post" action="{% url 'end_guest_session' %}" class="flex-grow-1">
+                {% csrf_token %}
+                <button class="btn btn-danger w-100">Sign Out Session</button>
+              </form>
+              {% if active_session.payment_status == 'paid' %}
+              <a href="{% url 'guest_session_receipt' active_session.pk %}" target="_blank" class="btn btn-outline-secondary" title="Print Receipt">
+                <i class="bi bi-receipt"></i> Receipt
+              </a>
+              {% endif %}
+            </div>
+
+            <hr class="my-3">
+            <h6 class="text-muted mb-2"><i class="bi bi-clock-history"></i> Renew Session</h6>
+            <form method="post" action="{% url 'guest_session_renew' %}" class="row g-2 align-items-end">
+              {% csrf_token %}
+              <div class="col-7">
+                <label class="form-label small">Add Hours (max 12h/day total)</label>
+                <input type="number" name="renew_hours" min="1" max="12" step="1" value="1" class="form-control" required>
+              </div>
+              <div class="col-5">
+                <button class="btn btn-outline-primary w-100"><i class="bi bi-plus-circle me-1"></i>Renew</button>
+              </div>
+            </form>
+            <div class="mt-1">
+              <small class="text-muted"><i class="bi bi-info-circle"></i> Add more hours via payment. Max 12h per day.</small>
+            </div>
+          {% else %}
+            <p class="mb-0 text-muted">No active session. <a href="{% url 'guest_start_session' %}">Start a new session</a>.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card border-0 shadow-sm h-100">
+        <div class="card-body">
+          <h6 class="text-muted">Access Rules</h6>
+          <ul class="mb-0 small">
+            <li>Read hardcopy inside library only.</li>
+            <li>Softcopy access is view-only for guest mode.</li>
+            <li>No borrowing or reservation in guest mode.</li>
+            <li>Start a new session whenever you return.</li>
+          </ul>
+          <hr>
+          <h6 class="text-muted mb-2">Upgrade to Member</h6>
+          <p class="small text-muted mb-2">Get borrowing rights, virtual card, and full access to all library resources.</p>
+          <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-primary w-100">
+            <i class="bi bi-arrow-up-circle me-1"></i> Become a Member
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card border-0 shadow-sm">
+    <div class="card-body">
+      <h6 class="fw-semibold">Recent Sessions</h6>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Sign In</th>
+              <th>Sign Out</th>
+              <th>Duration (h)</th>
+              <th>Amount (TZS)</th>
+              <th>Status</th>
+              <th>Payment</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in recent_sessions %}
+            <tr>
+              <td><strong>#{{ s.pk }}</strong></td>
+              <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
+              <td>{{ s.sign_out_time|date:"d M Y H:i"|default:'—' }}</td>
+              <td>{{ s.duration_hours }}</td>
+              <td>{{ s.amount_paid|floatformat:0 }}</td>
+              <td>
+                {% if s.status == 'active' %}<span class="badge bg-success">Active</span>
+                {% elif s.status == 'renewed' %}<span class="badge bg-primary">Renewed</span>
+                {% elif s.status == 'ended' %}<span class="badge bg-secondary">Ended</span>
+                {% elif s.status == 'expired' %}<span class="badge bg-warning text-dark">Expired</span>
+                {% else %}{{ s.status }}{% endif %}
+              </td>
+              <td>
+                {% if s.payment_status == 'paid' %}<span class="badge bg-success">Paid</span>
+                {% elif s.payment_status == 'waived' %}<span class="badge bg-info text-dark">Waived</span>
+                {% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}
+              </td>
+              <td>
+                {% if s.payment_status == 'paid' %}
+                <a href="{% url 'guest_session_receipt' s.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i>
+                </a>
+                {% endif %}
+                {% if s.status != 'active' and s.status != 'renewed' %}
+                <form method="post" action="{% url 'guest_session_delete' s.pk %}" class="d-inline" onsubmit="return confirm('Delete this session record? This cannot be undone.');">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete session">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </form>
+                {% elif s.status == 'active' or s.status == 'renewed' %}
+                <span class="text-muted small">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="8" class="text-muted">No session history yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if active_session %}
+<script>
+(function() {
+  // Compute expiry timestamp from sign_in_time + paid_hours
+  var signInStr = "{{ active_session.sign_in_time|date:'c' }}";
+  var paidHours = parseFloat("{{ active_session.paid_hours }}") || 0;
+  var signInDate = new Date(signInStr);
+  var expiryDate = new Date(signInDate.getTime() + paidHours * 3600 * 1000);
+  var warned15 = false, warned5 = false;
+
+  // Display expiry time
+  var expiryEl = document.getElementById('expiry-time');
+  if (expiryEl) {
+    expiryEl.textContent = expiryDate.toLocaleString('en-GB', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+  }
+
+  function updateCountdown() {
+    var now = new Date();
+    var diff = expiryDate - now;
+
+    if (diff <= 0) {
+      document.getElementById('countdown-display').textContent = '00:00:00';
+      document.getElementById('countdown-display').classList.remove('text-primary','text-warning','text-danger');
+      document.getElementById('countdown-display').classList.add('text-danger');
+      var warn = document.getElementById('countdown-warning');
+      warn.style.display = 'block';
+      warn.className = 'small mt-1 text-danger fw-bold';
+      warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Session expired. Please sign out.';
+      // Auto-submit sign out
+      clearInterval(timerId);
+      var form = document.querySelector('form[action*="end_guest_session"]');
+      if (form) {
+        var btn = document.createElement('input');
+        btn.type = 'hidden';
+        btn.name = 'auto_expire';
+        btn.value = '1';
+        form.appendChild(btn);
+        form.submit();
+      }
+      return;
+    }
+
+    var totalSec = Math.floor(diff / 1000);
+    var h = Math.floor(totalSec / 3600);
+    var m = Math.floor((totalSec % 3600) / 60);
+    var s = totalSec % 60;
+    var display = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+    var cdEl = document.getElementById('countdown-display');
+    cdEl.textContent = display;
+
+    var warn = document.getElementById('countdown-warning');
+
+    // Color changes
+    if (diff < 5 * 60 * 1000) {
+      cdEl.className = 'fs-3 fw-bold text-danger';
+      if (!warned5) {
+        warned5 = true;
+        warn.style.display = 'block';
+        warn.className = 'small mt-1 text-danger fw-bold';
+        warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Your session will expire soon. Please sign out.';
+      }
+    } else if (diff < 15 * 60 * 1000) {
+      cdEl.className = 'fs-3 fw-bold text-warning';
+      if (!warned15) {
+        warned15 = true;
+        warn.style.display = 'block';
+        warn.className = 'small mt-1 text-warning';
+        warn.innerHTML = '<i class="bi bi-clock-fill"></i> Your session ends in 15 minutes.';
+      }
+    }
+  }
+
+  var timerId = setInterval(updateCountdown, 1000);
+  updateCountdown();
+})();
+</script>
+{% endif %}
+{% endblock %}

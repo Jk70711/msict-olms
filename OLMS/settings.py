@@ -178,15 +178,26 @@ ASGI_APPLICATION = 'OLMS.asgi.application'
 REDIS_HOST = config('REDIS_HOST', default='127.0.0.1')
 REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
 REDIS_DB   = config('REDIS_DB',   default=0,    cast=int)
+CHANNEL_LAYER_BACKEND = config(
+    'CHANNEL_LAYER_BACKEND',
+    default='inmemory' if DEBUG else 'redis'
+).strip().lower()
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            'hosts': [(REDIS_HOST, REDIS_PORT)],
+if CHANNEL_LAYER_BACKEND == 'redis':
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [(REDIS_HOST, REDIS_PORT)],
+            },
         },
-    },
-}
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 # ----------------------------------------------------------------------
 # AI Chatbot (Gemini) + Google Books external knowledge fallback.

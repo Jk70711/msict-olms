@@ -79,10 +79,12 @@
                 </td>
                 <td class="text-end">
                   {% if not u.is_active %}
-                    <a href="{% url 'user_action' u.pk 'unlock' %}" class="btn btn-sm btn-success"
-                       onclick="return confirm('Unlock account for {{ u.username }}?')">
-                      <i class="bi bi-unlock-fill"></i> Unlock
-                    </a>
+                    <form method="post" action="{% url 'user_action' u.pk 'unlock' %}" class="d-inline" onsubmit="return confirm('Unlock account for {{ u.username }}?')">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-success">
+                        <i class="bi bi-unlock-fill"></i> Unlock
+                      </button>
+                    </form>
                   {% else %}
                     <a href="{% url 'user_detail' u.pk %}" class="btn btn-sm btn-outline-secondary">
                       <i class="bi bi-eye"></i> View
@@ -119,6 +121,7 @@
               <th>Last Attempt</th>
               <th>Usernames Tried</th>
               <th>User Status</th>
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
@@ -144,6 +147,20 @@
                   <span class="badge bg-secondary"><i class="bi bi-person-question"></i> Unknown</span>
                 {% endif %}
               </td>
+              <td>
+                {% if ip.is_blocked %}
+                  <span class="badge bg-danger"><i class="bi bi-shield-lock-fill"></i> Blocked</span>
+                {% else %}
+                  <form method="post" action="{% url 'block_ip' %}" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="ip_address" value="{{ ip.ip_address }}">
+                    <input type="hidden" name="reason" value="Suspicious activity: {{ ip.total }} failed attempts">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Block IP {{ ip.ip_address }}?')">
+                      <i class="bi bi-shield-lock"></i> Block
+                    </button>
+                  </form>
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -153,6 +170,64 @@
       <div class="text-center py-4 text-muted">
         <i class="bi bi-check-circle text-success fs-1"></i>
         <p class="mb-0 mt-2">No suspicious IPs detected recently.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Blocked IPs Management Panel -->
+  <div class="col-12">
+    <div class="card p-3 h-100 shadow-sm border-0" style="border-left: 4px solid #dc3545 !important;">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="fw-bold mb-0 text-danger">
+          <i class="bi bi-shield-lock-fill me-2"></i>Blocked IPs
+          <span class="badge bg-danger ms-2">{{ all_blocked_ips|length }}</span>
+        </h6>
+        <form method="post" action="{% url 'block_ip' %}" class="d-flex gap-2">
+          {% csrf_token %}
+          <input type="text" name="ip_address" class="form-control form-control-sm" placeholder="e.g. 192.168.1.1" required>
+          <input type="text" name="reason" class="form-control form-control-sm" placeholder="Reason (optional)" style="max-width:200px">
+          <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-plus-circle"></i> Block</button>
+        </form>
+      </div>
+      {% if all_blocked_ips %}
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 border">
+          <thead class="table-light">
+            <tr>
+              <th>S/N</th>
+              <th>IP Address</th>
+              <th>Reason</th>
+              <th>Blocked By</th>
+              <th>Date</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for bip in all_blocked_ips %}
+            <tr>
+              <td>{{ forloop.counter }}</td>
+              <td><code class="text-danger fw-bold">{{ bip.ip_address }}</code></td>
+              <td><small>{{ bip.reason|default:"—" }}</small></td>
+              <td><small>{{ bip.blocked_by.username|default:"system" }}</small></td>
+              <td><small class="text-muted">{{ bip.blocked_at|date:"d M Y H:i" }}</small></td>
+              <td>
+                <form method="post" action="{% url 'unblock_ip' bip.pk %}" class="d-inline" onsubmit="return confirm('Unblock IP {{ bip.ip_address }}?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-shield-check"></i> Unblock
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-3 text-muted">
+        <i class="bi bi-check-shield text-success fs-1"></i>
+        <p class="mb-0 mt-2">No IPs currently blocked.</p>
       </div>
       {% endif %}
     </div>

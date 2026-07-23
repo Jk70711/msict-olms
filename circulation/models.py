@@ -5,8 +5,10 @@
 # ============================================================
 
 from django.db import models
+import uuid
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 from django.conf import settings
 from accounts.models import OLMSUser
 from catalog.models import BookCopy, Book
@@ -36,6 +38,7 @@ class BorrowRequest(models.Model):
         ('approved', 'Approved'),
         ('rejected', 'Rejected'),
         ('cancelled', 'Cancelled'),
+        ('deleted', 'Deleted'),
     ]
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='borrow_requests')
     copy = models.ForeignKey(
@@ -47,7 +50,7 @@ class BorrowRequest(models.Model):
         related_name='hardcopy_requests'
     )  # Book title requested before a specific copy is assigned
     request_date = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='pending')
     approved_by = models.ForeignKey(
         OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='approved_requests'
@@ -95,6 +98,8 @@ class BorrowingTransaction(models.Model):
         OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='approved_transactions'
     )  # Mtunzaji aliyeidhinisha
+    access_token = models.UUIDField(unique=True, editable=False, null=True, blank=True)
+    token_expires = models.DateTimeField(null=True, blank=True)
     renewed_count = models.IntegerField(default=0)  # Mara ngapi mkopo umefanyiwa upya
 
     class Meta:
@@ -108,6 +113,11 @@ class BorrowingTransaction(models.Model):
         if not self.pk and not self.due_date:
             loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
             self.due_date = timezone.now() + timedelta(days=loan_days)
+        if self.copy.copy_type == 'softcopy' and self.borrow_type == 'softcopy':
+            if not self.access_token:
+                self.access_token = uuid.uuid4()
+            if not self.token_expires:
+                self.token_expires = self.due_date
         super().save(*args, **kwargs)
 
     @property
@@ -143,12 +153,16 @@ class BorrowingTransaction(models.Model):
 
     @property
     def time_remaining_display(self):
-        """Human-readable countdown: '3d 4h left', '5h 20m left', 'Due now', '2d overdue'."""
+        """Human-readable countdown: '3d 4h left', '5h 20m left', 'Due now', '2d overdue'.
+        For softcopies past due date, shows 'Expired' instead of 'overdue'."""
         if self.status == 'returned':
             return '—'
         delta = self.due_date - timezone.now()
         total_secs = int(delta.total_seconds())
         if total_secs <= 0:
+            # Softcopies expire (no overdue concept)
+            if self.copy.copy_type == 'softcopy':
+                return 'Expired'
             over_secs = abs(total_secs)
             over_days = over_secs // 86400
             over_hrs  = (over_secs % 86400) // 3600
@@ -188,25 +202,27 @@ class BorrowingTransaction(models.Model):
         """For softcopy: True only when borrow period has not yet expired."""
         # For free softcopies, link is always active while borrowed
         if self.copy.copy_type == 'softcopy' and self.copy.access_type == 'free':
-            return self.status in ('borrowed', 'overdue')
+            return self.status == 'borrowed'
         # For special (borrow) softcopies, link is only active within due_date
-        return self.status in ('borrowed', 'overdue') and timezone.now() <= self.due_date
+        return self.status == 'borrowed' and timezone.now() <= self.due_date
     
     @property
     def is_link_expired(self):
         """Check if special softcopy link has expired (past due date)."""
         if self.copy.copy_type == 'softcopy' and self.copy.access_type == 'borrow':
-            return self.status in ('borrowed', 'overdue') and timezone.now() > self.due_date
+            return self.status == 'borrowed' and timezone.now() > self.due_date
         return False
     
     @property
     def calculated_fine(self):
         """Calculate current fine amount based on overdue days and FINE_PER_DAY."""
-        from django.conf import settings
+        # Softcopies do not have overdue fines - link simply expires
+        if self.copy.copy_type == 'softcopy':
+            return 0
         if not self.is_overdue():
             return 0
         days_overdue = self.days_overdue()
-        fine_per_day = getattr(settings, 'FINE_PER_DAY', 1000)
+        fine_per_day = float(_pref('FINE_PER_DAY', 1000))
         return days_overdue * fine_per_day
     
     @property
@@ -237,38 +253,74 @@ class BorrowingTransaction(models.Model):
 
     def can_renew(self):
         max_renewals = int(_pref('MAX_RENEWALS', 2))
-        # 1. Max renewals: 2 times max per copy
+        is_soft = self.copy.copy_type == 'softcopy' and self.borrow_type == 'softcopy'
+
+        # 1. Max renewals: capped by system preference
         if self.renewed_count >= max_renewals:
-            return False, "Maximum renewals reached (2 times). Return the book then borrow again."
-        # 2. Check for unpaid fines - block renewal if user has fines
-        if Fine.objects.filter(user=self.user, paid=False).exists():
-            return False, "You have unpaid fines. Please pay all fines before renewing."
-        # 3. Renewal available only when 2 days or fewer remain before due date
-        days_remaining = (self.due_date - timezone.now()).days
-        if days_remaining > 2:
-            return False, f"Renewal available when 2 days or fewer remain before due date. ({days_remaining} days remaining)"
-        if self.is_overdue():
-            return False, "Overdue books cannot be renewed. Please return the book."
-        # 4. Hardcopy check for reservations
-        is_soft = self.copy.copy_type == 'softcopy'
-        if not is_soft:
+            return False, f"Maximum renewals reached ({max_renewals} time(s))."
+
+        renew_window = int(_pref('RENEWAL_WINDOW_DAYS', 2))
+        if is_soft:
+            # ── Softcopy renewal logic (different from hardcopy) ──
+            # No unpaid fines check — softcopy has no fine/overdue concept.
+            # No reservation check — digital copies are not physically reserved.
+            # Renewal allowed when renew_window days or fewer remain, OR when link already expired.
+            days_remaining = (self.due_date - timezone.now()).days
+            if self.is_link_expired or (self.token_expires and timezone.now() > self.token_expires):
+                return True, "Eligible for renewal (link expired)"
+            if days_remaining > renew_window:
+                return False, f"Renewal available when {renew_window} day(s) or fewer remain before due date. ({days_remaining} days remaining)"
+            return True, "Eligible for renewal"
+        else:
+            # ── Hardcopy renewal logic ──
+            # 2. Check for unpaid fines - block renewal if user has fines
+            if Fine.objects.filter(user=self.user, paid=False).exists():
+                return False, "You have unpaid fines. Please pay all fines before renewing."
+            # 3. Renewal available only when renew_window days or fewer remain before due date
+            days_remaining = (self.due_date - timezone.now()).days
+            if days_remaining > renew_window:
+                return False, f"Renewal available when {renew_window} day(s) or fewer remain before due date. ({days_remaining} days remaining)"
+            # 4. Overdue check
+            if self.is_overdue():
+                return False, "Overdue books cannot be renewed. Please return the book."
+            # 5. Hardcopy check for reservations
             if Reservation.objects.filter(
                 book=self.copy.book, status='pending'
             ).exists():
                 return False, "This book has pending reservations. Cannot renew."
-        return True, "Eligible for renewal"
+            return True, "Eligible for renewal"
 
     def renew(self):
+        """Renew the borrowing transaction.
+        For softcopy: called AFTER payment is confirmed in softcopy_renewal_payment_view.
+        For hardcopy: called directly from renew_transaction_view.
+        """
         can_renew, message = self.can_renew()
-        if can_renew:
-            loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-            self.due_date = timezone.now() + timedelta(days=loan_days)
-            self.renewed_count += 1
-            if self.status == 'overdue':
-                self.status = 'borrowed'
-            self.save()
-            return True, message
-        return False, message
+        if not can_renew:
+            return False, message
+
+        loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+        self.due_date = timezone.now() + timedelta(days=loan_days)
+        self.renewed_count += 1
+        if self.status == 'overdue':
+            self.status = 'borrowed'
+        # For softcopy: generate new access token and extend expiry
+        is_soft = self.copy.copy_type == 'softcopy' and self.borrow_type == 'softcopy'
+        if is_soft:
+            self.access_token = uuid.uuid4()
+            self.token_expires = self.due_date
+        self.save()
+        # Create new SoftcopyAccessLog entry for softcopy renewals
+        if is_soft:
+            SoftcopyAccessLog.objects.create(
+                user=self.user,
+                copy=self.copy,
+                transaction=self,
+                access_token=str(self.access_token),
+                access_url='',  # URL will be built by the view when needed
+                expires_at=self.due_date,
+            )
+        return True, "Renewal successful"
 
 
 # ----------------------------------------------------------------------
@@ -409,6 +461,69 @@ class LossReport(models.Model):
 
 
 # ----------------------------------------------------------------------
+# Model ya DamageReport — Ripoti ya uharibifu wa kitabu
+# Mtunzaji anaweka baada ya mwanachama kurudisha kitabu kilichoharibika
+# Hali: pending → confirmed (faini imewekwa) → resolved (faini imelipwa)
+# ----------------------------------------------------------------------
+class DamageReport(models.Model):
+    DAMAGE_TYPE_CHOICES = [
+        ('pages_torn', 'Pages Torn'),
+        ('cover_damaged', 'Cover Damaged'),
+        ('water_damage', 'Water Damage'),
+        ('spine_broken', 'Spine Broken'),
+        ('writing_marking', 'Writing / Marking'),
+        ('missing_pages', 'Missing Pages'),
+        ('other', 'Other'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'Pending Review'),
+        ('confirmed', 'Confirmed – Awaiting Payment'),
+        ('resolved', 'Resolved – Fine Paid'),
+        ('dismissed', 'Dismissed'),
+    ]
+
+    transaction = models.OneToOneField(
+        'BorrowingTransaction', on_delete=models.CASCADE, related_name='damage_report'
+    )
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='damage_reports')
+    damage_type = models.CharField(max_length=20, choices=DAMAGE_TYPE_CHOICES)
+    damage_description = models.TextField(blank=True, help_text='Detailed description of damage')
+    reported_by = models.ForeignKey(
+        OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='reported_damage_reports'
+    )
+    reported_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='confirmed')
+    damage_fine = models.OneToOneField(
+        'Fine', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='damage_report'
+    )
+    librarian_notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = 'damage_reports'
+        ordering = ['-reported_at']
+
+    def __str__(self):
+        return f"Damage: {self.user.username} – {self.transaction.copy.book.title} [{self.status}]"
+
+    @property
+    def total_remaining(self):
+        """Total remaining balance across damage fine and any overdue fine on this transaction."""
+        total = Decimal('0')
+        if self.damage_fine and not self.damage_fine.paid:
+            total += self.damage_fine.remaining_balance
+        # Include overdue fine if present
+        overdue_fine = Fine.objects.filter(
+            transaction=self.transaction,
+            reason__icontains='Overdue',
+        ).exclude(id=self.damage_fine_id if self.damage_fine_id else 0).first()
+        if overdue_fine and not overdue_fine.paid:
+            total += overdue_fine.remaining_balance
+        return total
+
+
+# ----------------------------------------------------------------------
 # Model ya Notification — Arifa zilizotumwa kwa mwanachama
 # SMS au barua pepe
 # channel: 'sms' au 'email' | status: pending → sent / failed
@@ -424,15 +539,25 @@ class Notification(models.Model):
         ('suspicious', 'Suspicious'),
         ('borrowing', 'Borrowing'),
         ('approval', 'Approval'),
+        ('rejection', 'Rejection'),
         ('fine', 'Fine'),
         ('overdue', 'Overdue'),
         ('loss_report', 'Loss Report'),
         ('loss_fine', 'Loss Fine'),
+        ('damage_report', 'Damage Report'),
+        ('damage_fine', 'Damage Fine'),
+        ('softcopy_link', 'Softcopy Link'),
+        ('softcopy_expiry', 'Softcopy Expiry Warning'),
+        ('password_reminder', 'Password Change Reminder'),
+        ('registration_approved', 'Registration Approved'),
+        ('registration_rejected', 'Registration Rejected'),
+        ('bulk_message', 'Bulk Message'),
+        ('new_arrival', 'New Arrival'),
     ]
 
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='notifications')
     message = models.TextField()
-    message_type = models.CharField(max_length=20, choices=MESSAGE_TYPE_CHOICES, default='approval', blank=True, null=True)
+    message_type = models.CharField(max_length=30, choices=MESSAGE_TYPE_CHOICES, default='approval', blank=True, null=True)
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='normal')
     channel = models.CharField(max_length=10, choices=CHANNEL_CHOICES)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
@@ -446,5 +571,111 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"[{self.channel}] to {self.user.username}: {self.message[:50]}"
+
+
+# ----------------------------------------------------------------------
+# Model ya PrepaidTransaction — Malipo ya awali kwa softcopy access
+# Inafuatilia malipo ya M-Pesa na payment gateway nyingine
+# ----------------------------------------------------------------------
+class PrepaidTransaction(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    PAYMENT_METHOD_CHOICES = [
+        ('mpesa', 'M-Pesa'),
+        ('tigopesa', 'Tigo Pesa'),
+        ('airtel', 'Airtel Money'),
+        ('halotel', 'Halotel'),
+        ('card', 'Card'),
+        ('bank', 'Bank'),
+        ('cash', 'Cash'),
+    ]
+
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='prepaid_transactions')
+    copy = models.ForeignKey(BookCopy, on_delete=models.CASCADE, related_name='prepaid_transactions')
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    payment_method = models.CharField(max_length=10, choices=PAYMENT_METHOD_CHOICES, default='mpesa')
+    transaction_id = models.CharField(max_length=100, unique=True, blank=True, null=True)  # External payment gateway ID
+    phone_number = models.CharField(max_length=15, blank=True, default='')  # Mobile money phone
+    bank_name = models.CharField(max_length=50, blank=True, default='')  # Bank name for bank transfers
+    bank_account_no = models.CharField(max_length=20, blank=True, default='')  # Bank account number
+    card_last4 = models.CharField(max_length=4, blank=True, default='')  # Last 4 digits of card
+    card_holder = models.CharField(max_length=100, blank=True, default='')  # Cardholder name
+    receipt_no = models.CharField(max_length=50, blank=True, default='')  # Reference/receipt number
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    payment_date = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'prepaid_transactions'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - TZS {self.amount} [{self.status}]"
+
+
+# ----------------------------------------------------------------------
+# Model ya SoftcopyAccessLogs — Kufuatilia links za softcopy access
+# Inahifadhi links za kipekee zinazoexpire baada ya siku 7
+# ----------------------------------------------------------------------
+class SoftcopyAccessLog(models.Model):
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='softcopy_access_logs')
+    copy = models.ForeignKey(BookCopy, on_delete=models.CASCADE, related_name='softcopy_access_logs')
+    transaction = models.ForeignKey(BorrowingTransaction, on_delete=models.CASCADE, related_name='softcopy_access_logs')
+    access_token = models.CharField(max_length=100, unique=True)  # Unique token for URL
+    access_url = models.URLField()  # Full secure URL
+    expires_at = models.DateTimeField()  # 7 days from creation
+    access_count = models.IntegerField(default=0)  # How many times accessed
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'softcopy_access_logs'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} - {self.copy.book.title} (expires: {self.expires_at})"
+
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def days_until_expiry(self):
+        delta = self.expires_at - timezone.now()
+        return max(0, delta.days)
+
+
+# ----------------------------------------------------------------------
+# Model ya RevenueTransaction — Ufuatiliaji wa mapato/hasara
+# account_type: overdue, link_fee, guest_fee, loss
+# amount: chanya = mapato, hasi = hasara/refund
+# ----------------------------------------------------------------------
+class RevenueTransaction(models.Model):
+    ACCOUNT_TYPE_CHOICES = [
+        ('overdue', 'Overdue Fee'),
+        ('link_fee', 'Softcopy Link Fee'),
+        ('guest_fee', 'Guest Session Fee'),
+        ('loss', 'Loss / Refund'),
+        ('damage', 'Damage Fee'),
+    ]
+
+    user = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='revenue_transactions')
+    account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    description = models.TextField(blank=True)
+    reference_id = models.BigIntegerField(null=True, blank=True)
+    reference_table = models.CharField(max_length=100, blank=True)
+    recorded_at = models.DateTimeField(auto_now_add=True)
+    recorded_by = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='recorded_revenue_transactions')
+
+    class Meta:
+        db_table = 'revenue_transactions'
+        ordering = ['-recorded_at']
+
+    def __str__(self):
+        who = self.user.username if self.user else 'System'
+        return f"{self.account_type} | TZS {self.amount} | {who}"
 
 

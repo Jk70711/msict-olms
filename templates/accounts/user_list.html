@@ -186,14 +186,26 @@ document.addEventListener('DOMContentLoaded', function() {
               
               {% if user.role == 'admin' %}
                 {% if u.is_active %}
-                  <a href="{% url 'user_action' u.pk 'lock' %}" class="btn btn-sm btn-outline-danger" title="Lock Account" onclick="return confirm('Are you sure you want to lock {{ u.username }}?')"><i class="bi bi-lock-fill"></i></a>
+                  <form method="post" action="{% url 'user_action' u.pk 'lock' %}" class="d-inline" onsubmit="return confirm('Are you sure you want to lock {{ u.username }}?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Lock Account"><i class="bi bi-lock-fill"></i></button>
+                  </form>
                 {% else %}
-                  <a href="{% url 'user_action' u.pk 'unlock' %}" class="btn btn-sm btn-outline-success" title="Unlock Account" onclick="return confirm('Are you sure you want to unlock {{ u.username }}?')"><i class="bi bi-unlock-fill"></i></a>
+                  <form method="post" action="{% url 'user_action' u.pk 'unlock' %}" class="d-inline" onsubmit="return confirm('Are you sure you want to unlock {{ u.username }}?')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success" title="Unlock Account"><i class="bi bi-unlock-fill"></i></button>
+                  </form>
                 {% endif %}
-                <a href="{% url 'user_action' u.pk 'delete' %}" class="btn btn-sm btn-outline-dark" title="Delete User" onclick="return confirm('CRITICAL WARNING: Are you sure you want to PERMANENTLY DELETE {{ u.username }}? This cannot be undone.')"><i class="bi bi-trash"></i></a>
+                <form method="post" action="{% url 'delete_user' u.pk %}" class="d-inline" onsubmit="return confirm('CRITICAL WARNING: Are you sure you want to PERMANENTLY DELETE {{ u.username }}? This cannot be undone.')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-dark" title="Delete User"><i class="bi bi-trash"></i></button>
+                </form>
               {% elif user.role == 'librarian' and u.role == 'member' %}
                 <a href="{% url 'edit_user' u.pk %}" class="btn btn-sm btn-outline-primary" title="Edit Member"><i class="bi bi-pencil"></i></a>
-                <a href="{% url 'user_action' u.pk 'delete' %}" class="btn btn-sm btn-outline-danger" title="Delete Member" onclick="return confirm('Are you sure you want to permanently delete member {{ u.username }}? This cannot be undone.')"><i class="bi bi-trash"></i></a>
+                <form method="post" action="{% url 'delete_user' u.pk %}" class="d-inline" onsubmit="return confirm('Are you sure you want to permanently delete member {{ u.username }}? This cannot be undone.')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete Member"><i class="bi bi-trash"></i></button>
+                </form>
               {% endif %}
             </div>
           </td>
@@ -203,6 +215,19 @@ document.addEventListener('DOMContentLoaded', function() {
         {% endfor %}
       </tbody>
     </table>
+    {% if page_obj.has_other_pages %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+      <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)</span>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}">&laquo;</a></li>{% endif %}
+        {% for n in page_obj.paginator.page_range %}
+          {% if n == page_obj.number %}<li class="page-item active"><span class="page-link">{{ n }}</span></li>
+          {% elif n > page_obj.number|add:'-3' and n < page_obj.number|add:'3' %}<li class="page-item"><a class="page-link" href="?page={{ n }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}">{{ n }}</a></li>{% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if status %}&status={{ status }}{% endif %}">&raquo;</a></li>{% endif %}
+      </ul>
+    </nav>
+    {% endif %}
   </div>
 </div>
 </div>

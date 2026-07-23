@@ -38,19 +38,48 @@
           </div>
           <div class="col-md-4">
             <label class="form-label fw-semibold">Phone <span class="text-danger">*</span></label>
-            <input type="text" name="phone" class="form-control" value="{{ user_obj.phone }}" required>
+            <input type="tel" name="phone" class="form-control" value="{{ user_obj.phone }}" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678" required>
           </div>
-          {% if user_obj.member_type == 'student' or not user_obj.member_type %}
+
+          {% if is_admin %}
           <div class="col-md-4">
-            <label class="form-label">Registration No {% if user_obj.member_type == 'student' %}<span class="text-danger">*</span>{% endif %} <small class="text-muted">(students only)</small></label>
-            <input type="text" name="registration_no" class="form-control" value="{{ user_obj.registration_no|default:'' }}" {% if user_obj.member_type == 'student' %}required{% endif %}>
+            <label class="form-label fw-semibold">Role <span class="text-danger">*</span></label>
+            <select name="role" id="roleSelect" class="form-select" onchange="toggleMemberType()">
+              {% for value, label in role_choices %}
+              <option value="{{ value }}" {% if user_obj.role == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Admin only — changing role affects access level.</div>
+          </div>
+          {% else %}
+          <input type="hidden" name="role" value="{{ user_obj.role }}">
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">Role</label>
+            <input type="text" class="form-control" value="{{ user_obj.role|title }}" disabled>
+            <div class="form-text">Only admins can change roles.</div>
           </div>
           {% endif %}
+
+          <div class="col-md-4" id="memberTypeDiv">
+            <label class="form-label fw-semibold">Member Type</label>
+            <select name="member_type" id="memberTypeSelect" class="form-select">
+              <option value="">-- None --</option>
+              {% for value, label in member_type_choices %}
+              <option value="{{ value }}" {% if user_obj.member_type == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Only applies to members.</div>
+          </div>
+
+          <div class="col-md-4" id="regNoDiv">
+            <label class="form-label">Registration No <small class="text-muted">(students only)</small></label>
+            <input type="text" name="registration_no" class="form-control" value="{{ user_obj.registration_no|default:'' }}">
+          </div>
         </div>
+
         <div class="alert alert-secondary mt-3 small">
-          <b>Role:</b> {{ user_obj.role|title }} &nbsp;|&nbsp;
-          <b>Member Type:</b> {{ user_obj.get_member_type_display|default:'—' }} &nbsp;|&nbsp;
-          <b>Username:</b> <code>{{ user_obj.username }}</code>
+          <b>Username:</b> <code>{{ user_obj.username }}</code> &nbsp;|&nbsp;
+          <b>Status:</b> {{ user_obj.registration_status|title }}
         </div>
         <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Changes</button>
         <a href="{% url 'user_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
@@ -58,4 +87,22 @@
     </div>
   </div>
 </div>
+
+<script>
+function toggleMemberType() {
+  var role = document.getElementById('roleSelect');
+  var memberTypeDiv = document.getElementById('memberTypeDiv');
+  var regNoDiv = document.getElementById('regNoDiv');
+  if (!role) return;
+  var isMember = role.value === 'member';
+  if (memberTypeDiv) memberTypeDiv.style.display = isMember ? '' : 'none';
+  if (regNoDiv) regNoDiv.style.display = isMember ? '' : 'none';
+  // Clear member_type if not member
+  if (!isMember) {
+    var mt = document.getElementById('memberTypeSelect');
+    if (mt) mt.value = '';
+  }
+}
+toggleMemberType();
+</script>
 {% endblock %}

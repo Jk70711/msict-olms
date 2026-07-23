@@ -156,13 +156,23 @@
               <div class="mt-2 d-flex flex-column gap-1 align-items-end">
                 {% if tx.copy.copy_type == 'softcopy' %}
                   {% if tx.is_link_active and tx.copy.file_path %}
-                  <a href="{% url 'serve_softcopy' tx.copy.pk %}" class="btn btn-sm btn-primary" target="_blank">
-                    <i class="bi bi-file-pdf"></i> Read Online
-                  </a>
+                  <div class="btn-group btn-group-sm">
+                    <a href="{% url 'softcopy_access' tx.access_token %}" class="btn btn-sm btn-primary" target="_blank">
+                      <i class="bi bi-file-pdf"></i> Read
+                    </a>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="copyToClipboard('{% url 'softcopy_access' tx.access_token %}')" title="Copy link">
+                      <i class="bi bi-clipboard"></i> Copy Link
+                    </button>
+                  </div>
                   {% elif tx.is_link_expired %}
                   <span class="btn btn-sm btn-outline-danger disabled"><i class="bi bi-wifi-off"></i> Link Expired</span>
                   {% elif not tx.is_link_active %}
                   <span class="btn btn-sm btn-outline-danger disabled"><i class="bi bi-wifi-off"></i> Link Expired</span>
+                  {% endif %}
+                  {% if tx.copy.prepaid_fee > 0 and tx.copy.prepaid_transactions.first.pk %}
+                  <a href="{% url 'softcopy_receipt_pdf' tx.copy.prepaid_transactions.first.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1" title="Print Receipt">
+                    <i class="bi bi-receipt"></i> Receipt
+                  </a>
                   {% endif %}
                   {% if tx.is_renewable %}
                   <form method="post" action="{% url 'renew_transaction' tx.pk %}" class="d-inline" onsubmit="return confirm('Renew this borrowing?')">
@@ -175,35 +185,13 @@
                   {% else %}
                   <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
                   {% endif %}
-                  {% if not tx.is_overdue %}
-                  <form method="post" action="{% url 'return_early' tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
+                  {% if tx.is_link_active %}
+                  <form method="post" action="{% url 'cancel_softcopy_access' tx.pk %}" class="d-inline" onsubmit="return confirm('Cancel access to this softcopy? This will free up a borrow slot.')">
                     {% csrf_token %}
-                    <button type="submit" class="btn btn-sm btn-outline-secondary">
-                      <i class="bi bi-arrow-return-left"></i> Return
+                    <button type="submit" class="btn btn-sm btn-outline-danger mt-1">
+                      <i class="bi bi-x-circle"></i> Cancel Access
                     </button>
                   </form>
-                  {% else %}
-                  {# Overdue - check if fines are paid #}
-                  {% for tid, fine_info in tx_fines.items %}
-                    {% if tid == tx.id %}
-                      {% if fine_info.remaining > 0 %}
-                      <span class="btn btn-sm btn-outline-danger disabled" title="Pay fines first (TZS {{ fine_info.remaining|floatformat:0 }})">
-                        <i class="bi bi-exclamation-triangle"></i> Return Blocked
-                      </span>
-                      {% else %}
-                      <form method="post" action="{% url 'return_early' tx.pk %}" class="d-inline" onsubmit="return confirm('Return this softcopy early?')">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-sm btn-outline-secondary">
-                          <i class="bi bi-arrow-return-left"></i> Return
-                        </button>
-                      </form>
-                      {% endif %}
-                    {% endif %}
-                  {% empty %}
-                  <span class="btn btn-sm btn-outline-danger disabled" title="Pay fines first">
-                    <i class="bi bi-exclamation-triangle"></i> Return Blocked
-                  </span>
-                  {% endfor %}
                   {% endif %}
                 {% else %}
                   {% if tx.is_renewable %}
@@ -217,6 +205,7 @@
                   {% else %}
                   <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
                   {% endif %}
+                  <span class="text-muted small d-block mt-1"><i class="bi bi-info-circle"></i> Return at circulation desk</span>
                   {% if not tx.loss_report_exists %}
                   <a href="{% url 'report_loss' tx.pk %}" class="btn btn-sm btn-outline-danger mt-1">
                     <i class="bi bi-exclamation-triangle"></i> Report Lost
@@ -226,6 +215,10 @@
                   {% if tx.loss_report.loss_fine and not tx.loss_report.loss_fine.paid %}
                   <a href="{% url 'pay_loss_fine' tx.loss_report.pk %}" class="btn btn-sm btn-success mt-1">
                     <i class="bi bi-credit-card"></i> Pay Fine
+                  </a>
+                  {% elif tx.loss_report.loss_fine and tx.loss_report.loss_fine.paid %}
+                  <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1" title="Print Receipt">
+                    <i class="bi bi-receipt"></i> Receipt
                   </a>
                   {% endif %}
                   {% endif %}
@@ -241,6 +234,33 @@
     </div>
   </div>
 
+  {% if expired_softcopies %}
+  <div class="col-md-6">
+    <div class="card h-100 border-warning">
+      <div class="card-header fw-bold text-warning"><i class="bi bi-clock-history"></i> Expired Softcopy Access</div>
+      <div class="list-group list-group-flush">
+        {% for tx in expired_softcopies %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              {% if tx.copy.book %}
+              <a href="{% url 'book_detail_public' tx.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ tx.copy.book.title|truncatechars:40 }}</a>
+              {% else %}
+              <span class="fw-semibold text-muted">Book not available</span>
+              {% endif %}
+              <div class="small text-muted">Softcopy access expired on {{ tx.due_date|date:"M d, Y" }}</div>
+            </div>
+            <div class="text-end">
+              <a href="{% url 'book_detail_public' tx.copy.book.pk %}" class="btn btn-sm btn-outline-secondary">View Book</a>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Pending Requests -->
   <div class="col-md-6">
     <div class="card h-100">
@@ -255,12 +275,14 @@
         <div class="list-group-item">
           <div class="d-flex justify-content-between align-items-start">
             <div>
-              {% if req.copy.book %}
-              <a href="{% url 'book_detail_public' req.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ req.copy.book.title|truncatechars:40 }}</a>
-              {% else %}
-              <span class="fw-semibold text-muted">Book not available</span>
-              {% endif %}
-              <div class="small text-muted">{% if req.copy.copy_type == 'hardcopy' %}Acc: {{ req.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}</div>
+              <a href="{% url 'book_detail_public' req.book.pk %}" class="fw-semibold text-decoration-none">{{ req.book.title|truncatechars:40 }}</a>
+              <div class="small text-muted">
+                {% if req.copy %}
+                  {% if req.copy.copy_type == 'hardcopy' %}Acc: {{ req.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}
+                {% else %}
+                  <span class="badge bg-secondary"><i class="bi bi-book"></i> Hardcopy (copy assigned at pickup)</span>
+                {% endif %}
+              </div>
               <div class="small text-muted">Requested: {{ req.request_date|date:"M d, Y" }}</div>
             </div>
             <form method="post" action="{% url 'cancel_borrow_request' req.pk %}" class="d-inline" onsubmit="return confirm('Cancel this request?')">
@@ -271,6 +293,41 @@
         </div>
         {% empty %}
         <div class="list-group-item text-muted text-center py-3">No pending requests</div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Approved Requests — Waiting Issuing -->
+  <div class="col-md-6">
+    <div class="card h-100" style="border-left: 4px solid #198754;">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-check-circle-fill text-success"></i> Approved — Waiting Issuing</span>
+        {% if approved_requests %}
+        <span class="badge bg-success">{{ approved_requests.count }}</span>
+        {% endif %}
+      </div>
+      <div class="list-group list-group-flush">
+        {% for req in approved_requests %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <a href="{% url 'book_detail_public' req.book.pk %}" class="fw-semibold text-decoration-none">{{ req.book.title|truncatechars:40 }}</a>
+              <div class="small text-muted">
+                {% if req.copy %}
+                  {% if req.copy.copy_type == 'hardcopy' %}Acc: {{ req.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}
+                {% else %}
+                  <span class="badge bg-secondary"><i class="bi bi-book"></i> Hardcopy (copy assigned at pickup)</span>
+                {% endif %}
+              </div>
+              <div class="small text-muted">Approved: {{ req.request_date|date:"M d, Y" }}</div>
+              <div class="small text-success"><i class="bi bi-info-circle"></i> Visit the library to collect your book.</div>
+            </div>
+            <span class="badge bg-success"><i class="bi bi-hourglass-bottom"></i> Waiting</span>
+          </div>
+        </div>
+        {% empty %}
+        <div class="list-group-item text-muted text-center py-3">No approved requests</div>
         {% endfor %}
       </div>
     </div>
@@ -367,29 +424,54 @@
   </div>
 </div>
 
-<!-- Unpaid Fines -->
-{% if unpaid_fines %}
+<!-- Other Requests (Rejected / Cancelled / Deleted) -->
+{% if rejected_requests %}
 <div class="row g-3 mt-3">
   <div class="col-12">
-    <div class="card border-danger">
-      <div class="card-header fw-bold bg-danger text-white"><i class="bi bi-exclamation-triangle"></i> Unpaid Fines</div>
+    <div class="card">
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-archive"></i> Other Requests</span>
+        <span class="badge bg-secondary">{{ rejected_requests.count }}</span>
+      </div>
       <div class="table-responsive">
-        <table class="table table-sm mb-0">
+        <table class="table table-sm table-hover mb-0">
           <thead>
             <tr>
               <th>Book</th>
-              <th>Amount</th>
-              <th>Reason</th>
-              <th>Created</th>
+              <th>Requested</th>
+              <th>Status</th>
+              <th>Details</th>
             </tr>
           </thead>
           <tbody>
-            {% for fine in unpaid_fines %}
+            {% for req in rejected_requests %}
             <tr>
-              <td>{{ fine.transaction.copy.book.title|truncatechars:40 }}</td>
-              <td class="fw-bold text-danger">TSh {{ fine.amount }}</td>
-              <td><span class="badge bg-warning text-dark">{{ fine.reason|default:"Overdue" }}</span></td>
-              <td class="small">{{ fine.created_at|date:"M d, Y" }}</td>
+              <td>
+                <small class="fw-semibold">{{ req.book.title|truncatechars:40 }}</small>
+              </td>
+              <td class="small text-muted">{{ req.request_date|date:"M d, Y" }}</td>
+              <td>
+                {% if req.status == 'rejected' %}
+                  <span class="badge bg-danger">Rejected</span>
+                {% elif req.status == 'cancelled' %}
+                  <span class="badge bg-secondary">Cancelled</span>
+                {% elif req.status == 'deleted' %}
+                  <span class="badge bg-dark">Deleted</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ req.status|title }}</span>
+                {% endif %}
+              </td>
+              <td class="small text-muted">
+                {% if req.status == 'rejected' %}
+                  {{ req.rejection_reason|truncatechars:40|default:"—" }}
+                {% elif req.status == 'deleted' %}
+                  Request deleted by librarian
+                {% elif req.status == 'cancelled' %}
+                  Cancelled by you
+                {% else %}
+                  —
+                {% endif %}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -399,4 +481,65 @@
   </div>
 </div>
 {% endif %}
+
+<!-- Unpaid Fines -->
+{% if unpaid_fines %}
+<div class="row g-3 mt-3">
+  <div class="col-12">
+    <div class="card border-danger">
+      <div class="card-header fw-bold bg-danger text-white d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-exclamation-triangle"></i> Unpaid Fines</span>
+        <a href="{% url 'my_fines' %}" class="btn btn-sm btn-light text-danger">View All Fines &amp; Receipts</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm mb-0">
+          <thead>
+            <tr>
+              <th>Book</th>
+              <th>Amount</th>
+              <th>Paid</th>
+              <th>Reason</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for fine in unpaid_fines %}
+            <tr>
+              <td>{{ fine.transaction.copy.book.title|truncatechars:40 }}</td>
+              <td class="fw-bold text-danger">TSh {{ fine.amount }}</td>
+              <td class="small text-success">TSh {{ fine.amount_paid|floatformat:0 }}</td>
+              <td><span class="badge bg-warning text-dark">{{ fine.reason|default:"Overdue" }}</span></td>
+              <td class="small">{{ fine.created_at|date:"M d, Y" }}</td>
+              <td>
+                <a href="{% url 'pay_fine' fine.id %}" class="btn btn-sm btn-success">
+                  <i class="bi bi-credit-card"></i> Pay
+                </a>
+                {% if fine.amount_paid > 0 %}
+                <a href="{% url 'fine_receipt_pdf' fine.id %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i>
+                </a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+function copyToClipboard(relativeUrl) {
+  var fullUrl = window.location.origin + relativeUrl;
+  navigator.clipboard.writeText(fullUrl).then(function() {
+    alert('Link copied to clipboard!');
+  }, function(err) {
+    console.error('Failed to copy: ', err);
+    alert('Failed to copy link. Please copy manually.');
+  });
+}
+</script>
 {% endblock %}

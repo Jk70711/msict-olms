@@ -1,0 +1,441 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Start Guest Session — MSICT OLMS</title>
+  <link rel="icon" type="image/png" href="{% static 'images/msict_logo.png' %}">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+      color: #1e293b;
+    }
+    .session-card {
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.3);
+      max-width: 560px;
+      width: 100%;
+      overflow: hidden;
+    }
+    .session-card-header {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      padding: 1.5rem;
+      text-align: center;
+    }
+    .session-card-header img {
+      max-height: 48px;
+      margin-bottom: .5rem;
+    }
+    .session-card-header h4 {
+      margin: 0;
+      font-weight: 700;
+      font-size: 1.15rem;
+    }
+    .session-card-header p {
+      margin: .25rem 0 0;
+      font-size: .8rem;
+      opacity: .85;
+    }
+    .session-card-body {
+      padding: 1.75rem;
+    }
+    .step-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      margin-bottom: 1.5rem;
+    }
+    .step-dot {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .75rem;
+      font-weight: 700;
+    }
+    .step-dot.active {
+      background: #2563eb;
+      color: #fff;
+    }
+    .step-dot.inactive {
+      background: #e2e8f0;
+      color: #94a3b8;
+    }
+    .step-line {
+      width: 40px;
+      height: 2px;
+      background: #e2e8f0;
+    }
+    .step-line.active { background: #2563eb; }
+    .step-label {
+      font-size: .72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .summary-card {
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: .35rem 0;
+    }
+    .summary-row:not(:last-child) {
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .summary-label { font-size: .82rem; color: #64748b; }
+    .summary-value { font-size: .9rem; font-weight: 600; color: #1e293b; }
+    .form-control, .form-select {
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      font-size: .85rem;
+      padding: .5rem .75rem;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37,99,235,.1);
+    }
+    .form-label { font-weight: 600; font-size: .8rem; margin-bottom: .35rem; }
+    .btn-primary {
+      background: #2563eb;
+      border-color: #2563eb;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+    .btn-primary:hover {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+    }
+    .btn-msict {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-weight: 500;
+      box-shadow: 0 2px 8px rgba(37,99,235,.3);
+    }
+    .btn-msict:hover {
+      background: linear-gradient(135deg, #1d4ed8, #1e40af);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(37,99,235,.4);
+    }
+    .logout-link {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      color: rgba(255,255,255,.6);
+      font-size: .8rem;
+      text-decoration: none;
+      padding: .4rem .75rem;
+      border-radius: 8px;
+      transition: all .15s;
+    }
+    .logout-link:hover {
+      color: #fff;
+      background: rgba(255,255,255,.1);
+    }
+    .alert {
+      border-radius: 10px;
+      font-size: .83rem;
+      border: none;
+    }
+    .alert-success { background: #f0fdf4; color: #166534; border-left: 4px solid #22c55e; }
+    .alert-danger  { background: #fef2f2; color: #991b1b; border-left: 4px solid #ef4444; }
+    .alert-warning { background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b; }
+    .alert-info    { background: #eff6ff; color: #1e40af; border-left: 4px solid #3b82f6; }
+  </style>
+</head>
+<body>
+
+<a href="{% url 'logout' %}" class="logout-link">
+  <i class="bi bi-box-arrow-right"></i> Logout
+</a>
+
+<div class="session-card">
+  <div class="session-card-header">
+    {% if active_logo and active_logo.image %}
+      <img src="{{ active_logo.image.url }}" alt="MSICT">
+    {% else %}
+      <div style="width:48px;height:48px;background:rgba(255,255,255,.15);border-radius:10px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:.5rem;">
+        <i class="bi bi-book-half text-white" style="font-size:1.4rem;"></i>
+      </div>
+    {% endif %}
+    <h4><i class="bi bi-person-badge me-1"></i> Guest Session</h4>
+    <p>MSICT Library — Pay to start your session</p>
+  </div>
+
+  <div class="session-card-body">
+
+    {% if messages %}
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+    {% endif %}
+
+    <div class="step-indicator">
+      <div class="step-dot {% if show_payment %}active{% else %}active{% endif %}">1</div>
+      <span class="step-label" style="color:#2563eb;">Hours</span>
+      <div class="step-line {% if show_payment %}active{% endif %}"></div>
+      <div class="step-dot {% if show_payment %}active{% else %}inactive{% endif %}">2</div>
+      <span class="step-label" style="color:{% if show_payment %}#2563eb{% else %}#94a3b8{% endif %};">Payment</span>
+    </div>
+
+    {% if show_payment %}
+    {# ── STEP 2: PAYMENT FORM ── #}
+    <div class="summary-card">
+      <div class="summary-row">
+        <span class="summary-label">Hours</span>
+        <span class="summary-value">{{ paid_hours|floatformat:0 }}h</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Hourly Rate</span>
+        <span class="summary-value">TZS {{ hourly_rate|floatformat:0 }}/h</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Total to Pay</span>
+        <span class="summary-value text-success fs-5">TZS {{ total_amount|floatformat:0 }}</span>
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'guest_payment' %}">{% csrf_token %}
+      <input type="hidden" name="paid_hours" value="{{ paid_hours|floatformat:2 }}">
+
+      <div class="col-12 mb-3">
+        <label class="form-label">Select Payment Method <span class="text-danger">*</span></label>
+        <select name="payment_method" id="paymentMethod" class="form-select" required onchange="toggleFields(this.value)">
+          <option value="">— Select Method —</option>
+          <optgroup label="Mobile Money">
+            <option value="mpesa">M-Pesa</option>
+            <option value="tigopesa">Tigo Pesa</option>
+            <option value="airtel_money">Airtel Money</option>
+            <option value="halopesa">Halopesa</option>
+          </optgroup>
+          <optgroup label="Bank Transfer">
+            <option value="bank_transfer">Bank Transfer</option>
+          </optgroup>
+          <optgroup label="Card">
+            <option value="visa">Visa Card</option>
+            <option value="mastercard">Mastercard</option>
+          </optgroup>
+        </select>
+        <div class="form-text">Cash payment is not available for online guest sessions.</div>
+      </div>
+
+      <div class="col-12 mb-3 d-none" id="section-mobile">
+        <label class="form-label">Phone Number <span class="text-danger">*</span></label>
+        <div class="input-group">
+          <span class="input-group-text"><i class="bi bi-phone"></i></span>
+          <input type="tel" name="phone_number" id="phoneNumber" class="form-control"
+                 placeholder="e.g. 0712345678" pattern="^0[67]\d{8}$" maxlength="10">
+        </div>
+        <div class="form-text">Enter registered mobile money number (10 digits starting with 07 or 06)</div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-6 mb-3 d-none" id="section-bank-name">
+          <label class="form-label">Bank Name <span class="text-danger">*</span></label>
+          <select name="bank_name" id="bankName" class="form-select">
+            <option value="">— Select Bank —</option>
+            <option value="CRDB">CRDB Bank</option>
+            <option value="NMB">NMB Bank</option>
+            <option value="NBC">NBC</option>
+            <option value="Stanbic">Stanbic Bank</option>
+            <option value="Standard Chartered">Standard Chartered</option>
+            <option value="Absa">Absa Bank</option>
+            <option value="DTB">Diamond Trust Bank</option>
+            <option value="BOA">Bank of Africa</option>
+            <option value="Exim">Exim Bank</option>
+            <option value="Azania">Azania Bank</option>
+            <option value="TPB">TPB Bank</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="col-md-6 mb-3 d-none" id="section-bank-account">
+          <label class="form-label">Account Number <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-bank"></i></span>
+            <input type="text" name="bank_account_no" id="bankAccountNo" class="form-control"
+                   placeholder="e.g. 0150123456789" maxlength="20">
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-md-6 mb-3 d-none" id="section-card-holder">
+          <label class="form-label">Cardholder Name <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+            <input type="text" name="card_holder" id="cardHolder" class="form-control"
+                   placeholder="Name as on card" autocomplete="cc-name">
+          </div>
+        </div>
+        <div class="col-md-6 mb-3 d-none" id="section-card-digits">
+          <label class="form-label">Card Number (last 4) <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <span class="input-group-text"><i class="bi bi-credit-card-2-front"></i></span>
+            <input type="text" name="card_last4" id="cardLast4" class="form-control"
+                   placeholder="e.g. 4521" maxlength="4" pattern="\d{4}" autocomplete="off">
+          </div>
+        </div>
+        <div class="col-md-6 mb-3 d-none" id="section-card-expiry">
+          <label class="form-label">Expiry Date <span class="text-danger">*</span></label>
+          <div class="input-group">
+            <select id="cardExpiryMonth" class="form-select" onchange="updateExpiry()">
+              <option value="">MM</option>
+              <option value="01">01</option><option value="02">02</option><option value="03">03</option>
+              <option value="04">04</option><option value="05">05</option><option value="06">06</option>
+              <option value="07">07</option><option value="08">08</option><option value="09">09</option>
+              <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+            </select>
+            <select id="cardExpiryYear" class="form-select" onchange="updateExpiry()">
+              <option value="">YYYY</option>
+            </select>
+          </div>
+          <input type="hidden" name="card_expiry" id="cardExpiry">
+        </div>
+      </div>
+
+      <div class="border-top pt-3 mt-2">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="fw-bold">Total:</span>
+          <span class="fw-bold fs-4 text-success">TZS {{ total_amount|floatformat:0 }}</span>
+        </div>
+        <div class="d-grid gap-2">
+          <button type="submit" class="btn btn-primary btn-lg">
+            <i class="bi bi-check-circle"></i> Pay &amp; Start Session
+          </button>
+          <a href="{% url 'guest_start_session' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-arrow-left"></i> Change Hours
+          </a>
+        </div>
+      </div>
+    </form>
+
+    {% else %}
+    {# ── STEP 1: HOURS FORM ── #}
+    <div class="text-center mb-3">
+      <p class="text-muted small mb-0">
+        <i class="bi bi-info-circle"></i> Choose how many hours you need. Payment is required before your session starts.
+      </p>
+    </div>
+
+    <div class="summary-card mb-3">
+      <div class="summary-row">
+        <span class="summary-label">Hourly Rate</span>
+        <span class="summary-value">TZS {{ hourly_rate|floatformat:0 }}/h</span>
+      </div>
+      <div class="summary-row">
+        <span class="summary-label">Max Hours / Day</span>
+        <span class="summary-value">{{ max_hours }}h</span>
+      </div>
+    </div>
+
+    <form method="post" action="{% url 'start_guest_session' %}">{% csrf_token %}
+      <div class="mb-3">
+        <label class="form-label">Session Hours <span class="text-danger">*</span></label>
+        <div class="input-group input-group-lg">
+          <span class="input-group-text"><i class="bi bi-clock"></i></span>
+          <input type="number" name="paid_hours" min="1" max="{{ max_hours }}" step="1" value="1" class="form-control form-control-lg text-center fw-bold" required>
+          <span class="input-group-text">hour(s)</span>
+        </div>
+        <div class="form-text">Minimum 1 hour, maximum {{ max_hours }} hours per day.</div>
+      </div>
+
+      <div class="d-grid gap-2 mt-4">
+        <button type="submit" class="btn btn-msict btn-lg">
+          <i class="bi bi-credit-card me-1"></i> Start Session
+        </button>
+      </div>
+    </form>
+
+    {% endif %}
+
+    <div class="text-center mt-3">
+      <small class="text-muted">
+        <i class="bi bi-shield-lock"></i> Payment is non-refundable. Session starts immediately after payment.
+      </small>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function toggleFields(method) {
+  const isMobile = ['mpesa','tigopesa','airtel_money','halopesa'].includes(method);
+  const isBank   = method === 'bank_transfer';
+  const isCard   = ['visa','mastercard'].includes(method);
+
+  function show(id, visible, isRequired) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('d-none', !visible);
+    el.querySelectorAll('input, select').forEach(i => {
+      if (visible && isRequired) {
+        i.setAttribute('required', '');
+      } else {
+        i.removeAttribute('required');
+      }
+      if (!visible) i.value = '';
+    });
+  }
+
+  show('section-mobile',       isMobile, true);
+  show('section-bank-name',    isBank,   true);
+  show('section-bank-account', isBank,   true);
+  show('section-card-holder',  isCard,   true);
+  show('section-card-digits',  isCard,   true);
+  show('section-card-expiry',  isCard,   true);
+}
+
+function updateExpiry() {
+  const m = document.getElementById('cardExpiryMonth');
+  const y = document.getElementById('cardExpiryYear');
+  const hidden = document.getElementById('cardExpiry');
+  if (!m || !y || !hidden) return;
+  if (m.value && y.value) {
+    hidden.value = m.value + '/' + y.value.slice(-2);
+  } else {
+    hidden.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const yearSel = document.getElementById('cardExpiryYear');
+  if (yearSel) {
+    const thisYear = new Date().getFullYear();
+    for (let y = thisYear; y <= thisYear + 15; y++) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+  }
+});
+</script>
+</body>
+</html>

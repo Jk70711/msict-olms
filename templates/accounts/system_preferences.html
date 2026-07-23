@@ -1,47 +1,386 @@
 {% extends 'base.html' %}
-{% block title %}System Preferences{% endblock %}
+{% block title %}System Preferences — MSICT OLMS{% endblock %}
+{% block extra_css %}
+<style>
+  .pref-section { margin-bottom: 2rem; }
+  .pref-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--bs-secondary-color, #6c757d);
+    padding: 0.5rem 0 0.4rem;
+    border-bottom: 2px solid var(--bs-border-color, #dee2e6);
+    margin-bottom: 1rem;
+  }
+  .pref-card {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    height: 100%;
+    transition: border-color 0.2s;
+  }
+  .pref-card:focus-within { border-color: var(--bs-primary, #0d6efd); }
+  .pref-card .pref-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .pref-card .pref-desc {
+    font-size: 0.75rem;
+    color: var(--bs-secondary-color, #6c757d);
+    margin-top: 0.35rem;
+    line-height: 1.4;
+  }
+  .pref-card .pref-meta {
+    font-size: 0.7rem;
+    color: var(--bs-secondary-color, #6c757d);
+    margin-top: 0.3rem;
+  }
+  .pref-card .pref-meta i { margin-right: 3px; }
+  .form-switch .form-check-input { width: 2.5em; height: 1.4em; cursor: pointer; }
+  .badge-unit {
+    font-size: 0.7rem;
+    padding: 0.25em 0.55em;
+    vertical-align: middle;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-  <div class="col-md-8">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h4 class="fw-bold mb-0"><i class="bi bi-gear"></i> System Preferences</h4>
+<div class="container-fluid px-3">
+
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h4 class="fw-bold mb-0"><i class="bi bi-sliders me-2 text-primary"></i>System Preferences</h4>
+      <p class="text-muted small mb-0 mt-1">Changes take effect immediately across the entire system. All changes are audit-logged.</p>
     </div>
-    <div class="card p-4">
-      <form method="post">{% csrf_token %}
-        <div class="row g-3">
-          {% for pref in prefs %}
-          <div class="col-md-6">
-            <div class="card bg-light border-0 p-3 h-100">
-              <label class="form-label fw-semibold mb-1">
-                {% if pref.key == 'LOAN_PERIOD_DAYS' %}<i class="bi bi-calendar-check text-primary"></i> Loan Period (days)
-                {% elif pref.key == 'MAX_RENEWALS' %}<i class="bi bi-arrow-clockwise text-success"></i> Max Renewals
-                {% elif pref.key == 'MAX_COPIES_PER_BORROW' %}<i class="bi bi-collection text-warning"></i> Max Borrows Per Member
-                {% elif pref.key == 'FINE_PER_DAY' %}<i class="bi bi-cash text-danger"></i> Overdue Fine Per Day
-                {% elif pref.key == 'RESERVATION_EXPIRY_DAYS' %}<i class="bi bi-bookmark-check text-secondary"></i> Reservation Expiry
-                {% else %}<i class="bi bi-sliders"></i> {{ pref.key }}{% endif %}
-              </label>
-              <div class="input-group">
-                <input type="number" name="pref_{{ pref.key }}" class="form-control" value="{{ pref.value }}" min="0" step="{% if pref.key == 'FINE_PER_DAY' %}50{% else %}1{% endif %}" required>
-                <span class="input-group-text">
-                  {% if pref.key == 'FINE_PER_DAY' %}TZS/day
-                {% elif pref.key == 'LOAN_PERIOD_DAYS' or pref.key == 'RESERVATION_EXPIRY_DAYS' %}days
-                  {% elif pref.key == 'MAX_RENEWALS' or pref.key == 'MAX_COPIES_PER_BORROW' %}times{% endif %}
-                </span>
-              </div>
-              {% if pref.description %}
-              <div class="form-text mt-1">{{ pref.description }}</div>
-              {% endif %}
-            </div>
-          </div>
-          {% empty %}
-          <div class="col-12"><p class="text-muted">No preferences found.</p></div>
-          {% endfor %}
-        </div>
-        <div class="mt-4">
-          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save All Preferences</button>
-        </div>
-      </form>
-    </div>
+    <button type="submit" form="prefsForm" class="btn btn-primary px-4">
+      <i class="bi bi-save me-1"></i>Save All Changes
+    </button>
   </div>
+
+  {% if messages %}
+  {% for msg in messages %}
+  <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible fade show py-2" role="alert">
+    <i class="bi bi-{% if msg.tags == 'success' %}check-circle{% elif msg.tags == 'error' or msg.tags == 'danger' %}x-circle{% else %}info-circle{% endif %} me-2"></i>{{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <form method="post" id="prefsForm">
+    {% csrf_token %}
+
+    {# ── BORROWING ─────────────────────────────────────────────────────────── #}
+    <div class="pref-section">
+      <div class="pref-section-title"><i class="bi bi-book me-1"></i>Borrowing Rules</div>
+      <div class="row g-3">
+
+        {% with p=prefs.LOAN_PERIOD_DAYS %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-calendar-check text-primary"></i> Loan Period <span class="badge bg-primary badge-unit">days</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_LOAN_PERIOD_DAYS" class="form-control" value="{{ p.value|default:'7' }}" min="1" max="365" step="1" required>
+              <span class="input-group-text">days</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'How long members can borrow a book' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.MAX_COPIES_PER_BORROW %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-collection text-warning"></i> Max Books Per Member <span class="badge bg-warning text-dark badge-unit">integer</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_MAX_COPIES_PER_BORROW" class="form-control" value="{{ p.value|default:'3' }}" min="1" max="20" step="1" required>
+              <span class="input-group-text">books</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Maximum simultaneous borrows per member' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.RESERVATION_EXPIRY_DAYS %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-bookmark-check text-secondary"></i> Reservation Expiry <span class="badge bg-secondary badge-unit">days</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_RESERVATION_EXPIRY_DAYS" class="form-control" value="{{ p.value|default:'7' }}" min="1" max="60" step="1" required>
+              <span class="input-group-text">days</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Days before an unconfirmed reservation expires' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+      </div>
+    </div>
+
+    {# ── RENEWALS ──────────────────────────────────────────────────────────── #}
+    <div class="pref-section">
+      <div class="pref-section-title"><i class="bi bi-arrow-clockwise me-1"></i>Renewals</div>
+      <div class="row g-3">
+
+        {% with p=prefs.MAX_RENEWALS %}
+        <div class="col-md-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-arrow-clockwise text-success"></i> Max Renewals <span class="badge bg-success badge-unit">integer</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_MAX_RENEWALS" class="form-control" value="{{ p.value|default:'2' }}" min="0" max="10" step="1" required>
+              <span class="input-group-text">times</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Maximum number of renewals allowed per borrowing' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.RENEWAL_WINDOW_DAYS %}
+        <div class="col-md-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-hourglass-split text-info"></i> Renewal Window <span class="badge bg-info text-dark badge-unit">days</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_RENEWAL_WINDOW_DAYS" class="form-control" value="{{ p.value|default:'2' }}" min="0" max="14" step="1" required>
+              <span class="input-group-text">days before due</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Days before due date that renewal is allowed' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+      </div>
+    </div>
+
+    {# ── FINES ─────────────────────────────────────────────────────────────── #}
+    <div class="pref-section">
+      <div class="pref-section-title"><i class="bi bi-cash-stack me-1"></i>Fines</div>
+      <div class="row g-3">
+
+        {% with p=prefs.FINE_PER_DAY %}
+        <div class="col-md-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-cash text-danger"></i> Overdue Fine Per Day <span class="badge bg-danger badge-unit">TZS</span></div>
+            <div class="input-group">
+              <span class="input-group-text">TZS</span>
+              <input type="number" name="pref_FINE_PER_DAY" class="form-control" value="{{ p.value|default:'1000' }}" min="0" step="50" required>
+              <span class="input-group-text">/day</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Overdue fine per day charged to member' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.SOFTCOPY_PREPAID_FEE %}
+        <div class="col-md-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-file-earmark-text text-info"></i> Softcopy Prepaid Fee <span class="badge bg-info text-dark badge-unit">TZS</span></div>
+            <div class="input-group">
+              <span class="input-group-text">TZS</span>
+              <input type="number" name="pref_SOFTCOPY_PREPAID_FEE" class="form-control" value="{{ p.value|default:'0' }}" min="0" step="100" required>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Default fee for softcopy access (0 = free)' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+      </div>
+    </div>
+
+    {# ── GUEST SESSIONS ────────────────────────────────────────────────────── #}
+    <div class="pref-section">
+      <div class="pref-section-title"><i class="bi bi-person-badge me-1"></i>Guest Sessions</div>
+      <div class="row g-3">
+
+        {% with p=prefs.GUEST_MAX_HOURS %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-clock text-secondary"></i> Max Session Hours <span class="badge bg-secondary badge-unit">integer</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_GUEST_MAX_HOURS" class="form-control" value="{{ p.value|default:'12' }}" min="1" max="24" step="1" required>
+              <span class="input-group-text">hours</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Maximum hours per guest session' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.GUEST_HOURLY_RATE %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-currency-exchange text-success"></i> Hourly Rate <span class="badge bg-success badge-unit">TZS</span></div>
+            <div class="input-group">
+              <span class="input-group-text">TZS</span>
+              <input type="number" name="pref_GUEST_HOURLY_RATE" class="form-control" value="{{ p.value|default:'500' }}" min="0" step="100" required>
+              <span class="input-group-text">/hr</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Guest session fee per hour' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.OTP_VALIDITY_MINUTES %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-shield-lock text-primary"></i> OTP Validity <span class="badge bg-primary badge-unit">minutes</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_OTP_VALIDITY_MINUTES" class="form-control" value="{{ p.value|default:'10' }}" min="1" max="60" step="1" required>
+              <span class="input-group-text">min</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'OTP validity period in minutes' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+      </div>
+    </div>
+
+    {# ── SECURITY ──────────────────────────────────────────────────────────── #}
+    <div class="pref-section">
+      <div class="pref-section-title"><i class="bi bi-shield-exclamation me-1"></i>Security & Login</div>
+      <div class="row g-3">
+
+        {% with p=prefs.ENABLE_AUTO_LOCKOUT %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-lock text-danger"></i> Auto Account Lockout</div>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" role="switch"
+                id="autoLockoutSwitch" name="pref_ENABLE_AUTO_LOCKOUT"
+                value="1" {% if p.value|default:'1' == '1' %}checked{% endif %}
+                onchange="this.value = this.checked ? '1' : '0'">
+              <label class="form-check-label" for="autoLockoutSwitch">
+                <span id="lockoutLabel">{% if p.value|default:'1' == '1' %}Enabled{% else %}Disabled{% endif %}</span>
+              </label>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Lock account after max failed login attempts' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.MAX_LOGIN_ATTEMPTS %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-exclamation-triangle text-warning"></i> Max Login Attempts <span class="badge bg-warning text-dark badge-unit">integer</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_MAX_LOGIN_ATTEMPTS" class="form-control" value="{{ p.value|default:'6' }}" min="2" max="20" step="1" required>
+              <span class="input-group-text">attempts</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Failed attempts before permanent account lockout. Suspension occurs at half this value.' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.SESSION_TIMEOUT_MINUTES %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-stopwatch text-secondary"></i> Session Timeout <span class="badge bg-secondary badge-unit">minutes</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_SESSION_TIMEOUT_MINUTES" class="form-control" value="{{ p.value|default:'30' }}" min="5" max="480" step="5" required>
+              <span class="input-group-text">min</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Inactivity timeout before session expires' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.PASSWORD_EXPIRY_DAYS %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-key text-primary"></i> Password Expiry <span class="badge bg-primary badge-unit">days</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_PASSWORD_EXPIRY_DAYS" class="form-control" value="{{ p.value|default:'90' }}" min="7" max="365" step="1" required>
+              <span class="input-group-text">days</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Days before password change is prompted' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+      </div>
+    </div>
+
+    {# ── NOTIFICATIONS ─────────────────────────────────────────────────────── #}
+    <div class="pref-section">
+      <div class="pref-section-title"><i class="bi bi-bell me-1"></i>Notifications</div>
+      <div class="row g-3">
+
+        {% with p=prefs.NEW_ARRIVAL_NOTIFY_ENABLED %}
+        <div class="col-md-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-bell text-success"></i> New Arrival Notifications</div>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" role="switch"
+                id="newArrivalSwitch" name="pref_NEW_ARRIVAL_NOTIFY_ENABLED"
+                value="1" {% if p.value|default:'1' == '1' %}checked{% endif %}
+                onchange="this.value = this.checked ? '1' : '0'">
+              <label class="form-check-label" for="newArrivalSwitch">
+                <span id="newArrivalLabel">{% if p.value|default:'1' == '1' %}Enabled{% else %}Disabled{% endif %}</span>
+              </label>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Send automatic new arrival notifications' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.NEW_ARRIVAL_NOTIFY_CHANNEL %}
+        <div class="col-md-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-send text-primary"></i> Notification Channel <span class="badge bg-primary badge-unit">text</span></div>
+            <select name="pref_NEW_ARRIVAL_NOTIFY_CHANNEL" class="form-select">
+              <option value="sms" {% if p.value|default:'sms' == 'sms' %}selected{% endif %}>SMS</option>
+              <option value="email" {% if p.value|default:'sms' == 'email' %}selected{% endif %}>Email</option>
+              <option value="both" {% if p.value|default:'sms' == 'both' %}selected{% endif %}>Both SMS & Email</option>
+            </select>
+            <div class="pref-desc">{{ p.description|default:'Channel for new arrivals alerts' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-end gap-2 py-3 border-top mt-2">
+      <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-x-circle me-1"></i>Cancel
+      </a>
+      <button type="submit" class="btn btn-primary px-4">
+        <i class="bi bi-save me-1"></i>Save All Changes
+      </button>
+    </div>
+
+  </form>
 </div>
+
+<script>
+document.getElementById('autoLockoutSwitch').addEventListener('change', function () {
+  document.getElementById('lockoutLabel').textContent = this.checked ? 'Enabled' : 'Disabled';
+  this.value = this.checked ? '1' : '0';
+});
+document.getElementById('newArrivalSwitch').addEventListener('change', function () {
+  document.getElementById('newArrivalLabel').textContent = this.checked ? 'Enabled' : 'Disabled';
+  this.value = this.checked ? '1' : '0';
+});
+</script>
 {% endblock %}

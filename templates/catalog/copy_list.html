@@ -37,6 +37,7 @@
         <option value="borrowed" {% if status == 'borrowed' %}selected{% endif %}>Borrowed</option>
         <option value="reserved" {% if status == 'reserved' %}selected{% endif %}>Reserved</option>
         <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
+        <option value="damaged" {% if status == 'damaged' %}selected{% endif %}>Damaged</option>
       </select>
     </div>
     <div class="col-md-2">
@@ -98,6 +99,8 @@
               <span class="badge bg-info">Reserved</span>
             {% elif copy.status == 'lost' %}
               <span class="badge bg-danger">Lost</span>
+            {% elif copy.status == 'damaged' %}
+              <span class="badge" style="background:#ea580c;color:#fff">Damaged</span>
             {% endif %}
           </td>
           <td>
@@ -113,7 +116,7 @@
             {% if user.is_authenticated and user.role in 'librarian,admin' %}
             <div class="btn-group">
               <a href="{% url 'copy_edit' copy.pk %}" class="btn btn-sm btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
-              {% if copy.status != 'lost' %}
+              {% if copy.status not in 'lost,damaged' %}
                 <form method="post" action="{% url 'copy_mark_lost' copy.pk %}" class="d-inline" onsubmit="return confirm('Mark this copy as lost?')">
                   {% csrf_token %}
                   <button type="submit" class="btn btn-sm btn-outline-warning" title="Mark as Lost"><i class="bi bi-exclamation-triangle"></i></button>

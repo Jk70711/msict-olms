@@ -70,6 +70,16 @@
             </div>
           </div>
 
+          <!-- Prepaid Fee (softcopy only - only for Special/Borrow type) -->
+          <div class="col-md-6" id="prepaidFeeRow" style="display:none">
+            <label class="form-label fw-semibold">Link Access Fee (TZS) <span class="text-danger">*</span></label>
+            <div class="input-group">
+              <span class="input-group-text">TZS</span>
+              <input type="number" name="prepaid_fee" id="prepaidFeeInput" class="form-control" value="0" min="0" step="0.01" placeholder="0.00">
+            </div>
+            <div class="form-text">Fee required for softcopy access. Set to 0 for free access.</div>
+          </div>
+
           <!-- Accession Number -->
           <div class="col-md-6" id="accessionRow">
             <label class="form-label fw-semibold">Accession Number <span class="text-danger">*</span></label>
@@ -125,6 +135,9 @@ const bookSelect       = document.getElementById('bookSelect');
 const accessionInput   = document.getElementById('accessionInput');
 const shelfSelect      = document.getElementById('shelfSelect');
 const accessTypeRow    = document.getElementById('accessTypeRow');
+const accessTypeSelect = document.getElementById('accessTypeSelect');
+const prepaidFeeRow    = document.getElementById('prepaidFeeRow');
+const prepaidFeeInput  = document.getElementById('prepaidFeeInput');
 const fileRow          = document.getElementById('fileRow');
 const shelfRow         = document.getElementById('shelfRow');
 const barcodeRow       = document.getElementById('barcodeRow');
@@ -201,6 +214,7 @@ document.querySelectorAll('input[name="copy_type"]').forEach(radio => {
   radio.addEventListener('change', function () {
     const isSoft = this.value === 'softcopy';
     accessTypeRow.style.display = isSoft ? '' : 'none';
+    prepaidFeeRow.style.display = isSoft ? '' : 'none';
     fileRow.style.display       = isSoft ? '' : 'none';
     shelfRow.style.display      = isSoft ? 'none' : '';
     barcodeRow.style.display    = isSoft ? 'none' : '';
@@ -208,11 +222,30 @@ document.querySelectorAll('input[name="copy_type"]').forEach(radio => {
       /* softcopy: accession field not needed, but keep it hidden */
       document.getElementById('accessionRow').style.display = 'none';
       accessionInput.removeAttribute('required');
+      updatePrepaidFeeVisibility();
     } else {
       document.getElementById('accessionRow').style.display = '';
       accessionInput.setAttribute('required', 'required');
     }
   });
 });
+
+/* ── Toggle prepaid fee field based on access type ─── */
+function updatePrepaidFeeVisibility() {
+  if (!accessTypeSelect) return;
+  const accessType = accessTypeSelect.value;
+  if (accessType === 'borrow') {
+    prepaidFeeRow.style.display = '';
+    prepaidFeeInput.setAttribute('required', 'required');
+  } else {
+    prepaidFeeRow.style.display = 'none';
+    prepaidFeeInput.removeAttribute('required');
+    prepaidFeeInput.value = 0;
+  }
+}
+
+if (accessTypeSelect) {
+  accessTypeSelect.addEventListener('change', updatePrepaidFeeVisibility);
+}
 </script>
 {% endblock %}

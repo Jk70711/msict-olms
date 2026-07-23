@@ -1038,6 +1038,43 @@
 
 {% block extra_js %}
 <script>
+  /* ── Login-first intercept for unauthenticated users ── */
+  {% if not user.is_authenticated %}
+  (function() {
+    const loginUrl = '{% url "login" %}';
+
+    function redirectToLogin(nextUrl) {
+      window.location.href = loginUrl + '?next=' + encodeURIComponent(nextUrl || window.location.href);
+    }
+
+    /* Intercept all <a> clicks inside home content */
+    document.addEventListener('click', function(e) {
+      const link = e.target.closest('a');
+      if (link && link.href && !link.href.startsWith('javascript:') && !link.href.startsWith('#')) {
+        e.preventDefault();
+        redirectToLogin(link.href);
+        return;
+      }
+      /* Intercept elements with onclick handlers (carousel slides, ad cards, etc.) */
+      const clickable = e.target.closest('[onclick], .swiper-slide, .ad-card, .carousel-3d-item, .book-card-simple');
+      if (clickable) {
+        e.preventDefault();
+        e.stopPropagation();
+        redirectToLogin(window.location.origin + window.location.pathname);
+        return;
+      }
+    }, true);
+
+    /* Intercept form submissions */
+    document.addEventListener('submit', function(e) {
+      e.preventDefault();
+      const form = e.target;
+      const nextUrl = form.action || window.location.href;
+      redirectToLogin(nextUrl);
+    }, true);
+  })();
+  {% endif %}
+
   /* ── Real-time catalog search ───────────────────────── */
   (function () {
     const input    = document.getElementById('homeSearchInput');

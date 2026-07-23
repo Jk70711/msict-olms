@@ -1,0 +1,153 @@
+{% extends 'base.html' %}
+{% block title %}Guest Registration - MSICT OLMS{% endblock %}
+{% block extra_css %}
+<style>
+  .pw-check { font-size: .85rem; }
+  .pw-check.ok { color: #198754; }
+  .pw-check.bad { color: #dc3545; }
+  .pw-meter {
+    height: 8px;
+    border-radius: 999px;
+    background: #e9ecef;
+    overflow: hidden;
+  }
+  .pw-meter > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    transition: width .2s ease;
+  }
+  .pw-weak { background: #dc3545; }
+  .pw-medium { background: #ffc107; }
+  .pw-strong { background: #198754; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width: 720px;">
+  <div class="card shadow-sm border-0">
+    <div class="card-body p-4">
+      <h4 class="fw-bold mb-3"><i class="bi bi-door-open me-2"></i>Walk-In Guest Registration</h4>
+      <p class="text-muted mb-4">Create your guest account for in-library access. Use email/phone to return next time.</p>
+
+      <form method="post">
+        {% csrf_token %}
+        <div class="row g-3">
+          <div class="col-md-4">
+            <label class="form-label">First Name</label>
+            <input type="text" name="first_name" class="form-control" required>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Middle Name</label>
+            <input type="text" name="middle_name" class="form-control">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Surname</label>
+            <input type="text" name="surname" class="form-control" required>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Email</label>
+            <input type="email" name="email" class="form-control" required>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Phone</label>
+            <input type="tel" name="phone" class="form-control" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678" required>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" id="passwordField" class="form-control" required minlength="8" maxlength="64" autocomplete="new-password">
+            <div class="form-text">Use a strong password. You will use this account for future guest sessions.</div>
+            <div class="pw-meter mt-2"><span id="pwMeterBar"></span></div>
+            <div class="small mt-1" id="pwStrengthLabel">Strength: —</div>
+
+            <ul class="list-unstyled mt-2 mb-0">
+              <li id="ruleLen" class="pw-check bad"><i class="bi bi-x-circle me-1"></i>At least 8 characters</li>
+              <li id="ruleUpper" class="pw-check bad"><i class="bi bi-x-circle me-1"></i>At least 1 uppercase letter</li>
+              <li id="ruleLower" class="pw-check bad"><i class="bi bi-x-circle me-1"></i>At least 1 lowercase letter</li>
+              <li id="ruleDigit" class="pw-check bad"><i class="bi bi-x-circle me-1"></i>At least 1 number</li>
+              <li id="ruleSpecial" class="pw-check bad"><i class="bi bi-x-circle me-1"></i>At least 1 special character</li>
+            </ul>
+          </div>
+
+          <div class="col-12">
+            <label class="form-label">Confirm Password</label>
+            <input type="password" name="confirm_password" id="confirmPasswordField" class="form-control" required minlength="8" maxlength="64" autocomplete="new-password">
+            <div class="small mt-1 pw-check bad" id="pwMatchLabel"><i class="bi bi-x-circle me-1"></i>Password match: No</div>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-msict">Create Guest Account</button>
+          <a href="{% url 'login' %}" class="btn btn-outline-secondary">Back to Login</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function() {
+    const pw = document.getElementById('passwordField');
+    const cpw = document.getElementById('confirmPasswordField');
+    const meter = document.getElementById('pwMeterBar');
+    const strengthLabel = document.getElementById('pwStrengthLabel');
+    const matchLabel = document.getElementById('pwMatchLabel');
+
+    const ruleLen = document.getElementById('ruleLen');
+    const ruleUpper = document.getElementById('ruleUpper');
+    const ruleLower = document.getElementById('ruleLower');
+    const ruleDigit = document.getElementById('ruleDigit');
+    const ruleSpecial = document.getElementById('ruleSpecial');
+
+    function setRule(el, ok) {
+      el.classList.toggle('ok', ok);
+      el.classList.toggle('bad', !ok);
+      el.innerHTML = `<i class="bi ${ok ? 'bi-check-circle' : 'bi-x-circle'} me-1"></i>${el.textContent.trim().replace(/^\s*[✔✖]?\s*/, '')}`;
+    }
+
+    function evaluate() {
+      const v = pw.value || '';
+      const hasLen = v.length >= 8;
+      const hasUpper = /[A-Z]/.test(v);
+      const hasLower = /[a-z]/.test(v);
+      const hasDigit = /\d/.test(v);
+      const hasSpecial = /[^A-Za-z0-9]/.test(v);
+
+      setRule(ruleLen, hasLen);
+      setRule(ruleUpper, hasUpper);
+      setRule(ruleLower, hasLower);
+      setRule(ruleDigit, hasDigit);
+      setRule(ruleSpecial, hasSpecial);
+
+      const score = [hasLen, hasUpper, hasLower, hasDigit, hasSpecial].filter(Boolean).length;
+      meter.className = '';
+      if (score <= 2) {
+        meter.classList.add('pw-weak');
+        meter.style.width = '35%';
+        strengthLabel.textContent = 'Strength: Weak';
+      } else if (score <= 4) {
+        meter.classList.add('pw-medium');
+        meter.style.width = '70%';
+        strengthLabel.textContent = 'Strength: Medium';
+      } else {
+        meter.classList.add('pw-strong');
+        meter.style.width = '100%';
+        strengthLabel.textContent = 'Strength: Strong';
+      }
+
+      const matched = cpw.value.length > 0 && v === cpw.value;
+      matchLabel.classList.toggle('ok', matched);
+      matchLabel.classList.toggle('bad', !matched);
+      matchLabel.innerHTML = `<i class="bi ${matched ? 'bi-check-circle' : 'bi-x-circle'} me-1"></i>Password match: ${matched ? 'Yes' : 'No'}`;
+    }
+
+    if (pw && cpw) {
+      pw.addEventListener('input', evaluate);
+      cpw.addEventListener('input', evaluate);
+    }
+  })();
+</script>
+{% endblock %}

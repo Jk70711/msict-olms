@@ -6,10 +6,12 @@
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'admin_dashboard' %}" class="nav-link{% if cur == 'admin_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
     <a href="{% url 'user_list' %}" class="nav-link{% if cur == 'user_list' %} active{% endif %}"><i class="bi bi-people"></i> Members</a>
+    <a href="{% url 'guest_manage' %}" class="nav-link{% if cur == 'guest_manage' %} active{% endif %}"><i class="bi bi-person-badge"></i> Guest Management</a>
     <a href="{% url 'chat_inbox' %}" class="nav-link{% if cur == 'chat_inbox' %} active{% endif %}" id="navMessages">
       <i class="bi bi-chat-dots"></i> Messages
       <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
     </a>
+    <a href="{% url 'bulk_message' %}" class="nav-link{% if cur == 'bulk_message' %} active{% endif %}"><i class="bi bi-megaphone"></i> Bulk Messaging</a>
     <a href="{% url 'assistant_page' %}" class="nav-link{% if cur == 'assistant_page' %} active{% endif %}"><i class="bi bi-robot"></i> AI Assistant</a>
   </div>
 
@@ -41,7 +43,7 @@
             data-bs-toggle="collapse" data-bs-target="#adm-security"
             aria-expanded="{% if cur == 'audit_logs' or cur == 'suspended_members' or cur == 'security_alerts' or cur == 'suspicious_activity' %}true{% else %}false{% endif %}">
       <i class="bi bi-shield-lock"></i> Security
-      {% with total_sec=security_alerts_count|add:suspicious_users_count %}
+      {% with total_sec=security_alerts_count|add:suspicious_users_count|add:locked_users|add:suspicious_ips_count %}
         {% if total_sec %}<span class="badge bg-danger ms-auto">{{ total_sec }}</span>{% endif %}
       {% endwith %}
       <i class="bi bi-chevron-down sidebar-chevron"></i>
@@ -62,7 +64,7 @@
       </a>
       <a href="{% url 'suspicious_activity' %}" class="nav-link{% if cur == 'suspicious_activity' %} active{% endif %}">
         <i class="bi bi-shield-lock"></i> Suspicious Activity
-        {% if recent_failed_logins_count %}<span class="badge bg-danger ms-auto">{{ recent_failed_logins_count }}</span>{% endif %}
+        {% if suspicious_ips_count %}<span class="badge bg-danger ms-auto">{{ suspicious_ips_count }}</span>{% endif %}
       </a>
     </div>
   </div>
@@ -93,6 +95,7 @@
       <i class="bi bi-chat-dots"></i> Messages
       <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
     </a>
+    <a href="{% url 'bulk_message' %}" class="nav-link{% if cur == 'bulk_message' %} active{% endif %}"><i class="bi bi-megaphone"></i> Bulk Messaging</a>
     <a href="{% url 'assistant_page' %}" class="nav-link{% if cur == 'assistant_page' %} active{% endif %}"><i class="bi bi-robot"></i> AI Assistant</a>
   </div>
 
@@ -100,17 +103,18 @@
     <div class="sidebar-section-label">Catalog</div>
     <button class="nav-link nav-group" type="button"
             data-bs-toggle="collapse" data-bs-target="#lib-catalog"
-            aria-expanded="{% if cur == 'book_list' or cur == 'copy_list' or cur == 'category_list' or cur == 'course_list' or cur == 'shelf_list_all' or cur == 'shelf_location' or cur == 'book_detail' or cur == 'book_edit' or cur == 'book_add' or cur == 'copy_create' or cur == 'copy_edit' %}true{% else %}false{% endif %}">
+            aria-expanded="{% if cur == 'book_list' or cur == 'copy_list' or cur == 'category_list' or cur == 'course_list' or cur == 'shelf_list_all' or cur == 'shelf_location' or cur == 'book_detail' or cur == 'book_edit' or cur == 'book_add' or cur == 'copy_create' or cur == 'copy_edit' or cur == 'lost_damaged_copies' %}true{% else %}false{% endif %}">
       <i class="bi bi-book"></i> Books &amp; Catalog
       <i class="bi bi-chevron-down sidebar-chevron"></i>
     </button>
-    <div class="collapse sidebar-submenu{% if cur == 'book_list' or cur == 'copy_list' or cur == 'category_list' or cur == 'course_list' or cur == 'shelf_list_all' or cur == 'shelf_location' or cur == 'book_detail' or cur == 'book_edit' or cur == 'book_add' or cur == 'copy_create' or cur == 'copy_edit' %} show{% endif %}" id="lib-catalog">
+    <div class="collapse sidebar-submenu{% if cur == 'book_list' or cur == 'copy_list' or cur == 'category_list' or cur == 'course_list' or cur == 'shelf_list_all' or cur == 'shelf_location' or cur == 'book_detail' or cur == 'book_edit' or cur == 'book_add' or cur == 'copy_create' or cur == 'copy_edit' or cur == 'lost_damaged_copies' %} show{% endif %}" id="lib-catalog">
       <a href="{% url 'book_list' %}" class="nav-link{% if cur == 'book_list' %} active{% endif %}"><i class="bi bi-book-half"></i> Books</a>
       <a href="{% url 'copy_list' %}" class="nav-link{% if cur == 'copy_list' %} active{% endif %}"><i class="bi bi-collection"></i> Copies</a>
       <a href="{% url 'category_list' %}" class="nav-link{% if cur == 'category_list' %} active{% endif %}"><i class="bi bi-tags"></i> Categories</a>
       <a href="{% url 'course_list' %}" class="nav-link{% if cur == 'course_list' %} active{% endif %}"><i class="bi bi-mortarboard"></i> Courses</a>
       <a href="{% url 'shelf_list_all' %}" class="nav-link{% if cur == 'shelf_list_all' %} active{% endif %}"><i class="bi bi-bookshelf"></i> Shelves</a>
       <a href="{% url 'shelf_location' %}" class="nav-link{% if cur == 'shelf_location' %} active{% endif %}"><i class="bi bi-graph-up"></i> Shelf Analytics</a>
+      <a href="{% url 'lost_damaged_copies' %}" class="nav-link{% if cur == 'lost_damaged_copies' %} active{% endif %}"><i class="bi bi-exclamation-octagon text-danger"></i> Lost &amp; Damaged</a>
     </div>
   </div>
 
@@ -118,12 +122,12 @@
     <div class="sidebar-section-label">Circulation</div>
     <button class="nav-link nav-group" type="button"
             data-bs-toggle="collapse" data-bs-target="#lib-circ"
-            aria-expanded="{% if cur == 'all_requests' or cur == 'reservation_list' or cur == 'all_borrowings' or cur == 'return_desk' or cur == 'return_history' or cur == 'overdue_list' or cur == 'fine_list' or cur == 'users_with_fines' or cur == 'record_fine_payment' %}true{% else %}false{% endif %}">
+            aria-expanded="{% if cur == 'all_requests' or cur == 'reservation_list' or cur == 'all_borrowings' or cur == 'return_desk' or cur == 'return_history' or cur == 'overdue_list' or cur == 'fine_list' or cur == 'users_with_fines' or cur == 'record_fine_payment' or cur == 'report_revenue' %}true{% else %}false{% endif %}">
       <i class="bi bi-arrow-left-right"></i> Circulation
       {% if overdue_count %}<span class="badge bg-danger ms-auto">{{ overdue_count }}</span>{% endif %}
       <i class="bi bi-chevron-down sidebar-chevron"></i>
     </button>
-    <div class="collapse sidebar-submenu{% if cur == 'all_requests' or cur == 'reservation_list' or cur == 'all_borrowings' or cur == 'return_desk' or cur == 'return_history' or cur == 'overdue_list' or cur == 'fine_list' or cur == 'users_with_fines' or cur == 'record_fine_payment' %} show{% endif %}" id="lib-circ">
+    <div class="collapse sidebar-submenu{% if cur == 'all_requests' or cur == 'reservation_list' or cur == 'all_borrowings' or cur == 'return_desk' or cur == 'return_history' or cur == 'overdue_list' or cur == 'fine_list' or cur == 'users_with_fines' or cur == 'record_fine_payment' or cur == 'report_revenue' %} show{% endif %}" id="lib-circ">
       <a href="{% url 'all_requests' %}" class="nav-link{% if cur == 'all_requests' %} active{% endif %}">
         <i class="bi bi-inbox"></i> Borrow Requests
         {% if pending_requests_count %}<span class="badge bg-warning text-dark ms-auto">{{ pending_requests_count }}</span>{% endif %}
@@ -138,6 +142,7 @@
       </a>
       <a href="{% url 'fine_list' %}" class="nav-link{% if cur == 'fine_list' %} active{% endif %}"><i class="bi bi-cash-coin"></i> Fines</a>
       <a href="{% url 'loss_report_list' %}" class="nav-link{% if cur == 'loss_report_list' %} active{% endif %}"><i class="bi bi-exclamation-triangle text-warning"></i> Loss Reports</a>
+      <a href="{% url 'report_revenue' %}" class="nav-link{% if cur == 'report_revenue' %} active{% endif %}"><i class="bi bi-cash-stack text-success"></i> Financial Accounts</a>
     </div>
   </div>
 
@@ -155,8 +160,10 @@
         {% if pending_registrations_count %}<span class="badge bg-warning text-dark ms-auto">{{ pending_registrations_count }}</span>{% endif %}
       </a>
       <a href="{% url 'create_user' %}" class="nav-link"><i class="bi bi-person-plus"></i> Add Member</a>
+      <a href="{% url 'guest_manage' %}" class="nav-link{% if cur == 'guest_manage' %} active{% endif %}"><i class="bi bi-person-badge"></i> Guest Management</a>
       <a href="{% url 'news_list' %}" class="nav-link"><i class="bi bi-newspaper"></i> News</a>
       <a href="{% url 'media_slide_list' %}" class="nav-link"><i class="bi bi-images"></i> Media &amp; Carousel</a>
+      <a href="{% url 'login_content_list' %}" class="nav-link{% if cur == 'login_content_list' or cur == 'login_content_edit' %} active{% endif %}"><i class="bi bi-window-sidebar"></i> Login Page Content</a>
       <a href="{% url 'footer_edit' %}" class="nav-link"><i class="bi bi-layout-text-sidebar-reverse"></i> Footer Settings</a>
       <a href="{% url 'external_library_list' %}" class="nav-link"><i class="bi bi-globe2"></i> Ext. Libraries</a>
     </div>
@@ -182,9 +189,27 @@
     <a href="{% url 'system_appearance' %}" class="nav-link"><i class="bi bi-palette"></i> Appearance</a>
   </div>
 
-{% else %}
+{% elif user.role == 'guest' or user.is_guest %}
 
-  {# ── MEMBER ────────────────────────────────────────────── #}
+  {# ── GUEST ─────────────────────────────────────────────── #}
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Overview</div>
+    <a href="{% url 'guest_dashboard' %}" class="nav-link{% if cur == 'guest_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Guest Dashboard</a>
+    <a href="{% url 'assistant_page' %}" class="nav-link{% if cur == 'assistant_page' %} active{% endif %}"><i class="bi bi-robot"></i> AI Assistant</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Catalog</div>
+    <a href="{% url 'catalog_search' %}" class="nav-link"><i class="bi bi-search"></i> Search Books</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Account</div>
+    <a href="{% url 'profile' %}" class="nav-link"><i class="bi bi-person"></i> My Profile</a>
+    <a href="{% url 'change_password' %}" class="nav-link"><i class="bi bi-key"></i> Change Password</a>
+  </div>
+
+{% else %}
   <div class="sidebar-section">
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'member_dashboard' %}" class="nav-link"><i class="bi bi-speedometer2"></i> My Dashboard</a>
@@ -238,6 +263,7 @@
     <div class="collapse sidebar-submenu" id="mem-fines">
       <a href="{% url 'my_fines' %}" class="nav-link"><i class="bi bi-clock-history text-danger"></i> Overdue Fines</a>
       <a href="{% url 'my_loss_reports' %}" class="nav-link"><i class="bi bi-exclamation-triangle text-warning"></i> Loss Fines</a>
+      <a href="{% url 'my_damage_reports' %}" class="nav-link"><i class="bi bi-exclamation-triangle" style="color: #ea580c;"></i> Damage Fines</a>
     </div>
   </div>
 

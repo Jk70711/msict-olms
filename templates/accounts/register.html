@@ -187,9 +187,15 @@
         {% else %}
         <img src="{% static 'images/msict_logo.png' %}" alt="MSICT">
         {% endif %}
-        <h1>Register</h1>
+        <h1>{% if upgrade %}Become a Member{% else %}Register{% endif %}</h1>
         <p>Military School of Information and Technology</p>
       </div>
+
+      {% if upgrade %}
+      <div class="alert alert-info small">
+        <i class="bi bi-info-circle"></i> Complete your details to upgrade from guest to full member. Your request will be sent for librarian approval.
+      </div>
+      {% endif %}
 
       <form method="post" class="register-form">
         {% csrf_token %}
@@ -198,8 +204,17 @@
           <div class="col-md-6">
             <div class="form-group">
               <label for="army_no">Army Number *</label>
-              <input type="text" name="army_no" id="army_no" placeholder="e.g. MT 134513" required>
-              <div class="help-text">Must start with MT, MTM, P, or PW</div>
+              <input type="hidden" name="army_no" id="army_no_hidden" value="{{ prefill.army_no|default:'' }}">
+              <div class="input-group" style="flex-wrap:nowrap;">
+                <select id="army_prefix" class="form-select" style="max-width:90px;flex:0 0 90px;" onchange="buildArmyNo()">
+                  <option value="MT">MT</option>
+                  <option value="MTM">MTM</option>
+                  <option value="P">P</option>
+                  <option value="PW">PW</option>
+                </select>
+                <input type="number" id="army_digits" class="form-control" placeholder="134513" min="1" oninput="buildArmyNo()" required>
+              </div>
+              <div class="help-text">Select prefix then enter digits. E.g. MT 134513, PW 456</div>
             </div>
           </div>
           <div class="col-md-6">
@@ -215,19 +230,19 @@
           <div class="col-md-4">
             <div class="form-group">
               <label for="first_name">First Name *</label>
-              <input type="text" name="first_name" id="first_name" placeholder="John" required>
+              <input type="text" name="first_name" id="first_name" placeholder="John" value="{{ prefill.first_name|default:'' }}" required>
             </div>
           </div>
           <div class="col-md-4">
             <div class="form-group">
               <label for="middle_name">Middle Name</label>
-              <input type="text" name="middle_name" id="middle_name" placeholder="Michael">
+              <input type="text" name="middle_name" id="middle_name" placeholder="Michael" value="{{ prefill.middle_name|default:'' }}">
             </div>
           </div>
           <div class="col-md-4">
             <div class="form-group">
               <label for="surname">Surname *</label>
-              <input type="text" name="surname" id="surname" placeholder="Doe" required>
+              <input type="text" name="surname" id="surname" placeholder="Doe" value="{{ prefill.surname|default:'' }}" required>
             </div>
           </div>
         </div>
@@ -261,13 +276,13 @@
           <div class="col-md-6">
             <div class="form-group">
               <label for="email">Email *</label>
-              <input type="email" name="email" id="email" placeholder="john@example.com" required>
+              <input type="email" name="email" id="email" placeholder="john@example.com" value="{{ prefill.email|default:'' }}" required>
             </div>
           </div>
           <div class="col-md-6">
             <div class="form-group">
               <label for="phone">Phone Number *</label>
-              <input type="text" name="phone" id="phone" placeholder="+255 123 456 789" required>
+              <input type="tel" name="phone" id="phone" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678" value="{{ prefill.phone|default:'' }}" required>
             </div>
           </div>
         </div>
@@ -283,4 +298,32 @@
     </div>
   </div>
 </div>
+
+<script>
+function buildArmyNo() {
+  var prefix = document.getElementById('army_prefix').value;
+  var digits = document.getElementById('army_digits').value.trim();
+  document.getElementById('army_no_hidden').value = digits ? prefix + ' ' + digits : '';
+}
+
+// Pre-fill prefix+digits if army_no already set (e.g. upgrade flow)
+(function() {
+  var existing = document.getElementById('army_no_hidden').value;
+  if (existing) {
+    var m = existing.match(/^([A-Z]+)\s?(\d+)$/);
+    if (m) {
+      document.getElementById('army_prefix').value = m[1];
+      document.getElementById('army_digits').value = m[2];
+      buildArmyNo();
+    }
+  }
+})();
+
+// Ensure army_no is set before submit
+document.querySelector('form').addEventListener('submit', function(e) {
+  var digits = document.getElementById('army_digits').value.trim();
+  if (!digits) { e.preventDefault(); alert('Please enter the digits for the army number.'); return; }
+  buildArmyNo();
+});
+</script>
 {% endblock %}

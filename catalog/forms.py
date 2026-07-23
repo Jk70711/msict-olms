@@ -15,7 +15,7 @@ class FooterForm(forms.ModelForm):
         widgets = {
             'school_name': forms.TextInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '10', 'pattern': '^0\\d{9}$', 'placeholder': 'e.g. 0712345678'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'location': forms.TextInput(attrs={'class': 'form-control'}),
             'copyright_text': forms.TextInput(attrs={'class': 'form-control'}),

@@ -26,6 +26,7 @@ urlpatterns = [
     path('copies/<int:copy_id>/delete/', views.copy_delete_view, name='copy_delete'),          # Futa nakala
     path('copies/<int:copy_id>/mark-lost/', views.copy_mark_lost_view, name='copy_mark_lost'), # Taji nakala kama imepotea
     path('copies/<int:copy_id>/read/', views.serve_softcopy_view, name='serve_softcopy'),                          # Soma PDF online
+    path('copies/access/<uuid:token>/', views.softcopy_access_link_view, name='softcopy_access'),                    # Tokenized access link
     path('copies/<int:copy_id>/pdf-data/', views.special_pdf_data_view, name='special_pdf_data'),                 # Raw PDF bytes (viewer only)
     path('copies/<int:copy_id>/download/', views.free_softcopy_download_view, name='free_softcopy_download'),     # Pakua PDF bure
 
@@ -68,4 +69,11 @@ urlpatterns = [
     path('news/<int:news_id>/delete/', views.news_delete_view, name='news_delete'),            # Futa habari
     path('news/<int:news_id>/toggle/', views.news_toggle_view, name='news_toggle'),            # Washa/zima habari
     path('footer/edit/', views.footer_edit_view, name='footer_edit'),                          # Hariri maelezo ya footer
+
+    # ── Login Page Content Management ────────────────────────
+    path('login-content/', views.login_content_list_view, name='login_content_list'),
+    path('login-content/<int:section_id>/edit/', views.login_content_edit_view, name='login_content_edit'),
+    path('login-content/<int:section_id>/toggle/', views.login_content_toggle_view, name='login_content_toggle'),
+    path('login-slideshow/create/', views.login_slideshow_create_view, name='login_slideshow_create'),
+    path('login-slideshow/<int:slide_id>/delete/', views.login_slideshow_delete_view, name='login_slideshow_delete'),
 ]

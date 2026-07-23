@@ -20,6 +20,16 @@
   {% endfor %}
 {% endif %}
 
+<style>
+/* Loss reports — improved spacing, wrapping and print-friendly */
+.lr-member-header {display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.75rem 1rem}
+.lr-member-meta {display:flex;align-items:center;gap:.75rem}
+.lr-member-meta .rank-badge {background:#343a40;color:#fff;padding:0.25rem .5rem;border-radius:.25rem;font-size:.85rem}
+.lr-text {white-space:normal;word-break:break-word;overflow-wrap:anywhere}
+.lr-report-card {margin-top:.5rem}
+@media print { .btn, .nav, .no-print {display:none!important} .card {page-break-inside: avoid} }
+</style>
+
 {% if not grouped_reports %}
 <div class="text-center text-muted py-4">
   <i class="bi bi-check-circle fs-3 text-success d-block mb-1"></i>
@@ -28,10 +38,21 @@
 {% else %}
   {% for grp in grouped_reports %}
   <div class="card mb-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
-      <div>
-        <strong class="me-2">{{ grp.user.get_full_name }}</strong>
-        <span class="small text-muted">{{ grp.user.army_no }}{% if grp.user.rank %} · {{ grp.user.rank.rank_name }}{% endif %}</span>
+    <div class="card-header lr-member-header">
+      <div class="lr-member-meta">
+        <div>
+          <div class="fw-bold">{{ grp.user.get_full_name }}</div>
+          <div class="small text-muted">Military School of Information &amp; Technology</div>
+        </div>
+        <div>
+          <div class="small">Army No: <strong class="text-muted">{{ grp.user.army_no|default:'—' }}</strong></div>
+          <div class="small">Email: <strong class="text-muted">{{ grp.user.email|default:'—' }}</strong></div>
+          <div class="small">Phone: <strong class="text-muted">{{ grp.user.phone|default:'—' }}</strong></div>
+        </div>
+        <div>
+          <div class="small">Role: <strong class="text-muted">{{ grp.user.get_role_display|default:'—' }}</strong></div>
+          <div class="rank-badge">{{ grp.user.rank.rank_name|default:'—' }}</div>
+        </div>
       </div>
       <div class="small text-muted">Reports: <span class="badge bg-secondary">{{ grp.reports|length }}</span></div>
     </div>
@@ -124,7 +145,9 @@
                   </ul>
                 </div>
                 {% else %}
-                <span class="badge bg-light text-muted border">No Actions</span>
+                <a href="{% url 'loss_fine_receipt_pdf' report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i> Receipt
+                </a>
                 {% endif %}
               </td>
             </tr>
@@ -137,8 +160,8 @@
       <!-- Render full-width detail cards for each report so nothing is clipped -->
       <div class="px-3 pb-3">
         {% for report in grp.reports %}
-        <div class="card border-0 border-start border-4 {% if report.status == 'pending' %}border-warning{% elif report.status == 'confirmed' %}border-danger{% elif report.status == 'resolved' %}border-success{% else %}border-secondary{% endif %} mt-2 bg-light shadow-sm">
-          <div class="card-body py-2">
+        <div class="card border-0 border-start border-4 {% if report.status == 'pending' %}border-warning{% elif report.status == 'confirmed' %}border-danger{% elif report.status == 'resolved' %}border-success{% else %}border-secondary{% endif %} mt-2 bg-light shadow-sm lr-report-card">
+          <div class="card-body py-3">
             <div class="row">
               <div class="col-md-6">
                 <p class="mb-1"><strong>Ref:</strong> <span class="badge bg-secondary">LR-{{ report.seq_no }}</span></p>
@@ -150,14 +173,14 @@
               <div class="col-md-6">
                 <p class="mb-1"><strong>Date Noticed:</strong> {{ report.date_noticed|date:'d M Y H:i'|default:'Not specified' }}</p>
                 <p class="mb-1"><strong>Authority Reported:</strong> {% if report.authority_reported %}Yes — Ref: {{ report.authority_reference|default:'—' }}{% else %}No{% endif %}</p>
-                <p class="mb-1"><strong>Circumstances:</strong> {{ report.circumstances|default:'Not specified' }}</p>
+                <p class="mb-1"><strong>Circumstances:</strong> <span class="lr-text">{{ report.circumstances|default:'Not specified' }}</span></p>
                 <p class="mb-1"><strong>Status:</strong> <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}bg-danger{% elif report.status == 'resolved' %}bg-success{% else %}bg-secondary{% endif %}">{{ report.get_status_display }}</span></p>
               </div>
             </div>
             <hr>
-            <p class="mb-1"><strong>Description:</strong><br>{{ report.description }}</p>
+            <p class="mb-1"><strong>Description:</strong><br><span class="lr-text">{{ report.description }}</span></p>
             {% if report.librarian_notes %}
-            <p class="mb-1"><strong>Librarian Notes:</strong><br>{{ report.librarian_notes|linebreaksbr }}</p>
+            <p class="mb-1"><strong>Librarian Notes:</strong><br><span class="lr-text">{{ report.librarian_notes|linebreaksbr }}</span></p>
             {% endif %}
           </div>
         </div>
@@ -189,7 +212,7 @@
                   <p>Confirming will mark <strong>{{ copy.book.title }}</strong> (Acc: {{ copy.accession_no }}) as <span class="text-danger fw-bold">LOST</span>.</p>
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Loss Fine Amount (TZS)</label>
-                    <input type="number" name="loss_fine_amount" class="form-control" min="0" step="100" placeholder="0 = no fine" value="{{ copy.book.lost_fine|default:'' }}">
+                    <input type="number" name="loss_fine_amount" class="form-control" min="0" step="1" placeholder="0 = no fine" value="{{ copy.book.lost_fine|default:'' }}">
                     <div class="form-text">Book's default loss fine: <strong>TZS {{ copy.book.lost_fine|default:0|floatformat:0 }}</strong>. Modify if needed.</div>
                   </div>
                   <div class="mb-3">
@@ -219,15 +242,18 @@
               <form method="post" action="{% url 'recover_book' report.pk %}">
                 {% csrf_token %}
                 <div class="modal-body">
-                  <p>Mark <strong>{{ copy.book.title }}</strong> as physically returned at the desk.</p>
+                  <p>Mark <strong>{{ copy.book.title }}</strong> as recovered by the member.</p>
                   <ul class="small text-muted">
-                    <li>Copy status will be restored to <strong>Available</strong>.</li>
-                    <li>Transaction will be marked <strong>Returned</strong>.</li>
+                    <li>Book goes back to <strong>active borrowing</strong> (member keeps the book).</li>
+                    <li>Loss fine is <strong>cancelled</strong> (if unpaid).</li>
+                    <li>System recalculates overdue from the original borrow date:
+                      <ul>
+                        <li>If past due date → status becomes <strong>Overdue</strong>, overdue fine applies.</li>
+                        <li>If within loan period → status stays <strong>Active</strong>, no fine.</li>
+                      </ul>
+                    </li>
                     {% if report.loss_fine and not report.loss_fine.paid and report.loss_fine.amount_paid == 0 %}
-                    <li class="text-success">Unpaid loss fine of <strong>TZS {{ report.loss_fine.amount|floatformat:0 }}</strong> will be <strong>waived</strong>.</li>
-                    {% endif %}
-                    {% if report.overdue_fine and not report.overdue_fine.paid and report.overdue_fine.amount_paid == 0 %}
-                    <li class="text-success">Unpaid overdue fine of <strong>TZS {{ report.overdue_fine.amount|floatformat:0 }}</strong> will also be <strong>waived</strong>.</li>
+                    <li class="text-success">Unpaid loss fine of <strong>TZS {{ report.loss_fine.amount|floatformat:0 }}</strong> will be <strong>cancelled</strong>.</li>
                     {% endif %}
                   </ul>
                   <div class="mb-3">
@@ -429,7 +455,7 @@
                   <!-- Amount -->
                   <div class="mb-3">
                     <label class="form-label fw-bold">Amount (TZS) <span class="text-danger">*</span></label>
-                    <input type="number" name="payment_amount" id="payAmt-{{ report.pk }}" class="form-control form-control-lg" min="1" step="100" required placeholder="Select fine type above to auto-fill">
+                    <input type="number" name="payment_amount" id="payAmt-{{ report.pk }}" class="form-control form-control-lg" min="1" step="1" required placeholder="Select fine type above to auto-fill">
                     <div class="form-text">Adjust for partial payments.</div>
                   </div>
 

@@ -1,0 +1,464 @@
+{% extends 'base.html' %}
+{% block title %}Lost & Damaged Copies — MSICT OLMS{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4 class="fw-bold mb-0">
+    <i class="bi bi-exclamation-octagon text-danger"></i> Lost &amp; Damaged Copies
+  </h4>
+</div>
+
+{% if messages %}
+{% for message in messages %}
+<div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+  {{ message }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="row mb-3 g-3">
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm text-center p-3">
+      <div class="fs-1 fw-bold text-danger">{{ stats.lost_count }}</div>
+      <div class="small text-muted">Lost Reports</div>
+      {% if stats.lost_unpaid_count %}<div class="small text-warning">{{ stats.lost_unpaid_count }} unpaid</div>{% endif %}
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm text-center p-3">
+      <div class="fs-1 fw-bold" style="color: #ea580c;">{{ stats.damaged_count }}</div>
+      <div class="small text-muted">Damaged Reports</div>
+      {% if stats.damage_unpaid_count %}<div class="small text-warning">{{ stats.damage_unpaid_count }} unpaid</div>{% endif %}
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm text-center p-3">
+      <div class="fs-1 fw-bold text-warning">{{ stats.damage_reports_count }}</div>
+      <div class="small text-muted">Damage Reports</div>
+    </div>
+  </div>
+  <div class="col-md-3">
+    <div class="card border-0 shadow-sm text-center p-3">
+      <div class="fs-1 fw-bold text-secondary">{{ stats.all_records }}</div>
+      <div class="small text-muted">All Records</div>
+    </div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" role="tablist">
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'all' %}active{% endif %}" href="?tab=all">
+      <i class="bi bi-list-ul"></i> All Records ({{ stats.all_records }})
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'lost' %}active{% endif %}" href="?tab=lost">
+      <i class="bi bi-exclamation-triangle text-danger"></i> Lost ({{ stats.lost_count }})
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'damaged' %}active{% endif %}" href="?tab=damaged">
+      <i class="bi bi-exclamation-triangle" style="color: #ea580c;"></i> Damaged ({{ stats.damaged_count }})
+    </a>
+  </li>
+  <li class="nav-item">
+    <a class="nav-link {% if tab == 'damage_reports' %}active{% endif %}" href="?tab=damage_reports">
+      <i class="bi bi-file-earmark-exclamation text-warning"></i> Damage Reports ({{ stats.damage_reports_count }})
+    </a>
+  </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content">
+
+  <!-- All Records Tab (combined with Reason column) -->
+  <div class="tab-pane fade {% if tab == 'all' %}show active{% endif %}" id="all">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if combined_records %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                <th>Reason</th>
+                <th>Ref No</th>
+                <th>Book Title</th>
+                <th>Acc. No</th>
+                <th>Copy Status</th>
+                <th>Member</th>
+                <th>Fine</th>
+                <th>Paid</th>
+                <th>Report Status</th>
+                <th>Report Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rec in combined_records %}
+              <tr>
+                <td class="text-muted small">{{ forloop.counter }}</td>
+                <td>
+                  <span class="badge bg-{{ rec.reason_class }}">
+                    {% if rec.reason == 'Lost' %}<i class="bi bi-exclamation-triangle me-1"></i>{% else %}<i class="bi bi-tools me-1"></i>{% endif %}
+                    {{ rec.reason }}
+                  </span>
+                </td>
+                <td><strong>{{ rec.ref }}</strong></td>
+                <td><small class="fw-semibold">{{ rec.book_title|truncatechars:35 }}</small></td>
+                <td><code class="small">{{ rec.accession_no }}</code></td>
+                <td>
+                  {% if rec.copy_status == 'lost' %}<span class="badge bg-danger">Lost</span>
+                  {% elif rec.copy_status == 'damaged' %}<span class="badge" style="background:#ea580c;color:#fff">Damaged</span>
+                  {% elif rec.copy_status == 'available' %}<span class="badge bg-success">Available</span>
+                  {% elif rec.copy_status == 'borrowed' %}<span class="badge bg-primary">Borrowed</span>
+                  {% else %}<span class="badge bg-secondary">{{ rec.copy_status|title }}</span>{% endif %}
+                </td>
+                <td>
+                  <small class="fw-semibold">{{ rec.member_name }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ rec.member_id }}</div>
+                </td>
+                <td>
+                  {% if rec.fine_amount %}<span class="badge bg-danger">TZS {{ rec.fine_amount|floatformat:0 }}</span>
+                  {% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% if rec.fine_paid == True %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
+                  {% elif rec.fine_paid == False %}
+                    <span class="badge bg-danger">Unpaid</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><small class="text-muted">{{ rec.status }}</small></td>
+                <td><small class="text-muted">{{ rec.reported_at|date:"d M Y" }}</small></td>
+                <td>
+                  {% if rec.reason == 'Lost' and rec.can_recover %}
+                  <form method="post" action="{% url 'recover_book' rec.report_id %}"
+                        class="d-inline" onsubmit="return confirm('Mark this book as recovered? It will be returned to the catalog.')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success">
+                      <i class="bi bi-arrow-counterclockwise"></i> Recover
+                    </button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+          <strong>No lost or damaged records found.</strong>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Lost Copies Tab -->
+  <div class="tab-pane fade {% if tab == 'lost' %}show active{% endif %}" id="lost">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if lost_copies %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                <th>Reason</th>
+                <th>LR No</th>
+                <th>Book Title</th>
+                <th>Acc. No</th>
+                <th>Member Name</th>
+                <th>Member Type</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Lost Fine</th>
+                <th>Paid</th>
+                <th>Processed By</th>
+                <th>Report Date</th>
+                <th>Payment Date</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for lr in lost_copies %}
+              <tr>
+                <td class="text-muted small">{{ forloop.counter }}</td>
+                <td><span class="badge bg-danger"><i class="bi bi-exclamation-triangle me-1"></i>Lost</span></td>
+                <td><strong>LR-{{ lr.pk }}</strong></td>
+                <td><small class="fw-semibold">{{ lr.transaction.copy.book.title|truncatechars:35 }}</small></td>
+                <td><code class="small">{{ lr.transaction.copy.accession_no }}</code></td>
+                <td>
+                  <small class="fw-semibold">{{ lr.user.get_full_name }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ lr.user.army_no|default:lr.user.registration_no|default:"—" }}</div>
+                </td>
+                <td>
+                  {% if lr.user.member_type %}
+                    <span class="badge bg-info text-dark">{{ lr.user.get_member_type_display }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ lr.user.get_role_display }}</span></td>
+                <td><span class="badge bg-{{ lr.status|lower|cut:' '|cut:'–'|cut:'-' }}-subtle text-dark small">{{ lr.get_status_display }}</span></td>
+                <td>
+                  {% if lr.loss_fine %}<span class="badge bg-danger">TZS {{ lr.loss_fine.amount|floatformat:0 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                </td>
+                <td>
+                  {% if lr.loss_fine and lr.loss_fine.paid %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
+                    <div class="small text-muted">TZS {{ lr.loss_fine.amount_paid|floatformat:0 }}</div>
+                  {% elif lr.loss_fine %}
+                    <span class="badge bg-danger">Unpaid</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if lr.reviewed_by %}
+                    <small class="fw-semibold">{{ lr.reviewed_by.get_full_name }}</small>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><small class="text-muted">{{ lr.reported_at|date:"d M Y" }}</small></td>
+                <td>
+                  {% if lr.loss_fine and lr.loss_fine.paid_at %}
+                    <small class="fw-semibold text-success">{{ lr.loss_fine.paid_at|date:"d M Y" }}</small>
+                    <div class="text-muted" style="font-size:.72rem;">{{ lr.loss_fine.paid_at|date:"H:i" }}</div>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if lr.status in 'confirmed,resolved' %}
+                  <form method="post" action="{% url 'recover_book' lr.pk %}"
+                        class="d-inline" onsubmit="return confirm('Mark as recovered? This will restore the copy to the catalog.')">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-success">
+                      <i class="bi bi-arrow-counterclockwise"></i> Recover
+                    </button>
+                  </form>
+                  {% else %}
+                  <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+          <strong>No lost copies found.</strong>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Damaged Copies Tab -->
+  <div class="tab-pane fade {% if tab == 'damaged' %}show active{% endif %}" id="damaged">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if damaged_copies %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                <th>Reason</th>
+                <th>DR No</th>
+                <th>Book Title</th>
+                <th>Acc. No</th>
+                <th>Member Name</th>
+                <th>Member Type</th>
+                <th>Role</th>
+                <th>Damage Type</th>
+                <th>Damage Fine</th>
+                <th>Paid</th>
+                <th>Processed By</th>
+                <th>Report Date</th>
+                <th>Payment Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for dr in damaged_copies %}
+              <tr>
+                <td class="text-muted small">{{ forloop.counter }}</td>
+                <td><span class="badge" style="background:#ea580c;color:#fff"><i class="bi bi-tools me-1"></i>Damaged</span></td>
+                <td><strong>DR-{{ dr.pk }}</strong></td>
+                <td><small class="fw-semibold">{{ dr.transaction.copy.book.title|truncatechars:35 }}</small></td>
+                <td><code class="small">{{ dr.transaction.copy.accession_no }}</code></td>
+                <td>
+                  <small class="fw-semibold">{{ dr.user.get_full_name }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ dr.user.army_no|default:dr.user.registration_no|default:"—" }}</div>
+                </td>
+                <td>
+                  {% if dr.user.member_type %}
+                    <span class="badge bg-info text-dark">{{ dr.user.get_member_type_display }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ dr.user.get_role_display }}</span></td>
+                <td><span class="badge bg-secondary">{{ dr.get_damage_type_display }}</span></td>
+                <td><span class="badge" style="background-color: #ea580c;">TZS {{ dr.damage_fine.amount|floatformat:0 }}</span></td>
+                <td>
+                  {% if dr.damage_fine.paid %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
+                    <div class="small text-muted">TZS {{ dr.damage_fine.amount_paid|floatformat:0 }}</div>
+                  {% else %}
+                    <span class="badge bg-danger">Unpaid</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if dr.reported_by %}
+                    <small class="fw-semibold">{{ dr.reported_by.get_full_name }}</small>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><small class="text-muted">{{ dr.reported_at|date:"d M Y" }}</small></td>
+                <td>
+                  {% if dr.damage_fine.paid_at %}
+                    <small class="fw-semibold text-success">{{ dr.damage_fine.paid_at|date:"d M Y" }}</small>
+                    <div class="text-muted" style="font-size:.72rem;">{{ dr.damage_fine.paid_at|date:"H:i" }}</div>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+          <strong>No paid damaged copies.</strong> No damage fines have been paid yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Damage Reports Tab -->
+  <div class="tab-pane fade {% if tab == 'damage_reports' %}show active{% endif %}" id="damage_reports">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        {% if damage_reports %}
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark">
+              <tr>
+                <th>#</th>
+                <th>DR No</th>
+                <th>Member Name</th>
+                <th>Member Type</th>
+                <th>Role</th>
+                <th>Book Title</th>
+                <th>Acc. No</th>
+                <th>Damage Type</th>
+                <th>Description</th>
+                <th>Damage Fine</th>
+                <th>Overdue Fine</th>
+                <th>Paid</th>
+                <th>Processed By</th>
+                <th>Report Date</th>
+                <th>Payment Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for rpt in damage_reports %}
+              <tr>
+                <td class="text-muted small">{{ forloop.counter }}</td>
+                <td><strong>DR-{{ rpt.pk }}</strong></td>
+                <td>
+                  <small class="fw-semibold">{{ rpt.user.get_full_name }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ rpt.user.army_no|default:rpt.user.registration_no|default:"—" }}</div>
+                </td>
+                <td>
+                  {% if rpt.user.member_type %}
+                    <span class="badge bg-info text-dark">{{ rpt.user.get_member_type_display }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ rpt.user.get_role_display }}</span></td>
+                <td><small class="fw-semibold">{{ rpt.transaction.copy.book.title|truncatechars:30 }}</small></td>
+                <td><code class="small">{{ rpt.transaction.copy.accession_no }}</code></td>
+                <td><span class="badge bg-secondary">{{ rpt.get_damage_type_display }}</span></td>
+                <td><small class="text-muted">{{ rpt.damage_description|truncatechars:35|default:"—" }}</small></td>
+                <td>
+                  {% if rpt.damage_fine %}
+                    <div class="fw-bold" style="color: #ea580c;">TZS {{ rpt.damage_fine.amount|floatformat:0 }}</div>
+                    <div class="small text-muted">Paid: TZS {{ rpt.damage_fine.amount_paid|floatformat:0 }}</div>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if rpt.overdue_fine %}
+                    <div class="text-warning fw-bold">TZS {{ rpt.overdue_fine.amount|floatformat:0 }}</div>
+                    {% if rpt.overdue_fine.paid %}
+                      <span class="badge bg-success">Paid</span>
+                    {% else %}
+                      <span class="badge bg-danger">Unpaid</span>
+                    {% endif %}
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if rpt.damage_fine and rpt.damage_fine.paid %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
+                  {% elif rpt.damage_fine and rpt.damage_fine.amount_paid > 0 %}
+                    <span class="badge bg-warning text-dark">Partial</span>
+                  {% else %}
+                    <span class="badge bg-danger">Unpaid</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if rpt.reported_by %}
+                    <small class="fw-semibold">{{ rpt.reported_by.get_full_name }}</small>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td><small class="text-muted">{{ rpt.reported_at|date:"d M Y" }}</small></td>
+                <td>
+                  {% if rpt.damage_fine.paid_at %}
+                    <small class="fw-semibold text-success">{{ rpt.damage_fine.paid_at|date:"d M Y" }}</small>
+                    <div class="text-muted" style="font-size:.72rem;">{{ rpt.damage_fine.paid_at|date:"H:i" }}</div>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5 text-muted">
+          <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+          <strong>No paid damage reports.</strong> No damage fines have been paid yet.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

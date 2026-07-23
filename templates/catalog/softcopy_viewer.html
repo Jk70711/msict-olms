@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return;
   }
 
-  const PDF_DATA_URL = '{% url "special_pdf_data" copy.pk %}';
+  const PDF_DATA_URL = '{% url "special_pdf_data" copy.pk %}{% if access_token %}?token={{ access_token }}{% endif %}';
   const WATERMARK_TEXT = '{{ request.user.get_full_name|default:request.user.username|escapejs }} · {{ request.user.army_no|default:""}} · MSICT OLMS';
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = '{% static "js/pdf.worker.min.js" %}';

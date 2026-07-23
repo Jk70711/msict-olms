@@ -66,6 +66,10 @@ class Command(BaseCommand):
             ('FINE_PER_DAY', '1000', 'Fine amount per overdue day in TZS'),
             ('OTP_VALIDITY_MINUTES', '10', 'OTP validity period in minutes'),
             ('MAX_LOGIN_ATTEMPTS', '5', 'Max failed login attempts before account lockout'),
+            ('GUEST_HOURLY_RATE', '500', 'Default guest session hourly fee in TZS'),
+            ('GUEST_MAX_HOURS', '12', 'Maximum hours per guest session'),
+            ('NEW_ARRIVAL_NOTIFY_ENABLED', '1', 'Enable new arrival alerts (1=yes,0=no)'),
+            ('NEW_ARRIVAL_NOTIFY_CHANNEL', 'sms', 'Preferred new arrival alert channel (sms/email)'),
         ]
         created = 0
         for key, value, desc in prefs:

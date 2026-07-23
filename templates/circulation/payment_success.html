@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Payment Successful{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8 col-lg-6">
+      <div class="card border-0 shadow">
+        <div class="card-header bg-success text-white">
+          <h5 class="mb-0"><i class="bi bi-check-circle-fill me-2"></i>Payment Successful</h5>
+        </div>
+        <div class="card-body p-4 text-center">
+          <div class="mb-4">
+            <i class="bi bi-check-circle-fill text-success" style="font-size: 4rem;"></i>
+          </div>
+          <h4 class="fw-bold mb-2">Payment Completed</h4>
+          <p class="text-muted mb-3">Your softcopy access has been activated.</p>
+
+          <div class="card bg-light mb-4 text-start">
+            <div class="card-body">
+              <div class="row mb-2">
+                <div class="col-5 text-muted small">Book:</div>
+                <div class="col-7 fw-semibold small">{{ book_title }}</div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-5 text-muted small">Amount Paid:</div>
+                <div class="col-7 fw-semibold small">TZS {{ amount|floatformat:0 }}</div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-5 text-muted small">Transaction ID:</div>
+                <div class="col-7 fw-semibold small"><code>{{ txn_id }}</code></div>
+              </div>
+              <div class="row mb-2">
+                <div class="col-5 text-muted small">Payment Method:</div>
+                <div class="col-7 fw-semibold small">{{ payment_method_label }}</div>
+              </div>
+              <div class="row">
+                <div class="col-5 text-muted small">Access Valid Until:</div>
+                <div class="col-7 fw-semibold small">{{ due_date }}</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-grid gap-2 mb-3">
+            <a href="{% url 'softcopy_receipt_pdf' prepaid_tx_id %}" target="_blank" class="btn btn-outline-primary btn-lg">
+              <i class="bi bi-receipt me-2"></i>Print Receipt
+            </a>
+          </div>
+
+          <div class="d-flex gap-2 justify-content-center">
+            <a href="{% url 'member_msict_borrowings' %}" class="btn btn-primary">
+              <i class="bi bi-book me-1"></i> Go to My Borrowings
+            </a>
+            {% if librarian_mode %}
+            <a href="{% url 'all_requests' %}" class="btn btn-outline-secondary">
+              <i class="bi bi-inbox me-1"></i> Back to Requests
+            </a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

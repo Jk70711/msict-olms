@@ -13,7 +13,7 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from circulation.models import BorrowingTransaction, Fine, LossReport
+from circulation.models import BorrowingTransaction, Fine, LossReport, SoftcopyAccessLog
 from accounts.utils import notify_user
 
 
@@ -29,10 +29,30 @@ class Command(BaseCommand):
         from accounts.models import SystemPreference
         fine_per_day = Decimal(str(SystemPreference.get('FINE_PER_DAY', 1000)))
 
+        # ── Cleanup: Mark any existing overdue softcopies back to 'borrowed' ─
+        # ALL softcopies should NEVER be marked as 'overdue' — no fine concept.
+        # They simply expire after their loan period.
+        overdue_softcopies = BorrowingTransaction.objects.filter(
+            status='overdue',
+            copy__copy_type='softcopy'
+        )
+        if overdue_softcopies.exists():
+            count = overdue_softcopies.count()
+            overdue_softcopies.update(status='borrowed')
+            self.stdout.write(
+                self.style.WARNING(
+                    f'Cleaned up {count} overdue special softcopy transaction(s) → status "borrowed"'
+                )
+            )
+
+
         # ── Step 1: Mark borrowed→overdue and send first alert ─────────────
+        # EXCLUDE ALL softcopies — they just expire without penalty
         new_overdue_qs = BorrowingTransaction.objects.filter(
             status='borrowed',
             due_date__lt=now,
+        ).exclude(
+            copy__copy_type='softcopy'
         ).select_related('user', 'copy__book')
 
         newly_marked_ids = []
@@ -58,15 +78,10 @@ class Command(BaseCommand):
                     paid=False,
                 )
 
-            return_hint = (
-                "Return the soft copy online from your dashboard or "
-                if tx.copy.copy_type == 'softcopy'
-                else "Bring the book to the library or "
-            )
             msg = (
                 f"MSICT OLMS: OVERDUE - '{tx.copy.book.title}' is overdue by {days} day(s). "
                 f"Fine so far: TZS {fine_amount:,.0f}. "
-                f"{return_hint}contact the librarian immediately to avoid further fines."
+                f"Bring the book to the library or contact the librarian immediately to avoid further fines."
             )
             notify_user(tx.user, msg, 'sms', priority='high', message_type='overdue')
             notify_user(tx.user, msg, 'email',
@@ -75,6 +90,7 @@ class Command(BaseCommand):
             newly_marked += 1
 
         # ── Step 2: Daily consecutive alert — EXCLUDE transactions just marked ─
+        # EXCLUDE ALL softcopies — they just expire without penalty
         # "until paid": skip if fine is fully paid (amount_paid >= amount).
         # We use Exists() to avoid duplicate rows from the join.
         from django.db.models import Exists, OuterRef, Q
@@ -87,6 +103,8 @@ class Command(BaseCommand):
             status='overdue',
         ).exclude(
             pk__in=newly_marked_ids,  # Don't double-notify on day 1
+        ).exclude(
+            copy__copy_type='softcopy'
         ).filter(
             unpaid_fine_exists | no_fine_yet  # Stop reminders once fine is fully paid
         ).select_related('user', 'copy__book')
@@ -113,15 +131,10 @@ class Command(BaseCommand):
                 )
                 remaining = total_fine
 
-            return_hint = (
-                "Return online from your dashboard or "
-                if tx.copy.copy_type == 'softcopy'
-                else "Return the book to the library or "
-            )
             msg = (
                 f"MSICT OLMS: DAILY REMINDER - '{tx.copy.book.title}' is {days} day(s) overdue. "
                 f"Total fine: TZS {total_fine:,.0f} | Remaining: TZS {remaining:,.0f}. "
-                f"{return_hint}pay fines at the circulation desk."
+                f"Return the book to the library or pay fines at the circulation desk."
             )
             notify_user(tx.user, msg, 'sms', priority='high', message_type='overdue')
             notify_user(tx.user, msg, 'email',
@@ -143,6 +156,8 @@ class Command(BaseCommand):
             status='confirmed',
             transaction__isnull=False,
             transaction__due_date__lt=now,
+        ).exclude(
+            transaction__copy__copy_type='softcopy'
         ).select_related('user', 'transaction__copy__book', 'loss_fine')
 
         lost_reminded = 0
@@ -223,6 +238,8 @@ class Command(BaseCommand):
             loss_fine__isnull=False,
             loss_fine__paid=False,
             transaction__due_date__gte=now,
+        ).exclude(
+            transaction__copy__copy_type='softcopy'
         ).select_related('user', 'transaction__copy__book', 'loss_fine')
 
         loss_only_reminded = 0
@@ -247,9 +264,54 @@ class Command(BaseCommand):
                         priority='high', message_type='loss_fine')
             loss_only_reminded += 1
 
+        # ── Step 5: Auto-expire SoftcopyAccessLog entries ─────────────────
+        # Deactivate all access logs past their expires_at timestamp.
+        expired_logs = SoftcopyAccessLog.objects.filter(
+            is_active=True,
+            expires_at__lt=now,
+        )
+        expired_count = expired_logs.count()
+        if expired_count:
+            expired_logs.update(is_active=False)
+            self.stdout.write(
+                self.style.WARNING(
+                    f'Deactivated {expired_count} expired softcopy access log(s)'
+                )
+            )
+
+        # Send 2-day expiry warning for active logs expiring within 2 days
+        from datetime import timedelta
+        warning_cutoff = now + timedelta(days=2)
+        expiring_soon = SoftcopyAccessLog.objects.filter(
+            is_active=True,
+            expires_at__lte=warning_cutoff,
+            expires_at__gt=now,
+        ).select_related('user', 'copy__book', 'transaction')
+
+        expiry_warned = 0
+        for log in expiring_soon:
+            days_left = log.days_until_expiry()
+            book_title = log.copy.book.title if log.copy.book else 'Unknown'
+            msg = (
+                f"MSICT OLMS: Your softcopy access for '{book_title}' expires in "
+                f"{days_left} day(s). Renew now to keep your access."
+            )
+            notify_user(
+                log.user, msg, 'sms',
+                priority='normal', message_type='softcopy_expiry'
+            )
+            notify_user(
+                log.user, msg, 'email',
+                subject=f'Softcopy Expiry Warning — {book_title}',
+                priority='normal', message_type='softcopy_expiry'
+            )
+            expiry_warned += 1
+
         self.stdout.write(self.style.SUCCESS(
             f'[mark_overdue] Newly marked: {newly_marked} | '
             f'Overdue reminders: {daily_reminded} | '
             f'Lost+overdue reminders: {lost_reminded} | '
-            f'Loss-only reminders: {loss_only_reminded}'
+            f'Loss-only reminders: {loss_only_reminded} | '
+            f'Softcopy logs expired: {expired_count} | '
+            f'Softcopy expiry warnings: {expiry_warned}'
         ))

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}My Damage Reports{% endblock %}
+{% block content %}
+<h4 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle-fill" style="color: #ea580c;"></i> My Damage Reports</h4>
+
+{% if messages %}
+{% for message in messages %}
+<div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+  {{ message }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="card border-0 shadow-sm mb-3">
+  <div class="card-body">
+    {% if total_unpaid_damage_fine > 0 %}
+    <div class="alert alert-warning">
+      <i class="bi bi-exclamation-triangle"></i>
+      You have unpaid damage fines totalling <strong>TZS {{ total_unpaid_damage_fine|floatformat:0 }}</strong>.
+      Please pay to continue borrowing books.
+    </div>
+    {% endif %}
+
+    {% if reports %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead class="table-dark">
+          <tr>
+            <th>#</th>
+            <th>Book Title</th>
+            <th>Acc. No</th>
+            <th>Damage Type</th>
+            <th>Description</th>
+            <th>Date</th>
+            <th>Fine</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rpt in reports %}
+          <tr>
+            <td class="text-muted small">{{ forloop.counter }}</td>
+            <td><small class="fw-semibold">{{ rpt.transaction.copy.book.title|truncatechars:40 }}</small></td>
+            <td><code class="small">{{ rpt.transaction.copy.accession_no }}</code></td>
+            <td><span class="badge bg-secondary">{{ rpt.get_damage_type_display }}</span></td>
+            <td><small class="text-muted">{{ rpt.damage_description|truncatechars:50|default:"—" }}</small></td>
+            <td><small class="text-muted">{{ rpt.reported_at|date:"d M Y" }}</small></td>
+            <td>
+              {% if rpt.damage_fine %}
+                <div class="fw-bold" style="color: #ea580c;">TZS {{ rpt.damage_fine.amount|floatformat:0 }}</div>
+                {% if rpt.damage_fine.paid %}
+                  <span class="badge bg-success">Paid</span>
+                {% elif rpt.damage_fine.amount_paid > 0 %}
+                  <span class="badge bg-warning text-dark">Partial: TZS {{ rpt.damage_fine.remaining_balance|floatformat:0 }} left</span>
+                {% else %}
+                  <span class="badge bg-danger">Unpaid</span>
+                {% endif %}
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if rpt.status == 'pending' %}
+                <span class="badge bg-warning text-dark">Pending</span>
+              {% elif rpt.status == 'confirmed' %}
+                <span class="badge bg-danger">Confirmed</span>
+              {% elif rpt.status == 'resolved' %}
+                <span class="badge bg-success">Resolved</span>
+              {% elif rpt.status == 'dismissed' %}
+                <span class="badge bg-secondary">Dismissed</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if rpt.damage_fine and not rpt.damage_fine.paid %}
+              <a href="{% url 'pay_damage_fine' rpt.pk %}" class="btn btn-sm btn-success">
+                <i class="bi bi-credit-card"></i> Pay
+              </a>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="text-center py-5 text-muted">
+      <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
+      <strong>No damage reports.</strong> You have no damaged book records.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

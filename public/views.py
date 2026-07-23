@@ -8,6 +8,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.db.models import Q
 from django.utils import timezone
 from django.http import JsonResponse
+from django.contrib.auth.decorators import login_required
 
 from catalog.models import Book, BookCopy, ExternalLibrary, News, Category, Course, MediaSlide, Footer
 from circulation.models import BorrowingTransaction
@@ -73,10 +74,21 @@ def home_view(request):
 
     carousel_slides = carousel_qs[:6]
 
+    # Exclude books whose only copies are all damaged/lost (no borrowable copy left)
+    _active_book_ids = BookCopy.objects.exclude(
+        status__in=['lost', 'damaged']
+    ).values_list('book_id', flat=True).distinct()
+
     # Kama picha za carousel hazipo, tumia picha za vitabu badala yake
-    carousel_books = Book.objects.filter(show_in_carousel=True).select_related('category').prefetch_related('copies')[:8]
+    carousel_books = (
+        Book.objects.filter(show_in_carousel=True, pk__in=_active_book_ids)
+        .select_related('category').prefetch_related('copies')[:8]
+    )
     if carousel_books.count() < 3:
-        carousel_books = Book.objects.select_related('category').prefetch_related('copies').order_by('-created_at')[:8]
+        carousel_books = (
+            Book.objects.filter(pk__in=_active_book_ids)
+            .select_related('category').prefetch_related('copies').order_by('-created_at')[:8]
+        )
 
     # Pata matangazo yanayoonekana kwenye ukurasa wa nyumbani
     advertisements = MediaSlide.objects.filter(
@@ -122,8 +134,11 @@ def home_view(request):
     if footer:
         footer.additional_links_parsed = additional_links_parsed
 
-    # Vitabu 10 vya hivi karibuni — vinaonekana kwenye carousel ya 3D
-    latest_books = Book.objects.select_related('category').prefetch_related('copies').order_by('-created_at')[:10]
+    # Vitabu 10 vya hivi karibuni — vinaonekana kwenye carousel ya 3D (exclude books with all copies damaged/lost)
+    latest_books = (
+        Book.objects.filter(pk__in=_active_book_ids)
+        .select_related('category').prefetch_related('copies').order_by('-created_at')[:10]
+    )
 
     # Vitabu vinavyosomwa sana — kulingana na idadi ya mikopo
     # Simple approach: count in Python to avoid Oracle NCLOB issues
@@ -134,8 +149,11 @@ def home_view(request):
     # Get top 8 most borrowed books
     top_book_ids = [book_id for book_id, _ in borrow_counts.most_common(8)]
     
+    _active_book_id_set = set(_active_book_ids)
     most_borrowed_books = []
     for book_id in top_book_ids:
+        if book_id not in _active_book_id_set:
+            continue
         try:
             book = Book.objects.get(pk=book_id)
             book.borrow_count = borrow_counts[book_id]
@@ -171,6 +189,7 @@ def home_view(request):
 # Ukurasa wa kutafuta vitabu (catalog ya umma)
 # Inachuja vitabu kulingana na: maneno ya tafuta, kozi, kategoria
 # Matokeo yanagawanywa kurasa 12 kwa kurasa moja
+@login_required
 def catalog_search_view(request):
     from django.core.paginator import Paginator
     query = request.GET.get('q', '')  # Maneno ya tafuta
@@ -238,11 +257,12 @@ def catalog_search_view(request):
 # Ukurasa wa maelezo ya kitabu mmoja (kwa umma)
 # Inaonyesha: taarifa za kitabu, nakala zilizopo, viungo vya kukopa au kupakua
 # Kwa mwanachama aliyeingia: inaonyesha hali ya mkopo wake wa kitabu hiki
+@login_required
 def book_detail_public_view(request, book_id):
     from circulation.models import BorrowingTransaction, BorrowRequest
     from django.conf import settings as _settings
     book = get_object_or_404(Book, pk=book_id)  # Tafuta kitabu au onyesha ukurasa wa 404
-    copies = book.copies.all()
+    copies = book.copies.exclude(status__in=['lost', 'damaged'])
     free_copies = copies.filter(copy_type='softcopy', access_type='free')
     special_copies = copies.filter(copy_type='softcopy', access_type='borrow')
     available_special = special_copies.filter(status='available')
@@ -258,7 +278,8 @@ def book_detail_public_view(request, book_id):
             copy__book=book,
             copy__copy_type='softcopy',
             status__in=['borrowed', 'overdue'],
-        ).select_related('copy').first()
+            due_date__gte=timezone.now(),
+        ).select_related('copy').order_by('-borrow_date').first()
         user_pending_softcopy_req = BorrowRequest.objects.filter(
             user=request.user, copy__in=special_copies, status='pending'
         ).exists()
@@ -288,6 +309,7 @@ def book_detail_public_view(request, book_id):
 
 # API ya kupata data ya kitabu kwa modal popup (inaitwa kwa AJAX)
 # Inarudisha JSON na taarifa muhimu za kitabu
+@login_required
 def book_modal_data_view(request, book_id):
     from django.http import JsonResponse
     book = get_object_or_404(Book, pk=book_id)

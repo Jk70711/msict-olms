@@ -1,0 +1,386 @@
+{% extends 'base.html' %}
+{% block title %}Bulk Messaging - MSICT OLMS{% endblock %}
+{% block content %}
+<div class="container py-4" style="max-width: 960px;">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="fw-bold mb-0"><i class="bi bi-megaphone me-2"></i>Bulk Messaging</h4>
+    <a href="{% url 'admin_dashboard' %}" class="btn btn-outline-secondary btn-sm">Back</a>
+  </div>
+
+  {% if messages %}
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Compose Form -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-light py-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-pencil-square"></i> Send Message to Members</h6>
+    </div>
+    <div class="card-body p-4">
+
+      <form method="get" id="previewForm" class="mb-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-5">
+            <label class="form-label small fw-bold">Recipients (preview filter)</label>
+            <select name="roles" class="form-select form-select-sm" multiple size="4">
+              <option value="member" {% if 'member' in roles_get %}selected{% endif %}>All Members</option>
+              <option value="librarian" {% if 'librarian' in roles_get %}selected{% endif %}>All Librarians</option>
+              <option value="guest" {% if 'guest' in roles_get %}selected{% endif %}>All Guests</option>
+            </select>
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small fw-bold">Member Types</label>
+            <select name="member_types" class="form-select form-select-sm" multiple size="4">
+              <option value="student" {% if 'student' in member_types_get %}selected{% endif %}>Students Only</option>
+              <option value="lecturer" {% if 'lecturer' in member_types_get %}selected{% endif %}>Lecturers Only</option>
+              <option value="staff" {% if 'staff' in member_types_get %}selected{% endif %}>Staff Only</option>
+            </select>
+          </div>
+          <div class="col-md-2">
+            <button type="submit" class="btn btn-outline-primary btn-sm w-100">
+              <i class="bi bi-eye"></i> Preview
+            </button>
+          </div>
+        </div>
+        <div class="mt-2">
+          <small class="text-muted">
+            Recipients Count: <strong class="fs-6 text-primary">{{ preview_count }}</strong>
+          </small>
+        </div>
+      </form>
+
+      <hr>
+
+      <form method="post" class="row g-3">
+        {% csrf_token %}
+
+        <!-- Recipients (checkboxes) -->
+        <div class="col-12">
+          <label class="form-label fw-bold">Recipients <span class="text-danger">*</span></label>
+          <div class="row g-2 ms-2">
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="roles" value="member" id="role_member" {% if 'member' in roles_get %}checked{% endif %}>
+                <label class="form-check-label" for="role_member">All Members</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="roles" value="librarian" id="role_librarian" {% if 'librarian' in roles_get %}checked{% endif %}>
+                <label class="form-check-label" for="role_librarian">All Librarians</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="roles" value="guest" id="role_guest">
+                <label class="form-check-label" for="role_guest">All Guests</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="member_types" value="student" id="mt_student" {% if 'student' in member_types_get %}checked{% endif %}>
+                <label class="form-check-label" for="mt_student">Students Only</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="member_types" value="lecturer" id="mt_lecturer" {% if 'lecturer' in member_types_get %}checked{% endif %}>
+                <label class="form-check-label" for="mt_lecturer">Lecturers Only</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="member_types" value="staff" id="mt_staff" {% if 'staff' in member_types_get %}checked{% endif %}>
+                <label class="form-check-label" for="mt_staff">Staff Only</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-text">Select roles and/or member types to target. Leave member types unchecked to target all within selected roles.</div>
+        </div>
+
+        <!-- Custom User Selection -->
+        <div class="col-12">
+          <div class="accordion" id="customUserAccordion">
+            <div class="accordion-item border-0">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed py-2 px-3 bg-light" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#customUsersCollapse">
+                  <i class="bi bi-people-fill me-2"></i>
+                  <span class="fw-bold small">Custom Selection (pick specific users by role)</span>
+                </button>
+              </h2>
+              <div id="customUsersCollapse" class="accordion-collapse collapse" data-bs-parent="#customUserAccordion">
+                <div class="accordion-body p-3 border rounded mt-1">
+                  <p class="text-muted small mb-2">Select individual users instead of broadcasting to entire roles. Selected users will be added to the recipients above.</p>
+
+                  <ul class="nav nav-pills mb-2" role="tablist">
+                    <li class="nav-item" role="presentation">
+                      <button class="nav-link active py-1 px-3 small" data-bs-toggle="pill" data-bs-target="#tabMembers" type="button">
+                        <i class="bi bi-people"></i> Members ({{ members_list|length }})
+                      </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                      <button class="nav-link py-1 px-3 small" data-bs-toggle="pill" data-bs-target="#tabGuests" type="button">
+                        <i class="bi bi-person-badge"></i> Guests ({{ guests_list|length }})
+                      </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                      <button class="nav-link py-1 px-3 small" data-bs-toggle="pill" data-bs-target="#tabLibrarians" type="button">
+                        <i class="bi bi-book"></i> Librarians ({{ librarians_list|length }})
+                      </button>
+                    </li>
+                  </ul>
+
+                  <div class="tab-content" style="max-height: 300px; overflow-y: auto;">
+                    <!-- Members tab -->
+                    <div class="tab-pane fade show active" id="tabMembers">
+                      {% if members_list %}
+                      <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAll('custom_members', true)">Select All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll('custom_members', false)">Clear</button>
+                      </div>
+                      <div class="row g-1">
+                        {% for u in members_list %}
+                        <div class="col-md-4">
+                          <div class="form-check">
+                            <input class="form-check-input custom_members" type="checkbox" name="custom_users" value="{{ u.pk }}" id="cu_{{ u.pk }}">
+                            <label class="form-check-label small" for="cu_{{ u.pk }}">
+                              {{ u.get_full_name|default:u.username }}
+                              <span class="text-muted">({{ u.member_type|default:"—" }})</span>
+                            </label>
+                          </div>
+                        </div>
+                        {% endfor %}
+                      </div>
+                      {% else %}
+                      <p class="text-muted small">No active members found.</p>
+                      {% endif %}
+                    </div>
+                    <!-- Guests tab -->
+                    <div class="tab-pane fade" id="tabGuests">
+                      {% if guests_list %}
+                      <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAll('custom_guests', true)">Select All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll('custom_guests', false)">Clear</button>
+                      </div>
+                      <div class="row g-1">
+                        {% for u in guests_list %}
+                        <div class="col-md-4">
+                          <div class="form-check">
+                            <input class="form-check-input custom_guests" type="checkbox" name="custom_users" value="{{ u.pk }}" id="cu_{{ u.pk }}">
+                            <label class="form-check-label small" for="cu_{{ u.pk }}">
+                              {{ u.get_full_name|default:u.username }}
+                            </label>
+                          </div>
+                        </div>
+                        {% endfor %}
+                      </div>
+                      {% else %}
+                      <p class="text-muted small">No active guests found.</p>
+                      {% endif %}
+                    </div>
+                    <!-- Librarians tab -->
+                    <div class="tab-pane fade" id="tabLibrarians">
+                      {% if librarians_list %}
+                      <div class="mb-2">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleAll('custom_librarians', true)">Select All</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="toggleAll('custom_librarians', false)">Clear</button>
+                      </div>
+                      <div class="row g-1">
+                        {% for u in librarians_list %}
+                        <div class="col-md-4">
+                          <div class="form-check">
+                            <input class="form-check-input custom_librarians" type="checkbox" name="custom_users" value="{{ u.pk }}" id="cu_{{ u.pk }}">
+                            <label class="form-check-label small" for="cu_{{ u.pk }}">
+                              {{ u.get_full_name|default:u.username }}
+                            </label>
+                          </div>
+                        </div>
+                        {% endfor %}
+                      </div>
+                      {% else %}
+                      <p class="text-muted small">No active librarians found.</p>
+                      {% endif %}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Channel -->
+        <div class="col-12">
+          <label class="form-label fw-bold">Channel <span class="text-danger">*</span></label>
+          <div class="row g-2 ms-2">
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="channels" value="email" id="ch_email" checked>
+                <label class="form-check-label" for="ch_email"><i class="bi bi-envelope"></i> Email</label>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="channels" value="sms" id="ch_sms" checked>
+                <label class="form-check-label" for="ch_sms"><i class="bi bi-phone"></i> SMS</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subject -->
+        <div class="col-12">
+          <label class="form-label fw-bold">Subject (for email)</label>
+          <input type="text" name="subject" class="form-control" placeholder="e.g. Special Event: Library Open Day!">
+        </div>
+
+        <!-- Message Body -->
+        <div class="col-12">
+          <label class="form-label fw-bold">Message <span class="text-danger">*</span></label>
+          <textarea name="message" rows="5" class="form-control" required
+            placeholder="Dear {name}, we are happy to announce..."></textarea>
+          <div class="form-text">
+            Placeholders: <code>{name}</code>, <code>{army_no}</code>, <code>{username}</code> — will be replaced per recipient.
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="col-12 d-flex justify-content-between align-items-center mt-2">
+          <small class="text-muted">
+            Recipients (from preview): <strong class="text-primary">{{ preview_count }}</strong>
+          </small>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" type="submit" name="action" value="draft">
+              <i class="bi bi-save me-1"></i>Save as Draft
+            </button>
+            <button class="btn btn-msict" type="submit" name="action" value="send">
+              <i class="bi bi-send me-1"></i>Send
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Drafts -->
+  {% if drafts %}
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-light py-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-file-earmark-text"></i> Drafts</h6>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>Subject</th>
+              <th>Body Preview</th>
+              <th>Recipients</th>
+              <th>Channels</th>
+              <th>Created</th>
+              <th>By</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in drafts %}
+            <tr>
+              <td><small class="fw-semibold">{{ d.subject|default:"(no subject)"|truncatechars:40 }}</small></td>
+              <td><small class="text-muted">{{ d.body|truncatechars:60 }}</small></td>
+              <td><span class="badge bg-info text-dark">{{ d.total_recipients }}</span></td>
+              <td>
+                {% for ch in d.send_via %}
+                  <span class="badge bg-secondary">{{ ch|upper }}</span>
+                {% endfor %}
+              </td>
+              <td><small class="text-muted">{{ d.created_at|date:"d M Y H:i" }}</small></td>
+              <td><small>{{ d.sent_by.get_full_name|default:"—" }}</small></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Message History -->
+  <div class="card border-0 shadow-sm">
+    <div class="card-header bg-light py-2">
+      <h6 class="fw-bold mb-0"><i class="bi bi-clock-history"></i> Message History</h6>
+    </div>
+    <div class="card-body p-0">
+      {% if message_history %}
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead class="table-dark">
+            <tr>
+              <th>Date</th>
+              <th>Subject</th>
+              <th>Recipients</th>
+              <th>Sent</th>
+              <th>Failed</th>
+              <th>Channels</th>
+              <th>Status</th>
+              <th>Sent By</th>
+              <th>New Arrival?</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in message_history %}
+            <tr>
+              <td><small class="text-muted">{{ m.sent_at|date:"d M Y H:i" }}</small></td>
+              <td><small class="fw-semibold">{{ m.subject|default:"(no subject)"|truncatechars:35 }}</small></td>
+              <td><span class="badge bg-info text-dark">{{ m.total_recipients }}</span></td>
+              <td><span class="badge bg-success">{{ m.total_sent }}</span></td>
+              <td><span class="badge bg-danger">{{ m.total_failed }}</span></td>
+              <td>
+                {% for ch in m.send_via %}
+                  <span class="badge bg-secondary">{{ ch|upper }}</span>
+                {% endfor %}
+              </td>
+              <td>
+                {% if m.status == 'sent' %}
+                  <span class="badge bg-success">Sent</span>
+                {% elif m.status == 'failed' %}
+                  <span class="badge bg-danger">Failed</span>
+                {% else %}
+                  <span class="badge bg-secondary">{{ m.status|title }}</span>
+                {% endif %}
+              </td>
+              <td><small>{{ m.sent_by.get_full_name|default:"—" }}</small></td>
+              <td>
+                {% if m.is_new_arrival %}
+                  <span class="badge bg-primary"><i class="bi bi-book"></i> Yes</span>
+                {% else %}
+                  <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+        <strong>No messages sent yet.</strong> Compose and send your first bulk message above.
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+function toggleAll(className, checked) {
+  document.querySelectorAll('.' + className).forEach(function(cb) {
+    cb.checked = checked;
+  });
+}
+</script>
+{% endblock %}

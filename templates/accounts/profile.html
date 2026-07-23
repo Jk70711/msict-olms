@@ -24,29 +24,63 @@
     <div class="card p-4">
       <h5 class="fw-bold mb-3"><i class="bi bi-pencil"></i> Edit Profile</h5>
       <form method="post" enctype="multipart/form-data">{% csrf_token %}
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Rank</label>
-          <select name="rank_id" class="form-select">
-            <option value="">-- Select Rank --</option>
-            {% for rank in ranks %}
-            <option value="{{ rank.pk }}" {% if user_obj.rank_id == rank.pk %}selected{% endif %}>{{ rank.rank_name }}</option>
-            {% endfor %}
-          </select>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Rank</label>
+            <select name="rank_id" class="form-select">
+              <option value="">-- Select Rank --</option>
+              {% for rank in ranks %}
+              <option value="{{ rank.pk }}" {% if user_obj.rank_id == rank.pk %}selected{% endif %}>{{ rank.rank_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Email</label>
+            <input type="email" name="email" class="form-control" value="{{ user_obj.email }}">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Phone</label>
+            <input type="tel" name="phone" class="form-control" value="{{ user_obj.phone }}" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Photo</label>
+            <input type="file" name="photo" class="form-control" accept="image/*">
+          </div>
+
+          {% if is_admin %}
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Role</label>
+            <select name="role" id="roleSelect" class="form-select" onchange="toggleMemberType()">
+              {% for value, label in role_choices %}
+              <option value="{{ value }}" {% if user_obj.role == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">You can change roles. You cannot remove your own admin role.</div>
+          </div>
+          {% else %}
+          <input type="hidden" name="role" value="{{ user_obj.role }}">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Role</label>
+            <input type="text" class="form-control" value="{{ user_obj.role|title }}" disabled>
+            <div class="form-text">Only admins can change roles.</div>
+          </div>
+          {% endif %}
+
+          <div class="col-md-6" id="memberTypeDiv">
+            <label class="form-label fw-semibold">Member Type</label>
+            <select name="member_type" id="memberTypeSelect" class="form-select">
+              <option value="">-- None --</option>
+              {% for value, label in member_type_choices %}
+              <option value="{{ value }}" {% if user_obj.member_type == value %}selected{% endif %}>{{ label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Only applies to members.</div>
+          </div>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Email</label>
-          <input type="email" name="email" class="form-control" value="{{ user_obj.email }}">
+        <div class="mt-3">
+          <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Changes</button>
+          <a href="{% url 'change_password' %}" class="btn btn-outline-warning ms-2"><i class="bi bi-key"></i> Change Password</a>
         </div>
-        <div class="mb-3">
-          <label class="form-label">Phone</label>
-          <input type="text" name="phone" class="form-control" value="{{ user_obj.phone }}">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Photo</label>
-          <input type="file" name="photo" class="form-control" accept="image/*">
-        </div>
-        <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save Changes</button>
-        <a href="{% url 'change_password' %}" class="btn btn-outline-warning ms-2"><i class="bi bi-key"></i> Change Password</a>
       </form>
     </div>
     <div class="card p-3 mt-3">
@@ -58,4 +92,19 @@
     </div>
   </div>
 </div>
+
+<script>
+function toggleMemberType() {
+  var role = document.getElementById('roleSelect');
+  var memberTypeDiv = document.getElementById('memberTypeDiv');
+  if (!role) return;
+  var isMember = role.value === 'member';
+  if (memberTypeDiv) memberTypeDiv.style.display = isMember ? '' : 'none';
+  if (!isMember) {
+    var mt = document.getElementById('memberTypeSelect');
+    if (mt) mt.value = '';
+  }
+}
+toggleMemberType();
+</script>
 {% endblock %}

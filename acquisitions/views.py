@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST
 from django.contrib import messages
+import re
 from accounts.views import librarian_required
 from accounts.utils import log_audit, notify_user, create_notification
 from accounts.models import OLMSUser
@@ -19,11 +20,15 @@ def vendor_list_view(request):
 @librarian_required
 def vendor_create_view(request):
     if request.method == 'POST':
+        phone = request.POST.get('phone', '').strip()
+        if phone and not re.match(r'^0\d{9}$', phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return render(request, 'acquisitions/vendor_form.html')
         Vendor.objects.create(
             name=request.POST.get('name', ''),
             contact_person=request.POST.get('contact_person', ''),
             email=request.POST.get('email', ''),
-            phone=request.POST.get('phone', ''),
+            phone=phone,
             address=request.POST.get('address', ''),
         )
         messages.success(request, 'Vendor added.')

@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% block title %}Guest Session Payment — MSICT OLMS{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-md-7">
+
+      {% if messages %}
+      {% for message in messages %}
+      <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+        {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold mb-0"><i class="bi bi-cash-stack me-2"></i>Guest Session Payment</h5>
+        <a href="{% url 'guest_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+          <i class="bi bi-arrow-left"></i> Back
+        </a>
+      </div>
+
+      <!-- Summary Card -->
+      <div class="card mb-3 border-0 shadow-sm">
+        <div class="card-body">
+          <div class="row g-2 text-center">
+            <div class="col-4">
+              <div class="small text-muted">Hours</div>
+              <div class="fw-bold fs-5">{{ paid_hours|floatformat:0 }}h</div>
+            </div>
+            <div class="col-4">
+              <div class="small text-muted">Rate</div>
+              <div class="fw-bold fs-5">TZS {{ hourly_rate|floatformat:0 }}/h</div>
+            </div>
+            <div class="col-4">
+              <div class="small text-muted">Total</div>
+              <div class="fw-bold fs-5 text-success">TZS {{ total_amount|floatformat:0 }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Payment Form -->
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-primary text-white py-2">
+          <h6 class="fw-bold mb-0"><i class="bi bi-credit-card"></i> Payment Method</h6>
+        </div>
+        <div class="card-body">
+          <form method="post" action="{% url 'guest_payment' %}">{% csrf_token %}
+            <input type="hidden" name="paid_hours" value="{{ paid_hours|floatformat:2 }}">
+
+            <!-- Payment Method -->
+            <div class="col-12 mb-3">
+              <label class="form-label fw-bold">Select Payment Method <span class="text-danger">*</span></label>
+              <select name="payment_method" id="paymentMethod" class="form-select form-select-lg" required onchange="toggleFields(this.value)">
+                <option value="">— Select Method —</option>
+                <optgroup label="📱 Mobile Money">
+                  <option value="mpesa">M-Pesa</option>
+                  <option value="tigopesa">Tigo Pesa</option>
+                  <option value="airtel_money">Airtel Money</option>
+                  <option value="halopesa">Halopesa</option>
+                </optgroup>
+                <optgroup label="🏦 Bank Transfer">
+                  <option value="bank_transfer">Bank Transfer</option>
+                </optgroup>
+                <optgroup label="💳 Card">
+                  <option value="visa">Visa Card</option>
+                  <option value="mastercard">Mastercard</option>
+                </optgroup>
+              </select>
+              <div class="form-text">Cash payment is not available for online guest sessions.</div>
+            </div>
+
+            <!-- MOBILE: Phone number -->
+            <div class="col-12 mb-3 d-none" id="section-mobile">
+              <label class="form-label fw-bold">Phone Number <span class="text-danger">*</span></label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                <input type="tel" name="phone_number" id="phoneNumber" class="form-control"
+                       placeholder="e.g. 0712345678" pattern="^0[67]\d{8}$" maxlength="10">
+              </div>
+              <div class="form-text">Enter registered mobile money number (10 digits starting with 07 or 06)</div>
+            </div>
+
+            <!-- BANK: Bank name + account number -->
+            <div class="row g-3">
+              <div class="col-md-6 mb-3 d-none" id="section-bank-name">
+                <label class="form-label fw-bold">Bank Name <span class="text-danger">*</span></label>
+                <select name="bank_name" id="bankName" class="form-select">
+                  <option value="">— Select Bank —</option>
+                  <option value="CRDB">CRDB Bank</option>
+                  <option value="NMB">NMB Bank</option>
+                  <option value="NBC">NBC</option>
+                  <option value="Stanbic">Stanbic Bank</option>
+                  <option value="Standard Chartered">Standard Chartered</option>
+                  <option value="Absa">Absa Bank</option>
+                  <option value="DTB">Diamond Trust Bank</option>
+                  <option value="BOA">Bank of Africa</option>
+                  <option value="Exim">Exim Bank</option>
+                  <option value="Azania">Azania Bank</option>
+                  <option value="TPB">TPB Bank</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="col-md-6 mb-3 d-none" id="section-bank-account">
+                <label class="form-label fw-bold">Account Number <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-bank"></i></span>
+                  <input type="text" name="bank_account_no" id="bankAccountNo" class="form-control"
+                         placeholder="e.g. 0150123456789" maxlength="20">
+                </div>
+              </div>
+            </div>
+
+            <!-- CARD: Cardholder, card number, expiry -->
+            <div class="row g-3">
+              <div class="col-md-6 mb-3 d-none" id="section-card-holder">
+                <label class="form-label fw-bold">Cardholder Name <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                  <input type="text" name="card_holder" id="cardHolder" class="form-control"
+                         placeholder="Name as on card" autocomplete="cc-name">
+                </div>
+              </div>
+              <div class="col-md-6 mb-3 d-none" id="section-card-digits">
+                <label class="form-label fw-bold">Card Number (last 4) <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <span class="input-group-text"><i class="bi bi-credit-card-2-front"></i></span>
+                  <input type="text" name="card_last4" id="cardLast4" class="form-control"
+                         placeholder="e.g. 4521" maxlength="4" pattern="\d{4}" autocomplete="off">
+                </div>
+              </div>
+              <div class="col-md-6 mb-3 d-none" id="section-card-expiry">
+                <label class="form-label fw-bold">Expiry Date <span class="text-danger">*</span></label>
+                <div class="input-group">
+                  <select id="cardExpiryMonth" class="form-select" onchange="updateExpiry()">
+                    <option value="">MM</option>
+                    <option value="01">01</option>
+                    <option value="02">02</option>
+                    <option value="03">03</option>
+                    <option value="04">04</option>
+                    <option value="05">05</option>
+                    <option value="06">06</option>
+                    <option value="07">07</option>
+                    <option value="08">08</option>
+                    <option value="09">09</option>
+                    <option value="10">10</option>
+                    <option value="11">11</option>
+                    <option value="12">12</option>
+                  </select>
+                  <select id="cardExpiryYear" class="form-select" onchange="updateExpiry()">
+                    <option value="">YYYY</option>
+                  </select>
+                </div>
+                <input type="hidden" name="card_expiry" id="cardExpiry">
+              </div>
+            </div>
+
+            <!-- Total & Submit -->
+            <div class="border-top pt-3 mt-2">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="fw-bold">Total to Pay:</span>
+                <span class="fw-bold fs-4 text-success">TZS {{ total_amount|floatformat:0 }}</span>
+              </div>
+              <div class="d-grid gap-2">
+                <button type="submit" class="btn btn-primary btn-lg">
+                  <i class="bi bi-check-circle"></i> Pay &amp; Start Session
+                </button>
+                <a href="{% url 'guest_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="text-center mt-3">
+        <small class="text-muted">
+          <i class="bi bi-info-circle"></i> Payment is non-refundable. Session starts immediately after payment.
+        </small>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleFields(method) {
+  const isMobile = ['mpesa','tigopesa','airtel_money','halopesa'].includes(method);
+  const isBank   = method === 'bank_transfer';
+  const isCard   = ['visa','mastercard'].includes(method);
+
+  function show(id, visible, isRequired) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle('d-none', !visible);
+    el.querySelectorAll('input, select').forEach(i => {
+      if (visible && isRequired) {
+        i.setAttribute('required', '');
+      } else {
+        i.removeAttribute('required');
+      }
+      if (!visible) i.value = '';
+    });
+  }
+
+  show('section-mobile',       isMobile, true);
+  show('section-bank-name',    isBank,   true);
+  show('section-bank-account', isBank,   true);
+  show('section-card-holder',  isCard,   true);
+  show('section-card-digits',  isCard,   true);
+  show('section-card-expiry',  isCard,   true);
+}
+
+function updateExpiry() {
+  const m = document.getElementById('cardExpiryMonth');
+  const y = document.getElementById('cardExpiryYear');
+  const hidden = document.getElementById('cardExpiry');
+  if (!m || !y || !hidden) return;
+  if (m.value && y.value) {
+    hidden.value = m.value + '/' + y.value.slice(-2);
+  } else {
+    hidden.value = '';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const yearSel = document.getElementById('cardExpiryYear');
+  if (yearSel) {
+    const thisYear = new Date().getFullYear();
+    for (let y = thisYear; y <= thisYear + 15; y++) {
+      const opt = document.createElement('option');
+      opt.value = y;
+      opt.textContent = y;
+      yearSel.appendChild(opt);
+    }
+  }
+});
+</script>
+{% endblock %}

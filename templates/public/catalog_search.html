@@ -107,7 +107,7 @@
               <span class="badge bg-success"><i class="bi bi-file-earmark-pdf-fill"></i> Free PDF</span>
             {% endif %}
             {% if book.has_special_softcopy %}
-              <span class="badge bg-warning text-dark"><i class="bi bi-lock-fill"></i> Special</span>
+              <span class="badge bg-warning text-dark"><i class="bi bi-lock-fill"></i> Special{% if book.special_softcopy_fee > 0 %} · TZS {{ book.special_softcopy_fee|floatformat:0 }}{% else %} · Fee not set{% endif %}</span>
             {% endif %}
           </div>
           {% endif %}

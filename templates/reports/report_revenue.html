@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+{% block title %}Revenue Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h4 class="fw-bold mb-0"><i class="bi bi-cash-stack text-success"></i> Revenue Accounting</h4>
+  <span class="badge bg-secondary fs-6">{{ period_label }}</span>
+</div>
+
+<!-- ── Filter / Preview Form ─────────────────────────────────────────── -->
+<div class="card border-0 shadow-sm mb-4">
+  <div class="card-body">
+    <form method="get" id="revenueFilterForm" data-no-loader>
+      <div class="row g-3 align-items-end">
+
+        <!-- Period preset -->
+        <div class="col-md-2">
+          <label class="form-label small fw-semibold mb-1"><i class="bi bi-calendar3 me-1"></i>Period</label>
+          <select name="period" class="form-select form-select-sm" id="periodSelect">
+            <option value="all"  {% if period == 'all'  %}selected{% endif %}>All Time</option>
+            <option value="7"    {% if period == '7'    %}selected{% endif %}>Last 7 days</option>
+            <option value="30"   {% if period == '30'   %}selected{% endif %}>Last 30 days</option>
+            <option value="90"   {% if period == '90'   %}selected{% endif %}>Last 90 days</option>
+            <option value="365"  {% if period == '365'  %}selected{% endif %}>Last 12 months</option>
+          </select>
+        </div>
+
+        <!-- Custom period free-text -->
+        <div class="col-md-3">
+          <label class="form-label small fw-semibold mb-1"><i class="bi bi-input-cursor me-1"></i>Custom Period <span class="text-muted">(overrides above)</span></label>
+          <input type="text" name="custom" class="form-control form-control-sm"
+                 id="customPeriodInput"
+                 placeholder="e.g. 6 days  /  3 months  /  9 years"
+                 value="{{ custom_input }}">
+        </div>
+
+        <!-- Account type checkboxes -->
+        <div class="col-md-5">
+          <label class="form-label small fw-semibold mb-1"><i class="bi bi-funnel me-1"></i>Include Revenue Types</label>
+          <div class="d-flex flex-wrap gap-3 pt-1">
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="account_type" value="overdue" id="chk_overdue"
+                     {% if not account_types or 'overdue' in account_types %}checked{% endif %}>
+              <label class="form-check-label small" for="chk_overdue"><span class="badge bg-warning text-dark">Overdue</span></label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="account_type" value="link_fee" id="chk_link"
+                     {% if not account_types or 'link_fee' in account_types %}checked{% endif %}>
+              <label class="form-check-label small" for="chk_link"><span class="badge bg-primary">Link Fee</span></label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="account_type" value="guest_fee" id="chk_guest"
+                     {% if not account_types or 'guest_fee' in account_types %}checked{% endif %}>
+              <label class="form-check-label small" for="chk_guest"><span class="badge bg-success">Guest Fee</span></label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="account_type" value="damage" id="chk_damage"
+                     {% if not account_types or 'damage' in account_types %}checked{% endif %}>
+              <label class="form-check-label small" for="chk_damage"><span class="badge" style="background:#ea580c;">Damage</span></label>
+            </div>
+            <div class="form-check form-check-inline mb-0">
+              <input class="form-check-input" type="checkbox" name="account_type" value="loss" id="chk_loss"
+                     {% if not account_types or 'loss' in account_types %}checked{% endif %}>
+              <label class="form-check-label small" for="chk_loss"><span class="badge bg-danger">Loss/Refund</span></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Preview + Export buttons -->
+        <div class="col-md-2 d-flex flex-column gap-2">
+          <button type="button" class="btn btn-primary btn-sm" id="previewReportBtn">
+            <i class="bi bi-eye me-1"></i> Preview Report
+          </button>
+          <button type="button" class="btn btn-danger btn-sm" id="exportPdfBtn">
+            <i class="bi bi-file-earmark-pdf me-1"></i> Export PDF
+          </button>
+        </div>
+
+      </div><!-- /.row -->
+    </form>
+
+    <!-- Hidden export form — mirrors filter form, targets export URL -->
+    <form method="get" action="{% url 'export_revenue_pdf' %}" id="exportForm" class="d-none">
+      <input type="hidden" name="period"  id="exp_period">
+      <input type="hidden" name="custom"  id="exp_custom">
+      <div id="exp_types_container"></div>
+    </form>
+
+  </div><!-- /.card-body -->
+</div><!-- /.card -->
+
+<!-- Summary cards (shown on initial page load) -->
+<div class="row g-3 mb-4" id="resultsSection">
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #10b981 !important;">
+      <div class="card-body">
+        <div class="text-muted small">Total Revenue</div>
+        <div class="fs-4 fw-bold text-success">TZS {{ total_revenue|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #dc3545 !important;">
+      <div class="card-body">
+        <div class="text-muted small">Total Loss / Refunds</div>
+        <div class="fs-4 fw-bold text-danger">TZS {{ loss|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card border-0 shadow-sm h-100" style="border-left:4px solid #1e40af !important;">
+      <div class="card-body">
+        <div class="text-muted small">Net Revenue</div>
+        <div class="fs-4 fw-bold text-primary">TZS {{ net_revenue|floatformat:2 }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Breakdown -->
+<div class="row g-3 mb-4">
+  <div class="col-md-5">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-pie-chart-fill text-primary"></i> Breakdown by Type</h6>
+        {% for b in breakdown %}
+        <div class="mb-2">
+          <div class="d-flex justify-content-between small mb-1">
+            <span>{{ b.label }}</span>
+            <span class="fw-bold">TZS {{ b.amount|floatformat:2 }} ({{ b.pct }}%)</span>
+          </div>
+          <div class="progress" style="height:10px;">
+            <div class="progress-bar" style="width:{{ b.pct }}%; background:{{ b.color }};"></div>
+          </div>
+        </div>
+        {% endfor %}
+        <hr>
+        <div class="d-flex justify-content-between small">
+          <span class="text-danger">Loss / Refunds</span>
+          <span class="fw-bold text-danger">TZS {{ loss|floatformat:2 }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-list-columns-reverse text-primary"></i> Income Streams</h6>
+        <table class="table table-sm align-middle mb-0">
+          <tbody>
+            <tr><td><i class="bi bi-clock-history text-warning"></i> Overdue Fees</td><td class="text-end fw-bold">TZS {{ overdue|floatformat:2 }}</td></tr>
+            <tr><td><i class="bi bi-link-45deg text-primary"></i> Softcopy Link Fees</td><td class="text-end fw-bold">TZS {{ link_fee|floatformat:2 }}</td></tr>
+            <tr><td><i class="bi bi-person-badge text-success"></i> Guest Session Fees</td><td class="text-end fw-bold">TZS {{ guest_fee|floatformat:2 }}</td></tr>
+            <tr><td><i class="bi bi-exclamation-triangle" style="color: #ea580c;"></i> Damage Fines</td><td class="text-end fw-bold">TZS {{ damage|floatformat:2 }}</td></tr>
+            <tr class="table-light"><td class="fw-bold">Total Revenue</td><td class="text-end fw-bold text-success">TZS {{ total_revenue|floatformat:2 }}</td></tr>
+            <tr><td class="text-danger">Loss / Refunds</td><td class="text-end fw-bold text-danger">TZS {{ loss|floatformat:2 }}</td></tr>
+            <tr class="table-light"><td class="fw-bold">Net Revenue</td><td class="text-end fw-bold text-primary">TZS {{ net_revenue|floatformat:2 }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent transactions -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h6 class="fw-bold mb-0"><i class="bi bi-receipt text-primary"></i> Recent Transactions</h6>
+      <span class="badge bg-secondary">{{ txn_count }} total</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0 border">
+        <thead class="table-light">
+          <tr>
+            <th>S/N</th>
+            <th>Date</th>
+            <th>User</th>
+            <th>Account Type</th>
+            <th class="text-end">Amount (TZS)</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in transactions %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><small>{{ t.recorded_at|date:"d M Y H:i" }}</small></td>
+            <td><small>{{ t.user.get_full_name|default:"System" }}</small></td>
+            <td>
+              {% if t.account_type == 'guest_fee' %}<span class="badge bg-success">Guest Fee</span>
+              {% elif t.account_type == 'link_fee' %}<span class="badge bg-primary">Link Fee</span>
+              {% elif t.account_type == 'overdue' %}<span class="badge bg-warning text-dark">Overdue</span>
+              {% elif t.account_type == 'damage' %}<span class="badge" style="background-color: #ea580c;">Damage Fine</span>
+              {% else %}<span class="badge bg-danger">Loss/Refund</span>{% endif %}
+            </td>
+            <td class="text-end fw-bold {% if t.amount < 0 %}text-danger{% else %}text-success{% endif %}">{{ t.amount|floatformat:2 }}</td>
+            <td><small class="text-muted">{{ t.description|truncatechars:60 }}</small></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="text-center py-4 text-muted">No revenue transactions recorded yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+
+<!-- Preview Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white py-2">
+        <h5 class="modal-title fw-bold" id="previewModalLabel">
+          <i class="bi bi-cash-stack me-1"></i> Revenue Report Preview
+        </h5>
+        <div class="ms-3">
+          <span class="badge bg-light text-dark" id="previewPeriodBadge">{{ period_label }}</span>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0" id="previewModalBody">
+        <div class="d-flex align-items-center justify-content-center py-5">
+          <div class="spinner-border text-primary" role="status"></div>
+          <span class="ms-2 text-muted">Loading report...</span>
+        </div>
+      </div>
+      <div class="modal-footer bg-light py-2">
+        <button type="button" class="btn btn-danger btn-sm" id="modalExportPdfBtn">
+          <i class="bi bi-file-earmark-pdf me-1"></i> Export PDF
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+  var previewBody = document.getElementById('previewModalBody');
+  var previewBadge = document.getElementById('previewPeriodBadge');
+
+  function buildFilterUrl() {
+    var form = document.getElementById('revenueFilterForm');
+    var params = new URLSearchParams();
+    var period = document.getElementById('periodSelect').value;
+    var custom = document.getElementById('customPeriodInput').value;
+    if (custom) {
+      params.append('custom', custom);
+    } else {
+      params.append('period', period);
+    }
+    form.querySelectorAll('input[name="account_type"]:checked').forEach(function (cb) {
+      params.append('account_type', cb.value);
+    });
+    return location.pathname + '?' + params.toString();
+  }
+
+  function getPeriodLabel() {
+    var custom = document.getElementById('customPeriodInput').value;
+    if (custom) return 'Custom: ' + custom;
+    var sel = document.getElementById('periodSelect');
+    return sel.options[sel.selectedIndex].text;
+  }
+
+  document.getElementById('previewReportBtn').addEventListener('click', function () {
+    var url = buildFilterUrl();
+    previewBadge.textContent = getPeriodLabel();
+    previewBody.innerHTML = '<div class="d-flex align-items-center justify-content-center py-5"><div class="spinner-border text-primary" role="status"></div><span class="ms-2 text-muted">Loading report...</span></div>';
+    previewModal.show();
+
+    fetch(url, {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin'
+    })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+
+        // Build a clean container with all report sections
+        var content = document.createElement('div');
+        content.className = 'p-3';
+
+        // Find all sections after the filter form card (summary, breakdown, transactions)
+        var filterCard = doc.querySelector('#revenueFilterForm').closest('.card');
+        if (!filterCard) {
+          previewBody.innerHTML = '<div class="alert alert-warning m-3">No data found for the selected filters.</div>';
+          return;
+        }
+
+        // Collect all sibling elements after the filter card
+        var sibling = filterCard.nextElementSibling;
+        while (sibling) {
+          content.appendChild(sibling.cloneNode(true));
+          sibling = sibling.nextElementSibling;
+        }
+
+        previewBody.innerHTML = '';
+        previewBody.appendChild(content);
+      })
+      .catch(function (err) {
+        previewBody.innerHTML = '<div class="alert alert-danger m-3">Failed to load report: ' + err.message + '</div>';
+      });
+  });
+
+  // Export PDF from modal
+  document.getElementById('modalExportPdfBtn').addEventListener('click', function () {
+    document.getElementById('exportPdfBtn').click();
+  });
+
+  // Export PDF (original button, hidden behind modal's button)
+  document.getElementById('exportPdfBtn').addEventListener('click', function () {
+  var filterForm = document.getElementById('revenueFilterForm');
+  var exportForm = document.getElementById('exportForm');
+  var typesDiv   = document.getElementById('exp_types_container');
+
+  document.getElementById('exp_period').value = document.getElementById('periodSelect').value;
+  document.getElementById('exp_custom').value  = document.getElementById('customPeriodInput').value;
+
+  typesDiv.innerHTML = '';
+  filterForm.querySelectorAll('input[name="account_type"]:checked').forEach(function (cb) {
+    var h = document.createElement('input');
+    h.type = 'hidden'; h.name = 'account_type'; h.value = cb.value;
+    typesDiv.appendChild(h);
+  });
+
+  exportForm.submit();
+  });
+})();
+</script>
+{% endblock %}

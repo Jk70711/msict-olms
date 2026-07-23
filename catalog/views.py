@@ -1,19 +1,19 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.http import HttpResponse, FileResponse, JsonResponse, Http404
+from django.http import HttpResponse, FileResponse, JsonResponse, Http404, HttpResponseForbidden
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.conf import settings
 from django.views.decorators.http import require_POST
-from django.views.decorators.csrf import csrf_exempt
 from django.template.loader import render_to_string
 
 from accounts.views import librarian_required
-from accounts.utils import log_audit
+from accounts.utils import log_audit, notify_user
 from accounts.security_utils import build_content_disposition, validate_upload
 from django.core.exceptions import ValidationError
-from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, InventoryLog, MediaSlide, Shelf, Footer
+from accounts.models import OLMSUser, SystemPreference
+from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, InventoryLog, MediaSlide, Shelf, Footer, LoginContent
 
 
 # ──────────────────────────────────────────────────────────────
@@ -46,7 +46,91 @@ def _check_upload(request, file, *, allowed_extensions, max_size, label):
     return True
 
 
-@csrf_exempt
+def _notify_new_arrival(book, actor, request):
+    """Best-effort alert to approved members about a newly added book.
+    Creates a BulkMessage record and sends via email + SMS."""
+    try:
+        enabled = str(SystemPreference.get('NEW_ARRIVAL_NOTIFY_ENABLED', '1')).strip().lower()
+        if enabled in ('0', 'false', 'no', 'off'):
+            return
+
+        channels = str(SystemPreference.get('NEW_ARRIVAL_NOTIFY_CHANNEL', 'sms')).strip().lower()
+        # Send via both if configured, else single channel
+        send_channels = []
+        if channels == 'both':
+            send_channels = ['email', 'sms']
+        elif channels in ('email', 'sms'):
+            send_channels = [channels]
+        else:
+            send_channels = ['sms']  # default
+
+        recipients = OLMSUser.objects.filter(
+            role='member',
+            registration_status='approved',
+            is_active=True,
+        )
+
+        msg_template = (
+            "New Arrival at MSICT Library: '{title}' by {author} is now available. "
+            "Visit to borrow or read online!"
+        ).format(title=book.title, author=book.author or 'Unknown')
+
+        subject = f"MSICT OLMS — New Arrival: {book.title}"
+
+        # Create BulkMessage record
+        from accounts.models import BulkMessage, BulkMessageRecipient
+        bm = BulkMessage.objects.create(
+            subject=subject,
+            body=msg_template,
+            target_roles=['member'],
+            send_via=send_channels,
+            sent_by=actor,
+            status='sent',
+            is_new_arrival=True,
+            total_recipients=recipients.count(),
+        )
+
+        sent_count = 0
+        failed_count = 0
+        now = timezone.now()
+
+        for user in recipients:
+            for ch in send_channels:
+                recipient_row = BulkMessageRecipient.objects.create(
+                    message=bm,
+                    user=user,
+                    delivered_via='email' if ch == 'email' else 'sms',
+                    status='pending',
+                )
+                try:
+                    notify_user(
+                        user,
+                        msg_template,
+                        ch,
+                        subject=subject,
+                        priority='normal',
+                        message_type='new_arrival',
+                    )
+                    recipient_row.status = 'sent'
+                    recipient_row.delivered_at = timezone.now()
+                    recipient_row.save(update_fields=['status', 'delivered_at'])
+                    sent_count += 1
+                except Exception as e:
+                    recipient_row.status = 'failed'
+                    recipient_row.error_message = str(e)[:500]
+                    recipient_row.save(update_fields=['status', 'error_message'])
+                    failed_count += 1
+
+        bm.sent_at = now
+        bm.total_sent = sent_count
+        bm.total_failed = failed_count
+        bm.save(update_fields=['sent_at', 'total_sent', 'total_failed'])
+
+        log_audit(actor, f"New-arrival notifications sent for book '{book.title}': {sent_count} sent, {failed_count} failed", request)
+    except Exception:
+        pass
+
+
 @login_required
 def book_search_ajax(request):
     """AJAX endpoint for real-time book search."""
@@ -83,7 +167,20 @@ def librarian_dashboard_view(request):
     from collections import defaultdict
 
     pending_requests = BorrowRequest.objects.filter(status='pending').select_related('user__virtual_card', 'copy__book').order_by('-request_date')
-    overdue_transactions = BorrowingTransaction.objects.filter(status='overdue').select_related('user__virtual_card', 'copy__book')
+    # Match overdue_list_view: exclude special softcopies and transactions with fully paid fines
+    from django.db.models import Exists, OuterRef, F
+    from circulation.models import Fine as _Fine
+    has_unpaid_fine = Exists(
+        _Fine.objects.filter(transaction=OuterRef('pk'), paid=False, amount__gt=F('amount_paid'))
+    )
+    has_no_fine = ~Exists(_Fine.objects.filter(transaction=OuterRef('pk')))
+    overdue_transactions = BorrowingTransaction.objects.filter(
+        status='overdue'
+    ).exclude(
+        copy__copy_type='softcopy', copy__access_type='borrow'
+    ).filter(
+        has_unpaid_fine | has_no_fine
+    ).select_related('user__virtual_card', 'copy__book')
     unpaid_fines = Fine.objects.filter(paid=False).select_related('user__virtual_card', 'transaction__copy__book').order_by('-created_at')
     pending_accounts = OLMSUser.objects.filter(role='member', registration_status='pending').order_by('-created_at')
     total_books = Book.objects.count()
@@ -145,6 +242,55 @@ def librarian_dashboard_view(request):
             'percentage': int((count / max_borrows) * 100) if max_borrows > 0 else 0
         }
 
+    # Revenue / Financial summary
+    from reports.views import _revenue_summary
+    revenue = _revenue_summary()
+
+    # ── Chart data (JSON for Chart.js) ───────────────────────────────
+    import json as _json
+
+    # Copy status distribution
+    copy_status_data = _json.dumps({
+        'labels': ['Available', 'Borrowed', 'Reserved', 'Lost', 'Damaged'],
+        'values': [
+            BookCopy.objects.filter(status='available').count(),
+            BookCopy.objects.filter(status='borrowed').count(),
+            BookCopy.objects.filter(status='reserved').count(),
+            BookCopy.objects.filter(status='lost').count(),
+            BookCopy.objects.filter(status='damaged').count(),
+        ],
+    })
+
+    # Monthly borrowing bar chart
+    borrow_chart_data = _json.dumps({
+        'labels': list(monthly_borrows_with_pct.keys()),
+        'values': [v['count'] for v in monthly_borrows_with_pct.values()],
+    })
+
+    # Category distribution bar chart
+    category_chart_data = _json.dumps({
+        'labels': [s['category__name'] or 'Uncategorized' for s in category_stats],
+        'values': [s['count'] for s in category_stats],
+    })
+
+    # Most borrowed books horizontal bar
+    most_borrowed_chart_data = _json.dumps({
+        'labels': [b.title[:25] for b in most_borrowed_books],
+        'values': [b.borrow_count for b in most_borrowed_books],
+    })
+
+    # Revenue breakdown doughnut
+    revenue_chart_data = _json.dumps({
+        'labels': ['Overdue', 'Link Fee', 'Guest Fee', 'Damage', 'Loss'],
+        'values': [
+            float(revenue['overdue']),
+            float(revenue['link_fee']),
+            float(revenue['guest_fee']),
+            float(revenue.get('damage', 0)),
+            float(revenue['loss']),
+        ],
+    })
+
     context = {
         'pending_requests': pending_requests[:10],
         'overdue_transactions': overdue_transactions[:10],
@@ -163,6 +309,18 @@ def librarian_dashboard_view(request):
         'category_stats': category_stats,
         'copy_type_stats': copy_type_stats,
         'most_borrowed_books': most_borrowed_books,
+        'revenue_overdue': revenue['overdue'],
+        'revenue_link_fee': revenue['link_fee'],
+        'revenue_guest_fee': revenue['guest_fee'],
+        'revenue_damage': revenue.get('damage', 0),
+        'revenue_loss': revenue['loss'],
+        'revenue_total': revenue['total_revenue'],
+        'revenue_net': revenue['net_revenue'],
+        'copy_status_data': copy_status_data,
+        'borrow_chart_data': borrow_chart_data,
+        'category_chart_data': category_chart_data,
+        'most_borrowed_chart_data': most_borrowed_chart_data,
+        'revenue_chart_data': revenue_chart_data,
     }
     return render(request, 'catalog/librarian_dashboard.html', context)
 
@@ -172,6 +330,7 @@ def librarian_dashboard_view(request):
 # View ya Orodha ya Vitabu — Mtunzaji anaona vitabu vyote
 # ----------------------------------------------------------------------
 def book_list_view(request):
+    from django.core.paginator import Paginator
     query = request.GET.get('q', '')
     category_id = request.GET.get('category', '')
     books = Book.objects.select_related('category').prefetch_related('copies', 'courses')
@@ -183,22 +342,33 @@ def book_list_view(request):
         books = books.filter(category_id=category_id)
     categories = Category.objects.all()
     can_manage = request.user.role in ('librarian', 'admin')
-    context = {
-        'books': books,
-        'query': query,
-        'categories': categories,
-        'selected_category': category_id,
-        'can_manage': can_manage,
-    }
 
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.GET.get('ajax') == '1'
     if is_ajax:
+        context = {
+            'books': books,
+            'query': query,
+            'categories': categories,
+            'selected_category': category_id,
+            'can_manage': can_manage,
+        }
         table_rows_html = render_to_string('catalog/partials/book_table_rows.html', context, request=request)
         return JsonResponse({
             'table_rows_html': table_rows_html,
             'total_results': books.count(),
         })
 
+    paginator = Paginator(books, 25)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+    context = {
+        'books': page_obj,
+        'page_obj': page_obj,
+        'query': query,
+        'categories': categories,
+        'selected_category': category_id,
+        'can_manage': can_manage,
+    }
     return render(request, 'catalog/book_list.html', context)
 
 
@@ -272,12 +442,14 @@ def book_create_view(request):
                 access_type = 'borrow'
             else:
                 access_type = request.POST.get('access_type') or request.POST.get('access_type_forced') or 'free'
+            prepaid_fee = request.POST.get('prepaid_fee', 0)
             softcopy = BookCopy(
                 book=book,
                 copy_type='softcopy',
                 access_type=access_type,
                 accession_no=BookCopy.get_next_accession_number(for_softcopy=True),
                 status='available',
+                prepaid_fee=prepaid_fee if prepaid_fee else 0,
             )
             if 'softcopy_file' in request.FILES:
                 f = request.FILES['softcopy_file']
@@ -295,6 +467,7 @@ def book_create_view(request):
         else:
             messages.success(request, f"Book '{book.title}' created successfully.")
 
+        _notify_new_arrival(book, request.user, request)
         log_audit(request.user, f"Created book '{book.title}'", request)
         return redirect('book_detail', book_id=book.pk)
     return render(request, 'catalog/book_form.html', {'categories': categories, 'courses': courses})
@@ -342,6 +515,22 @@ def book_edit_view(request, book_id):
                 return render(request, 'catalog/book_form.html', {'book': book, 'categories': categories, 'courses': courses})
             book.cover_image = f
         book.save()
+
+        # Update softcopy if exists
+        softcopy = book.copies.filter(copy_type='softcopy').first()
+        if softcopy:
+            access_type = request.POST.get('access_type_forced') or request.POST.get('access_type')
+            if access_type:
+                softcopy.access_type = access_type
+            prepaid_fee = request.POST.get('prepaid_fee', 0)
+            softcopy.prepaid_fee = prepaid_fee if prepaid_fee else 0
+            # Handle file upload if provided
+            if 'softcopy_file' in request.FILES:
+                f = request.FILES['softcopy_file']
+                if not _check_upload(request, f, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+                    return render(request, 'catalog/book_form.html', {'book': book, 'categories': categories, 'courses': courses})
+                softcopy.file_path = f
+            softcopy.save()
 
         from .models import BookCourse
         BookCourse.objects.filter(book=book).delete()
@@ -464,6 +653,7 @@ def copy_add_standalone_view(request):
             accession_no=accession_no,
             shelf_location=shelf_location,
             barcode=barcode or accession_no,
+            prepaid_fee=request.POST.get('prepaid_fee', 0) if copy_type == 'softcopy' else 0,
         )
         if softcopy_file is not None:
             copy.file_path = softcopy_file
@@ -648,7 +838,54 @@ def serve_softcopy_view(request, copy_id):
     return redirect('home')
 
 
-@login_required
+# ----------------------------------------------------------------------
+# View ya Tokenized Softcopy Access — Access with a per-user secret link
+# ----------------------------------------------------------------------
+def softcopy_access_link_view(request, token):
+    from circulation.models import BorrowingTransaction, SoftcopyAccessLog
+    from django.utils import timezone as tz
+
+    tx = get_object_or_404(
+        BorrowingTransaction,
+        access_token=token,
+        borrow_type='softcopy',
+        copy__access_type='borrow',
+    )
+
+    if tx.status == 'returned':
+        messages.error(request, 'This access link has already ended because the borrowing was returned.')
+        return redirect('member_msict_borrowings')
+
+    if tx.token_expires and tz.now() > tx.token_expires:
+        messages.warning(request, 'This softcopy access link has expired. Please request access again.')
+        return redirect('member_msict_borrowings')
+
+    if not tx.copy.file_path:
+        messages.error(request, 'File not available. Contact the librarian.')
+        return redirect('member_msict_borrowings')
+
+    if request.user.is_authenticated and request.user != tx.user:
+        messages.error(request, 'This link belongs to another user.')
+        return redirect('home')
+
+    # Increment access count in SoftcopyAccessLog
+    try:
+        access_log = SoftcopyAccessLog.objects.filter(
+            transaction=tx, access_token=str(token), is_active=True
+        ).order_by('-created_at').first()
+        if access_log and not access_log.is_expired():
+            access_log.access_count += 1
+            access_log.save(update_fields=['access_count'])
+    except Exception:
+        pass
+
+    return render(request, 'catalog/softcopy_viewer.html', {
+        'copy': tx.copy,
+        'tx': tx,
+        'access_token': token,
+    })
+
+
 # ----------------------------------------------------------------------
 # View ya Data ya PDF — Inatoa data ya PDF kwa ajili ya kusoma
 # ----------------------------------------------------------------------
@@ -660,9 +897,20 @@ def special_pdf_data_view(request, copy_id):
     from django.utils import timezone as tz
     from django.http import HttpResponseForbidden
     copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='borrow')
-    tx = BorrowingTransaction.objects.filter(
-        user=request.user, copy=copy
-    ).order_by('-borrow_date').first()
+    token = request.GET.get('token')
+    tx = None
+    if token:
+        try:
+            tx = BorrowingTransaction.objects.get(access_token=token, copy=copy)
+        except BorrowingTransaction.DoesNotExist:
+            return HttpResponseForbidden('Invalid access token.')
+    else:
+        if not request.user.is_authenticated:
+            return HttpResponseForbidden('Authentication required.')
+        tx = BorrowingTransaction.objects.filter(
+            user=request.user, copy=copy
+        ).order_by('-borrow_date').first()
+
     if not tx or tx.status == 'returned':
         return HttpResponseForbidden('Access denied.')
     if tz.now() > tx.due_date:
@@ -752,6 +1000,10 @@ def copy_edit_view(request, copy_id):
             copy.accession_no = request.POST.get('accession_no', copy.accession_no)
             copy.barcode = request.POST.get('barcode', copy.barcode)
         copy.shelf_location = request.POST.get('shelf_location', copy.shelf_location)
+        
+        # Handle prepaid_fee for softcopies
+        if copy.copy_type == 'softcopy':
+            copy.prepaid_fee = request.POST.get('prepaid_fee', 0)
 
         # Validate status against the model's allowed choices — never trust
         # arbitrary POST values. Refusing to corrupt copy.status is the
@@ -804,7 +1056,8 @@ def category_list_view(request):
 # View ya Mahali pa Rafu — Mtunzaji anaona mahali pa rafu
 # ----------------------------------------------------------------------
 def shelf_location_view(request):
-    from django.db.models import Count, Q, Case, When, IntegerField
+    import json
+    from django.db.models import Count, Q
     from circulation.models import BorrowingTransaction
 
     # Get all categories (treating each as a shelf)
@@ -815,6 +1068,7 @@ def shelf_location_view(request):
         borrowed=Count('books__copies', filter=Q(books__copies__status='borrowed')),
         reserved=Count('books__copies', filter=Q(books__copies__status='reserved')),
         lost=Count('books__copies', filter=Q(books__copies__status='lost')),
+        damaged=Count('books__copies', filter=Q(books__copies__status='damaged')),
     ).order_by('name')
 
     # Calculate borrow counts per category (for most borrowed shelf)
@@ -835,6 +1089,7 @@ def shelf_location_view(request):
     most_borrowed = borrow_stats_sorted[:5] if borrow_stats_sorted else []
 
     # Calculate totals
+    total_damaged = sum(c.damaged for c in categories)
     totals = {
         'total_books': sum(c.total_books for c in categories),
         'total_copies': sum(c.total_copies for c in categories),
@@ -842,7 +1097,45 @@ def shelf_location_view(request):
         'total_borrowed': sum(c.borrowed for c in categories),
         'total_reserved': sum(c.reserved for c in categories),
         'total_lost': sum(c.lost for c in categories),
+        'total_damaged': total_damaged,
         'total_borrows': total_borrows_all,
+    }
+
+    # ── Chart data (JSON for Chart.js) ───────────────────────────────
+    chart_labels = [c.name for c in categories]
+    chart_available = [c.available for c in categories]
+    chart_borrowed = [c.borrowed for c in categories]
+    chart_reserved = [c.reserved for c in categories]
+    chart_lost = [c.lost for c in categories]
+    chart_damaged = [c.damaged for c in categories]
+    chart_borrows = [s['borrow_count'] for s in borrow_stats]
+
+    # Doughnut data — overall status distribution
+    doughnut_data = {
+        'labels': ['Available', 'Borrowed', 'Reserved', 'Lost', 'Damaged'],
+        'values': [
+            totals['total_available'],
+            totals['total_borrowed'],
+            totals['total_reserved'],
+            totals['total_lost'],
+            totals['total_damaged'],
+        ],
+    }
+
+    # Stacked bar data — copies by status per category
+    bar_data = {
+        'labels': chart_labels,
+        'available': chart_available,
+        'borrowed': chart_borrowed,
+        'reserved': chart_reserved,
+        'lost': chart_lost,
+        'damaged': chart_damaged,
+    }
+
+    # Borrow trend bar data
+    borrow_chart_data = {
+        'labels': chart_labels,
+        'values': chart_borrows,
     }
 
     return render(request, 'catalog/shelf_location.html', {
@@ -850,6 +1143,9 @@ def shelf_location_view(request):
         'borrow_stats': borrow_stats,
         'most_borrowed': most_borrowed,
         'totals': totals,
+        'doughnut_data': json.dumps(doughnut_data),
+        'bar_data': json.dumps(bar_data),
+        'borrow_chart_data': json.dumps(borrow_chart_data),
     })
 
 
@@ -1499,4 +1795,97 @@ def footer_edit_view(request):
         form = FooterForm(instance=footer)
     
     return render(request, 'catalog/footer_form.html', {'form': form, 'footer': footer})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Login Page Content Management — Librarian CRUD
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@librarian_required
+def login_content_list_view(request):
+    """List all login page content sections for librarian management."""
+    sections = LoginContent.objects.all().order_by('section')
+    slideshow_slides = MediaSlide.objects.filter(
+        slide_type='login_slideshow', is_active=True
+    ).order_by('display_order', '-created_at')
+    return render(request, 'catalog/login_content_list.html', {
+        'sections': sections,
+        'slideshow_slides': slideshow_slides,
+    })
+
+
+@login_required
+@librarian_required
+def login_content_edit_view(request, section_id):
+    """Edit a login page content section."""
+    content = get_object_or_404(LoginContent, pk=section_id)
+    if request.method == 'POST':
+        content.title = request.POST.get('title', '').strip()
+        content.body = request.POST.get('body', '').strip()
+        content.icon = request.POST.get('icon', '').strip()
+        try:
+            content.font_size = max(10, min(32, int(request.POST.get('font_size', 18))))
+        except (ValueError, TypeError):
+            content.font_size = 18
+        content.is_active = request.POST.get('is_active') == 'on'
+        content.updated_by = request.user
+        content.save()
+        log_audit(request.user, f"Updated login content: '{content.get_section_display()}'", request)
+        messages.success(request, f'{content.get_section_display()} updated successfully.')
+        return redirect('login_content_list')
+    return render(request, 'catalog/login_content_edit.html', {'content': content})
+
+
+@login_required
+@librarian_required
+@require_POST
+def login_content_toggle_view(request, section_id):
+    """Toggle active/inactive for a login content section."""
+    content = get_object_or_404(LoginContent, pk=section_id)
+    content.is_active = not content.is_active
+    content.updated_by = request.user
+    content.save(update_fields=['is_active', 'updated_by'])
+    status = 'activated' if content.is_active else 'deactivated'
+    messages.success(request, f'{content.get_section_display()} {status}.')
+    return redirect('login_content_list')
+
+
+@login_required
+@librarian_required
+def login_slideshow_create_view(request):
+    """Upload a new slideshow image for the login page."""
+    if request.method == 'POST':
+        title = request.POST.get('title', '').strip()
+        image = request.FILES.get('image')
+        display_order = int(request.POST.get('display_order', 0) or 0)
+        if not title or not image:
+            messages.error(request, 'Title and image are required.')
+            return redirect('login_content_list')
+        slide = MediaSlide.objects.create(
+            title=title,
+            description=request.POST.get('description', ''),
+            image=image,
+            slide_type='login_slideshow',
+            display_order=display_order,
+            is_active=True,
+            created_by=request.user,
+        )
+        log_audit(request.user, f"Added login slideshow image: '{title}'", request)
+        messages.success(request, f'Slideshow image "{title}" added.')
+        return redirect('login_content_list')
+    return redirect('login_content_list')
+
+
+@login_required
+@librarian_required
+@require_POST
+def login_slideshow_delete_view(request, slide_id):
+    """Delete a login slideshow image."""
+    slide = get_object_or_404(MediaSlide, pk=slide_id, slide_type='login_slideshow')
+    title = slide.title
+    slide.delete()
+    log_audit(request.user, f"Deleted login slideshow image: '{title}'", request)
+    messages.success(request, f'Slideshow image "{title}" deleted.')
+    return redirect('login_content_list')
 

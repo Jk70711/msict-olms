@@ -173,17 +173,133 @@ def list_categories():
 # TOOL: get_library_info
 # ----------------------------------------------------------------------
 def get_library_info():
-    """Return general library policies (loan period, fine, etc.) from Django settings."""
+    """Return comprehensive MSICT library policies from the SystemPreference DB."""
+    def _p(key, default):
+        try:
+            from accounts.models import SystemPreference
+            val = SystemPreference.objects.filter(key=key).values_list('value', flat=True).first()
+            if val is not None:
+                return val
+        except Exception:
+            pass
+        return getattr(settings, key, default)
+
+    loan_days      = int(_p('LOAN_PERIOD_DAYS',        7))
+    max_renewals   = int(_p('MAX_RENEWALS',             2))
+    renew_window   = int(_p('RENEWAL_WINDOW_DAYS',      2))
+    max_copies     = int(_p('MAX_COPIES_PER_BORROW',    3))
+    fine_per_day   = float(_p('FINE_PER_DAY',           1000))
+    resv_expiry    = int(_p('RESERVATION_EXPIRY_DAYS',  7))
+    guest_max_hrs  = int(_p('GUEST_MAX_HOURS',          12))
+    guest_rate     = float(_p('GUEST_HOURLY_RATE',      500))
+    soft_fee       = float(_p('SOFTCOPY_PREPAID_FEE',   0))
+    otp_validity   = int(_p('OTP_VALIDITY_MINUTES',     10))
+    max_attempts   = int(_p('MAX_LOGIN_ATTEMPTS',       6))
+    session_tmout  = int(_p('SESSION_TIMEOUT_MINUTES',  30))
+    pwd_expiry     = int(_p('PASSWORD_EXPIRY_DAYS',     90))
+    auto_lockout   = _p('ENABLE_AUTO_LOCKOUT',          '1') == '1'
+
     return {
-        'name':              'MSICT Library',
-        'institution':       'Military School of Information and Communication Technology',
-        'loan_period_days':  getattr(settings, 'LOAN_PERIOD_DAYS', 7),
-        'max_renewals':      getattr(settings, 'MAX_RENEWALS', 2),
-        'max_copies_per_borrow': getattr(settings, 'MAX_COPIES_PER_BORROW', 3),
-        'fine_per_day_tzs':  getattr(settings, 'FINE_PER_DAY', 1000),
-        'note': (
-            'To borrow a book, you must be logged in. Click the book title to '
-            'view its detail page, then use the Borrow button.'
+        'name':        'MSICT Library',
+        'institution': 'Military School of Information and Communication Technology',
+
+        # ── Borrowing ──────────────────────────────────────────────────────
+        'borrowing': {
+            'loan_period_days':      loan_days,
+            'max_copies_per_borrow': max_copies,
+            'reservation_expiry_days': resv_expiry,
+            'note': (
+                f"Members may borrow up to {max_copies} book(s) at a time. "
+                f"Each loan lasts {loan_days} day(s). "
+                f"To borrow, log in → open book detail page → click Borrow. "
+                f"Reservations expire after {resv_expiry} day(s) if unclaimed."
+            ),
+        },
+
+        # ── Renewals ───────────────────────────────────────────────────────
+        'renewals': {
+            'max_renewals':        max_renewals,
+            'renewal_window_days': renew_window,
+            'note': (
+                f"A borrowing can be renewed up to {max_renewals} time(s). "
+                f"Renewal is only allowed when {renew_window} day(s) or fewer remain before the due date, "
+                f"or when the link has expired (softcopy). "
+                f"Books with pending reservations cannot be renewed. "
+                f"Unpaid fines block renewal of hardcopy books."
+            ),
+        },
+
+        # ── Fines ──────────────────────────────────────────────────────────
+        'fines': {
+            'overdue_fine_per_day_tzs': fine_per_day,
+            'note': (
+                f"Overdue hardcopy books are charged TZS {fine_per_day:,.0f} per day. "
+                f"Softcopy (digital) books do NOT incur overdue fines — the access link simply expires. "
+                f"Fines must be paid at the circulation desk before borrowing more books. "
+                f"Loss fine: charged based on the replacement cost of the book. "
+                f"Damage fine: assessed by librarian based on level of damage."
+            ),
+        },
+
+        # ── Softcopy / Digital Books ────────────────────────────────────────
+        'softcopy': {
+            'prepaid_fee_tzs': soft_fee,
+            'note': (
+                f"Softcopy (digital/ebook) books are accessed via a secure time-limited link. "
+                f"{'Free access — no fee required.' if soft_fee == 0 else f'Access fee: TZS {soft_fee:,.0f} per borrow period.'} "
+                f"The link is valid for {loan_days} day(s) (same as the loan period). "
+                f"After expiry, you can renew (pay again if fee > 0) up to {max_renewals} time(s). "
+                f"Softcopy books do not have overdue fines — link simply expires."
+            ),
+        },
+
+        # ── Guest Sessions ──────────────────────────────────────────────────
+        'guest_sessions': {
+            'max_hours_per_day': guest_max_hrs,
+            'hourly_rate_tzs':   guest_rate,
+            'note': (
+                f"Guest users can access library facilities (reading room/internet) without a full membership. "
+                f"Guests pay TZS {guest_rate:,.0f} per hour. "
+                f"Maximum session time is {guest_max_hrs} hour(s) per day. "
+                f"To start a session: log in as guest → go to Guest Dashboard → click Pay & Start Session. "
+                f"Sessions can be extended (renewed) before they expire. "
+                f"Total daily usage cannot exceed {guest_max_hrs} hour(s). "
+                f"Guests CANNOT borrow books — they can only use in-house resources."
+            ),
+        },
+
+        # ── Damage & Loss Reports ───────────────────────────────────────────
+        'damage_and_loss': {
+            'note': (
+                "If a borrowed book is damaged: the member or librarian files a Damage Report. "
+                "The librarian assesses the damage level and sets a damage fine. "
+                "The fine must be paid at the circulation desk before further borrowing. "
+                "If a book is lost: the member or librarian files a Loss Report. "
+                "A loss fine (replacement cost) is charged. "
+                "Once the fine is paid, the member's account is cleared. "
+                "Both damage and loss reports are tracked in the member's dashboard under 'My Reports'."
+            ),
+        },
+
+        # ── Security & Accounts ─────────────────────────────────────────────
+        'security': {
+            'otp_validity_minutes':   otp_validity,
+            'max_login_attempts':     max_attempts,
+            'session_timeout_minutes': session_tmout,
+            'password_expiry_days':   pwd_expiry,
+            'auto_lockout_enabled':   auto_lockout,
+            'note': (
+                f"OTP codes expire after {otp_validity} minute(s). "
+                f"{'Accounts are locked after ' + str(max_attempts) + ' failed login attempts. ' if auto_lockout else 'Auto-lockout is currently disabled. '}"
+                f"Suspension (10-min cooldown) occurs at {max(1, max_attempts // 2)} failed attempts. "
+                f"Sessions expire after {session_tmout} minute(s) of inactivity. "
+                f"Password change is prompted every {pwd_expiry} day(s). "
+                f"Locked accounts can only be unlocked by an administrator."
+            ),
+        },
+
+        'general_note': (
+            'All policies above are live values from the system and may be updated by the administrator at any time.'
         ),
     }
 

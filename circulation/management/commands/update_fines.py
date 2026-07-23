@@ -24,9 +24,12 @@ class Command(BaseCommand):
         skipped = 0
 
         # Get all overdue transactions (borrowed or overdue status)
+        # EXCLUDE ALL softcopies — they never have overdue fines
         overdue_qs = BorrowingTransaction.objects.filter(
             status__in=['borrowed', 'overdue'],
             due_date__lt=now,
+        ).exclude(
+            copy__copy_type='softcopy'
         ).select_related('user', 'copy__book')
 
         for tx in overdue_qs:
