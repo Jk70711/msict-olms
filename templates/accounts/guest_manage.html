@@ -64,6 +64,9 @@
                   <a href="{% url 'guest_session_receipt' s.id %}" target="_blank" class="btn btn-outline-secondary btn-sm" title="Print Receipt">
                     <i class="bi bi-receipt"></i>
                   </a>
+                  <a href="{% url 'guest_session_receipt' s.id %}?download=1" class="btn btn-outline-primary btn-sm" title="Download Receipt">
+                    <i class="bi bi-download"></i>
+                  </a>
                   {% endif %}
                 </div>
               </td>

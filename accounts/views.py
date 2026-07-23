@@ -26,7 +26,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
 from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, GuestSession, BulkMessage, BulkMessageRecipient
-from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user, log_credentials_fallback
+from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user, log_credentials_fallback, mark_badge_viewed
 from .forms import LoginForm
 from .security_utils import safe_redirect, build_content_disposition
 from .models import Rank
@@ -978,7 +978,8 @@ def end_guest_session_view(request):
         pass
 
     if auto_expired:
-        messages.warning(request, f'Your session has expired. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}.')
+        messages.warning(request, f'Your session has expired. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}. Please start a new session to continue.')
+        return redirect('guest_start_session')
     else:
         messages.success(request, f'Session ended. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}. No refund for unused time.')
     return redirect('guest_dashboard')
@@ -1245,6 +1246,7 @@ def guest_session_receipt_pdf_view(request, session_id):
             'Payment is non-refundable. Unused time is not carried over.',
             f'Session status: {session.get_status_display()}',
         ],
+        download=request.GET.get('download') == '1',
     )
 
 
@@ -1921,6 +1923,7 @@ def public_registrations_view(request):
     rejected_count = OLMSUser.objects.filter(role='member', registration_status='rejected').count()
     approved_count = OLMSUser.objects.filter(role='member', registration_status='approved').count()
 
+    mark_badge_viewed(request.user, 'pending_registrations')
     return render(request, 'accounts/public_registrations.html', {
         'registrations': qs,
         'pending_count': pending_count,
@@ -2099,6 +2102,8 @@ def user_list_view(request):
     if role_filter:
         users = users.filter(role=role_filter)
 
+    if status == 'locked':
+        mark_badge_viewed(request.user, 'locked_users')
     paginator = Paginator(users, 25)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
@@ -2765,6 +2770,7 @@ def suspicious_activity_view(request):
 
     all_blocked_ips = BlockedIP.objects.select_related('blocked_by').order_by('-blocked_at')[:50]
 
+    mark_badge_viewed(request.user, 'suspicious_ips')
     return render(request, 'accounts/suspicious_activity.html', {
         'failed_logins': enriched_logins,
         'suspicious_ips': suspicious_ips,
@@ -2800,6 +2806,7 @@ def suspended_members_view(request):
         message__icontains='password reset'
     ).order_by('-created_at')[:10]
 
+    mark_badge_viewed(request.user, 'suspicious_users')
     return render(request, 'accounts/suspended_members.html', {
         'suspended': suspended,
         'security_alerts': security_alerts,
@@ -2861,6 +2868,7 @@ def security_alerts_view(request):
         .distinct()
         .order_by('message_type')
     )
+    mark_badge_viewed(request.user, 'security_alerts')
     return render(request, 'accounts/security_alerts.html', {
         'alerts': alerts_qs,
         'alert_types': alert_types,

@@ -45,6 +45,9 @@
             <a href="{% url 'softcopy_receipt_pdf' prepaid_tx_id %}" target="_blank" class="btn btn-outline-primary btn-lg">
               <i class="bi bi-receipt me-2"></i>Print Receipt
             </a>
+            <a href="{% url 'softcopy_receipt_pdf' prepaid_tx_id %}?download=1" class="btn btn-outline-success btn-lg">
+              <i class="bi bi-download me-2"></i>Download Receipt
+            </a>
           </div>
 
           <div class="d-flex gap-2 justify-content-center">

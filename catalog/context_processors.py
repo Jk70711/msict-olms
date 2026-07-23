@@ -1,6 +1,13 @@
+def _badge_last_viewed(user, badge_key):
+    """Return last_viewed_at for a badge, or None if never viewed."""
+    from accounts.utils import get_badge_last_viewed
+    return get_badge_last_viewed(user, badge_key)
+
+
 def security_badges(request):
-    """Pass accurate counts for sidebar badges (available on every page).
-    Each count matches the actual query used by the corresponding list view."""
+    """Pass unseen counts for sidebar badges (available on every page).
+    Each count shows only items created AFTER the user's last visit to that page.
+    Visiting the page resets the count to 0 via mark_badge_viewed()."""
     security_alerts_count = 0
     suspicious_users_count = 0
     locked_accounts_count = 0
@@ -26,29 +33,37 @@ def security_badges(request):
             # ── Admin-specific counts (match actual page queries) ──
             if request.user.role == 'admin':
                 # Security Alerts: match security_alerts_view (ALL is_security_alert=True)
-                security_alerts_count = Notification.objects.filter(
-                    is_security_alert=True
-                ).count()
+                sa_last = _badge_last_viewed(request.user, 'security_alerts')
+                sa_qs = Notification.objects.filter(is_security_alert=True)
+                if sa_last:
+                    sa_qs = sa_qs.filter(created_at__gt=sa_last)
+                security_alerts_count = sa_qs.count()
 
                 # Suspicious/Suspended Members: match suspended_members_view
                 # (failed_attempts >= 3, role='member')
-                suspicious_users_count = OLMSUser.objects.filter(
-                    failed_attempts__gte=3, role='member'
-                ).count()
+                su_last = _badge_last_viewed(request.user, 'suspicious_users')
+                su_qs = OLMSUser.objects.filter(failed_attempts__gte=3, role='member')
+                if su_last:
+                    su_qs = su_qs.filter(created_at__gt=su_last)
+                suspicious_users_count = su_qs.count()
 
                 # Locked Accounts: match user_list?status=locked
                 # (non-admin, inactive OR pending registration)
-                locked_accounts_count = OLMSUser.objects.exclude(
-                    role='admin'
-                ).filter(
+                la_last = _badge_last_viewed(request.user, 'locked_users')
+                la_qs = OLMSUser.objects.exclude(role='admin').filter(
                     Q(is_active=False) | Q(registration_status='pending')
-                ).distinct().count()
+                ).distinct()
+                if la_last:
+                    la_qs = la_qs.filter(created_at__gt=la_last)
+                locked_accounts_count = la_qs.count()
 
                 # Suspicious IPs: last 1h with >=5 failed attempts (match suspicious_activity_view)
                 window_1h = timezone.now() - timedelta(hours=1)
-                suspicious_ips_count = LoginAttempt.objects.filter(
-                    status='failed', timestamp__gte=window_1h
-                ).values('ip_address').annotate(
+                si_last = _badge_last_viewed(request.user, 'suspicious_ips')
+                si_qs = LoginAttempt.objects.filter(status='failed', timestamp__gte=window_1h)
+                if si_last and si_last > window_1h:
+                    si_qs = si_qs.filter(timestamp__gt=si_last)
+                suspicious_ips_count = si_qs.values('ip_address').annotate(
                     total=Sum('attempt_count')
                 ).filter(total__gte=5).count()
 
@@ -60,23 +75,28 @@ def security_badges(request):
 
                 # Pending Registrations: match public_registrations_view
                 # (role='member', registration_status='pending')
-                pending_registrations_count = OLMSUser.objects.filter(
-                    role='member', registration_status='pending'
-                ).count()
+                pr_last = _badge_last_viewed(request.user, 'pending_registrations')
+                pr_qs = OLMSUser.objects.filter(role='member', registration_status='pending')
+                if pr_last:
+                    pr_qs = pr_qs.filter(created_at__gt=pr_last)
+                pending_registrations_count = pr_qs.count()
 
             # ── Librarian/Admin counts ──
             if request.user.role in ('admin', 'librarian'):
                 # Pending Borrow Requests: match all_requests_view with status='pending'
-                pending_requests_count = BorrowRequest.objects.filter(
-                    status='pending'
-                ).count()
+                br_last = _badge_last_viewed(request.user, 'pending_requests')
+                br_qs = BorrowRequest.objects.filter(status='pending')
+                if br_last:
+                    br_qs = br_qs.filter(request_date__gt=br_last)
+                pending_requests_count = br_qs.count()
 
             # ── Member-specific counts (match actual page queries) ──
             if request.user.role == 'member':
                 # Active Borrowings: match member_msict_borrowings_view
                 # (borrowed/overdue/lost, exclude expired special softcopies)
                 now = timezone.now()
-                member_active_borrowings = BorrowingTransaction.objects.filter(
+                mb_last = _badge_last_viewed(request.user, 'member_active_borrowings')
+                mb_qs = BorrowingTransaction.objects.filter(
                     user=request.user,
                     status__in=['borrowed', 'overdue', 'lost'],
                     copy__book__isnull=False,
@@ -84,12 +104,17 @@ def security_badges(request):
                     copy__copy_type='softcopy',
                     copy__access_type='borrow',
                     due_date__lt=now,
-                ).count()
+                )
+                if mb_last:
+                    mb_qs = mb_qs.filter(borrow_date__gt=mb_last)
+                member_active_borrowings = mb_qs.count()
 
                 # Reservations: match my_reservations_view
-                member_reservations = Reservation.objects.filter(
-                    user=request.user, status__in=['pending', 'notified']
-                ).count()
+                mr_last = _badge_last_viewed(request.user, 'member_reservations')
+                mr_qs = Reservation.objects.filter(user=request.user, status__in=['pending', 'notified'])
+                if mr_last:
+                    mr_qs = mr_qs.filter(created_at__gt=mr_last)
+                member_reservations = mr_qs.count()
 
                 # Unpaid Fines: match my_fines_view (exclude loss fines)
                 loss_fine_ids = set(
@@ -97,9 +122,11 @@ def security_badges(request):
                         user=request.user, loss_fine__isnull=False
                     ).values_list('loss_fine_id', flat=True)
                 )
-                member_unpaid_fines = Fine.objects.filter(
-                    user=request.user, paid=False
-                ).exclude(id__in=loss_fine_ids).count()
+                mf_last = _badge_last_viewed(request.user, 'member_unpaid_fines')
+                mf_qs = Fine.objects.filter(user=request.user, paid=False).exclude(id__in=loss_fine_ids)
+                if mf_last:
+                    mf_qs = mf_qs.filter(created_at__gt=mf_last)
+                member_unpaid_fines = mf_qs.count()
     except Exception:
         pass
     return {
@@ -134,14 +161,18 @@ def overdue_counter(request):
             has_no_fine = ~Exists(
                 Fine.objects.filter(transaction=OuterRef('pk'))
             )
-            count = BorrowingTransaction.objects.filter(
+            od_last = _badge_last_viewed(request.user, 'overdue')
+            od_qs = BorrowingTransaction.objects.filter(
                 status='overdue'
             ).exclude(
                 copy__copy_type='softcopy',
                 copy__access_type='borrow'
             ).filter(
                 has_unpaid_fine | has_no_fine
-            ).count()
+            )
+            if od_last:
+                od_qs = od_qs.filter(due_date__gt=od_last)
+            count = od_qs.count()
     except Exception:
         pass
     return {'overdue_count': count}

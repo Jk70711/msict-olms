@@ -119,11 +119,17 @@
                 <a href="{% url 'fine_receipt_pdf' fine.id %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
                   <i class="bi bi-receipt"></i>
                 </a>
+                <a href="{% url 'fine_receipt_pdf' fine.id %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
+                  <i class="bi bi-download"></i>
+                </a>
               </div>
               {% elif fine.paid %}
               <div class="d-flex align-items-center gap-1">
                 <a href="{% url 'fine_receipt_pdf' fine.id %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
                   <i class="bi bi-receipt"></i>
+                </a>
+                <a href="{% url 'fine_receipt_pdf' fine.id %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
+                  <i class="bi bi-download"></i>
                 </a>
                 <small class="text-muted">
                   <span class="fw-semibold">{{ fine.get_payment_method_display|default:fine.payment_method }}</span>

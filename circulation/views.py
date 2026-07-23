@@ -18,7 +18,7 @@ from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
 from accounts.views import librarian_required
-from accounts.utils import log_audit, send_sms, send_email_notification, create_notification, notify_user
+from accounts.utils import log_audit, send_sms, send_email_notification, create_notification, notify_user, mark_badge_viewed
 from accounts.models import OLMSUser
 
 
@@ -1822,6 +1822,7 @@ def my_reservations_view(request):
         user=user, status__in=['fulfilled', 'cancelled', 'expired']
     ).select_related('book').order_by('-created_at')[:30]
 
+    mark_badge_viewed(request.user, 'member_reservations')
     return render(request, 'circulation/my_reservations.html', {
         'annotated': annotated,
         'history': history,
@@ -1844,6 +1845,7 @@ def all_requests_view(request):
     paginator = Paginator(requests_qs, 25)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
+    mark_badge_viewed(request.user, 'pending_requests')
     return render(request, 'circulation/all_requests.html', {
         'requests': page_obj,
         'page_obj': page_obj,
@@ -1875,6 +1877,7 @@ def overdue_list_view(request):
         .select_related('user', 'copy__book')
         .order_by('due_date')
     )
+    mark_badge_viewed(request.user, 'overdue')
     return render(request, 'circulation/overdue_list.html', {'overdue': overdue})
 
 
@@ -2102,6 +2105,7 @@ def my_fines_view(request):
     
     unpaid_fines = [f for f in overdue_fines if not f.paid]
     total_unpaid = sum(f.remaining_balance for f in unpaid_fines)
+    mark_badge_viewed(request.user, 'member_unpaid_fines')
     return render(request, 'circulation/my_fines.html', {
         'fines': overdue_fines,
         'unpaid_fines': unpaid_fines,
@@ -3460,6 +3464,7 @@ def member_msict_borrowings_view(request):
         'unpaid_fines': unpaid_fines,
         'tx_fines': tx_fines,
     }
+    mark_badge_viewed(request.user, 'member_active_borrowings')
     return render(request, 'circulation/member_msict_borrowings.html', context)
 
 
@@ -4803,6 +4808,7 @@ def fine_receipt_pdf_view(request, fine_id):
         amount_label='Amount Paid',
         amount_value=f"TZS {fine.amount_paid:,.0f}",
         filename=f'fine_receipt_{fine.pk}',
+        download=request.GET.get('download') == '1',
     )
 
 
@@ -4856,6 +4862,7 @@ def softcopy_receipt_pdf_view(request, tx_id):
             'Digital access is valid for 7 days from issue date.',
             'Sharing or misuse of digital content may lead to disciplinary action.',
         ],
+        download=request.GET.get('download') == '1',
     )
 
 
@@ -4911,6 +4918,7 @@ def loss_fine_receipt_pdf_view(request, report_id):
             'This receipt covers the loss fine for the reported book.',
             'Loss report status: ' + report.get_status_display(),
         ],
+        download=request.GET.get('download') == '1',
     )
 
 

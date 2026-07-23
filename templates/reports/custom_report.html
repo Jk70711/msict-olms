@@ -451,6 +451,7 @@ function goToPage(p) {
   let pg = document.getElementById('pageField');
   if (!pg) { pg = document.createElement('input'); pg.type='hidden'; pg.name='page'; pg.id='pageField'; form.appendChild(pg); }
   pg.value = p;
+  if (window.showGlobalLoader) window.showGlobalLoader();
   form.submit();
 }
 

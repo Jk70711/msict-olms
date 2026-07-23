@@ -152,11 +152,17 @@
               <a href="{% url 'fine_receipt_pdf' fine.pk %}" class="btn btn-sm btn-outline-secondary ms-1" title="Print Receipt" target="_blank">
                 <i class="bi bi-receipt"></i>
               </a>
+              <a href="{% url 'fine_receipt_pdf' fine.pk %}?download=1" class="btn btn-sm btn-outline-primary ms-1" title="Download Receipt">
+                <i class="bi bi-download"></i>
+              </a>
               {% endif %}
               {% else %}
               <span class="text-success"><i class="bi bi-check-circle-fill"></i> Done</span>
               <a href="{% url 'fine_receipt_pdf' fine.pk %}" class="btn btn-sm btn-outline-primary ms-1" title="Print Receipt" target="_blank">
                 <i class="bi bi-printer"></i>
+              </a>
+              <a href="{% url 'fine_receipt_pdf' fine.pk %}?download=1" class="btn btn-sm btn-outline-success ms-1" title="Download Receipt">
+                <i class="bi bi-download"></i>
               </a>
               {% endif %}
             </td>

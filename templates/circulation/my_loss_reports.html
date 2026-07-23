@@ -128,6 +128,9 @@
                 <a href="{% url 'loss_fine_receipt_pdf' report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
                   <i class="bi bi-receipt"></i>
                 </a>
+                <a href="{% url 'loss_fine_receipt_pdf' report.pk %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
+                  <i class="bi bi-download"></i>
+                </a>
                 <small class="text-muted">
                   <span class="fw-semibold">{{ report.loss_fine.get_payment_method_display|default:report.loss_fine.payment_method }}</span>
                   {% if report.loss_fine.receipt_no %}<br><code>{{ report.loss_fine.receipt_no|truncatechars:30 }}</code>{% endif %}

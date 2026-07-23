@@ -25,6 +25,7 @@ def generate_receipt_pdf(
     amount_value=None,
     filename='receipt',
     extra_notes=None,
+    download=False,
 ):
     """
     Generate a branded PDF receipt and return an HttpResponse.
@@ -282,7 +283,8 @@ def generate_receipt_pdf(
     doc.build(elems, canvasmaker=WatermarkCanvas)
     buf.seek(0)
     resp = HttpResponse(buf, content_type='application/pdf')
-    resp['Content-Disposition'] = f'inline; filename="{filename}.pdf"'
+    disposition = 'attachment' if download else 'inline'
+    resp['Content-Disposition'] = f'{disposition}; filename="{filename}.pdf"'
     return resp
 
 

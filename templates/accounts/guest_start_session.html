@@ -164,9 +164,40 @@
     .alert-danger  { background: #fef2f2; color: #991b1b; border-left: 4px solid #ef4444; }
     .alert-warning { background: #fffbeb; color: #92400e; border-left: 4px solid #f59e0b; }
     .alert-info    { background: #eff6ff; color: #1e40af; border-left: 4px solid #3b82f6; }
+
+    @keyframes loaderSpin { to { transform: rotate(360deg); } }
+    #globalLoader {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(15,23,42,0.45);
+      z-index: 99999;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      backdrop-filter: blur(2px);
+    }
+    #globalLoader .spinner {
+      width: 52px; height: 52px;
+      border: 4px solid rgba(255,255,255,0.15);
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: loaderSpin .7s linear infinite;
+    }
+    #globalLoader .label {
+      color: #fff; font-size: .85rem; font-weight: 500;
+      letter-spacing: .03em; opacity: .9;
+    }
   </style>
 </head>
 <body>
+
+<!-- Global Loading Spinner -->
+<div id="globalLoader">
+  <div class="spinner"></div>
+  <div class="label">Loading…</div>
+</div>
 
 <a href="{% url 'logout' %}" class="logout-link">
   <i class="bi bi-box-arrow-right"></i> Logout
@@ -436,6 +467,52 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 });
+
+/* ── Global Loader ── */
+(function() {
+  var loader = document.getElementById('globalLoader');
+  if (!loader) return;
+  var safetyTimer = null;
+
+  function show() {
+    loader.style.display = 'flex';
+    clearTimeout(safetyTimer);
+    safetyTimer = setTimeout(hide, 20000);
+  }
+
+  function hide() {
+    loader.style.display = 'none';
+    clearTimeout(safetyTimer);
+  }
+
+  window.showGlobalLoader = show;
+  window.hideGlobalLoader = hide;
+
+  document.addEventListener('submit', function(e) {
+    if (e.target.dataset.noLoader) return;
+    show();
+  });
+
+  document.addEventListener('click', function(e) {
+    var a = e.target.closest('a');
+    if (!a) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (a.dataset.noLoader) return;
+    if (!a.href) return;
+    var href = a.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript') || href.startsWith('mailto')) return;
+    if (a.target === '_blank') return;
+    try {
+      var url = new URL(a.href, window.location.href);
+      if (url.hostname !== window.location.hostname) return;
+    } catch(err) { return; }
+    show();
+  });
+
+  window.addEventListener('pageshow', hide);
+  window.addEventListener('load', hide);
+  window.addEventListener('error', hide);
+})();
 </script>
 </body>
 </html>

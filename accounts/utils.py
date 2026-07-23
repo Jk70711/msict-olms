@@ -342,3 +342,21 @@ def add_password_to_history(user, password_hash):
     
     if old_entries:
         old_entries.delete()
+
+
+def mark_badge_viewed(user, badge_key):
+    """Record that user has viewed a badge page — resets the sidebar count to 0."""
+    from accounts.models import BadgeViewed
+    BadgeViewed.objects.update_or_create(
+        user=user, badge_key=badge_key,
+        defaults={'last_viewed_at': timezone.now()},
+    )
+
+
+def get_badge_last_viewed(user, badge_key):
+    """Return the last_viewed_at timestamp for a badge, or None if never viewed."""
+    from accounts.models import BadgeViewed
+    try:
+        return BadgeViewed.objects.get(user=user, badge_key=badge_key).last_viewed_at
+    except BadgeViewed.DoesNotExist:
+        return None

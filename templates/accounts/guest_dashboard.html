@@ -37,11 +37,14 @@
             <div class="d-flex gap-2 mb-2">
               <form method="post" action="{% url 'end_guest_session' %}" class="flex-grow-1">
                 {% csrf_token %}
-                <button class="btn btn-danger w-100">Sign Out Session</button>
+                <button class="btn btn-danger w-100">Terminate Session</button>
               </form>
               {% if active_session.payment_status == 'paid' %}
               <a href="{% url 'guest_session_receipt' active_session.pk %}" target="_blank" class="btn btn-outline-secondary" title="Print Receipt">
                 <i class="bi bi-receipt"></i> Receipt
+              </a>
+              <a href="{% url 'guest_session_receipt' active_session.pk %}?download=1" class="btn btn-outline-primary" title="Download Receipt">
+                <i class="bi bi-download"></i>
               </a>
               {% endif %}
             </div>
@@ -131,6 +134,9 @@
                 <a href="{% url 'guest_session_receipt' s.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
                   <i class="bi bi-receipt"></i>
                 </a>
+                <a href="{% url 'guest_session_receipt' s.pk %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
+                  <i class="bi bi-download"></i>
+                </a>
                 {% endif %}
                 {% if s.status != 'active' and s.status != 'renewed' %}
                 <form method="post" action="{% url 'guest_session_delete' s.pk %}" class="d-inline" onsubmit="return confirm('Delete this session record? This cannot be undone.');">
@@ -181,8 +187,8 @@
       var warn = document.getElementById('countdown-warning');
       warn.style.display = 'block';
       warn.className = 'small mt-1 text-danger fw-bold';
-      warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Session expired. Please sign out.';
-      // Auto-submit sign out
+      warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Session expired. Redirecting to payment…';
+      // Auto-submit sign out (server will redirect to payment page)
       clearInterval(timerId);
       var form = document.querySelector('form[action*="end_guest_session"]');
       if (form) {
@@ -191,6 +197,7 @@
         btn.name = 'auto_expire';
         btn.value = '1';
         form.appendChild(btn);
+        if (window.showGlobalLoader) window.showGlobalLoader();
         form.submit();
       }
       return;

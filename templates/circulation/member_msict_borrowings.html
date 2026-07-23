@@ -173,6 +173,9 @@
                   <a href="{% url 'softcopy_receipt_pdf' tx.copy.prepaid_transactions.first.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1" title="Print Receipt">
                     <i class="bi bi-receipt"></i> Receipt
                   </a>
+                  <a href="{% url 'softcopy_receipt_pdf' tx.copy.prepaid_transactions.first.pk %}?download=1" class="btn btn-sm btn-outline-primary mt-1" title="Download Receipt">
+                    <i class="bi bi-download"></i>
+                  </a>
                   {% endif %}
                   {% if tx.is_renewable %}
                   <form method="post" action="{% url 'renew_transaction' tx.pk %}" class="d-inline" onsubmit="return confirm('Renew this borrowing?')">
@@ -219,6 +222,9 @@
                   {% elif tx.loss_report.loss_fine and tx.loss_report.loss_fine.paid %}
                   <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1" title="Print Receipt">
                     <i class="bi bi-receipt"></i> Receipt
+                  </a>
+                  <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}?download=1" class="btn btn-sm btn-outline-primary mt-1" title="Download Receipt">
+                    <i class="bi bi-download"></i>
                   </a>
                   {% endif %}
                   {% endif %}
@@ -518,6 +524,9 @@
                 {% if fine.amount_paid > 0 %}
                 <a href="{% url 'fine_receipt_pdf' fine.id %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
                   <i class="bi bi-receipt"></i>
+                </a>
+                <a href="{% url 'fine_receipt_pdf' fine.id %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
+                  <i class="bi bi-download"></i>
                 </a>
                 {% endif %}
               </td>

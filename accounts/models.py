@@ -558,3 +558,16 @@ class BulkMessageRecipient(models.Model):
 
     def __str__(self):
         return f"Recipient {self.user.username} — {self.status} via {self.delivered_via}"
+
+
+class BadgeViewed(models.Model):
+    user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='badge_views')
+    badge_key = models.CharField(max_length=50)
+    last_viewed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = 'badge_views'
+        unique_together = ('user', 'badge_key')
+
+    def __str__(self):
+        return f"{self.user.username} — {self.badge_key} @ {self.last_viewed_at:%Y-%m-%d %H:%M}"
