@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}{{ book.title }}{% endblock %}
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
@@ -29,7 +30,7 @@
       <div class="small mt-1">
         <b>Loss Fine:</b>
         {% if book.lost_fine %}
-          <span class="text-danger fw-semibold">TZS {{ book.lost_fine|floatformat:0 }}</span>
+          <span class="text-danger fw-semibold">TZS {{ book.lost_fine|floatformat:0|intcomma }}</span>
         {% else %}
           <span class="text-muted">Not set</span>
         {% endif %}
@@ -38,7 +39,7 @@
         <b>Borrowing Fee:</b>
         {% if book.has_special_softcopy %}
           {% if book.special_softcopy_fee > 0 %}
-            <span class="text-warning fw-semibold">TZS {{ book.special_softcopy_fee|floatformat:0 }}</span>
+            <span class="text-warning fw-semibold">TZS {{ book.special_softcopy_fee|floatformat:0|intcomma }}</span>
           {% else %}
             <span class="text-warning">Fee not set</span>
           {% endif %}
@@ -126,7 +127,7 @@
               <div class="btn-group">
                 <a href="{% url 'copy_edit' copy.pk %}" class="btn btn-sm btn-outline-primary py-0" title="Edit"><i class="bi bi-pencil"></i></a>
                 {% if copy.copy_type == 'softcopy' and copy.file_path %}
-                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview PDF"><i class="bi bi-eye"></i></a>
+                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview eBook"><i class="bi bi-eye"></i></a>
                 {% endif %}
                 {% if copy.status != 'lost' and copy.copy_type == 'hardcopy' %}
                 <form method="post" action="{% url 'copy_mark_lost' copy.pk %}" class="d-inline" onsubmit="return confirm('Mark copy {{ copy.display_id }} as lost?')">
@@ -137,7 +138,7 @@
               </div>
               {% else %}
                 {% if copy.copy_type == 'softcopy' and copy.file_path and user.is_authenticated %}
-                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview PDF"><i class="bi bi-eye"></i></a>
+                <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-sm btn-outline-success py-0" target="_blank" title="Preview eBook"><i class="bi bi-eye"></i></a>
                 {% endif %}
               {% endif %}
             </td>
@@ -216,8 +217,8 @@
             <div class="form-text">Book category: <strong>{{ book.category.name|default:"None" }}</strong></div>
           </div>
           <div id="fileGroup" style="display:none" class="mb-3">
-            <label class="form-label">Upload PDF File</label>
-            <input type="file" name="file_path" class="form-control" accept=".pdf">
+            <label class="form-label">Upload eBook File</label>
+            <input type="file" name="file_path" class="form-control" accept=".pdf,.epub,.doc,.docx,.txt,.rtf,.mobi,.azw,.azw3,.fb2">
           </div>
         </div>
         <div class="modal-footer">

@@ -11,4 +11,5 @@ urlpatterns = [
     path('history/',  views.history,        name='assistant_history'),
     path('send/',     views.send,           name='assistant_send'),
     path('reset/',    views.reset,          name='assistant_reset'),
+    path('clear/',    views.clear,          name='assistant_clear'),
 ]

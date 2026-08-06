@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Circulation Report{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -9,6 +10,8 @@
     </button>
     <a href="{% url 'export_circulation_pdf' %}?period={{ period }}"
        class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
+    <a href="{% url 'export_circulation_xlsx' %}?period={{ period }}"
+       class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
   </div>
 </div>
 <div class="card p-3 mb-3">
@@ -103,10 +106,10 @@
   <div class="col-md-6">
     <div class="card p-3 text-center stat-card border-0 shadow-sm">
       <div class="d-flex flex-column align-items-center">
-        <div class="fs-4 fw-bold text-danger">TZS {{ total_loss_fine|floatformat:0 }}</div>
+        <div class="fs-4 fw-bold text-danger">TZS {{ total_loss_fine|floatformat:0|intcomma }}</div>
         <div class="small fw-semibold">Loss Fines Total</div>
-        <div class="small text-success">Paid: TZS {{ loss_fine_paid|floatformat:0 }}</div>
-        <div class="small text-danger">Unpaid: TZS {{ loss_fine_unpaid|floatformat:0 }}</div>
+        <div class="small text-success">Paid: TZS {{ loss_fine_paid|floatformat:0|intcomma }}</div>
+        <div class="small text-danger">Unpaid: TZS {{ loss_fine_unpaid|floatformat:0|intcomma }}</div>
       </div>
     </div>
   </div>

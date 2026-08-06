@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}My MSICT Borrowings{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -129,8 +130,6 @@
                     <span class="badge bg-success">Borrowed</span>
                   {% elif tx.status == 'overdue' %}
                     <span class="badge bg-danger">Overdue</span>
-                  {% elif tx.status == 'lost' %}
-                    <span class="badge bg-warning">Lost</span>
                   {% else %}
                     <span class="badge bg-secondary">{{ tx.status|title }}</span>
                   {% endif %}
@@ -145,8 +144,6 @@
                     {% else %}
                     <span class="badge bg-info text-dark"><i class="bi bi-clock"></i> {{ tx.days_remaining }} day{{ tx.days_remaining|pluralize }} left</span>
                     {% endif %}
-                  {% elif tx.status == 'lost' %}
-                  <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Book Lost</span>
                   {% endif %}
                 {% endif %}
               </div>
@@ -209,25 +206,9 @@
                   <span class="text-muted small">{% if tx.renewals_left == 0 %}Max renewals reached{% else %}Not eligible{% endif %}</span>
                   {% endif %}
                   <span class="text-muted small d-block mt-1"><i class="bi bi-info-circle"></i> Return at circulation desk</span>
-                  {% if not tx.loss_report_exists %}
                   <a href="{% url 'report_loss' tx.pk %}" class="btn btn-sm btn-outline-danger mt-1">
                     <i class="bi bi-exclamation-triangle"></i> Report Lost
                   </a>
-                  {% else %}
-                  <span class="btn btn-sm btn-outline-secondary mt-1 disabled"><i class="bi bi-clock"></i> Loss Reported</span>
-                  {% if tx.loss_report.loss_fine and not tx.loss_report.loss_fine.paid %}
-                  <a href="{% url 'pay_loss_fine' tx.loss_report.pk %}" class="btn btn-sm btn-success mt-1">
-                    <i class="bi bi-credit-card"></i> Pay Fine
-                  </a>
-                  {% elif tx.loss_report.loss_fine and tx.loss_report.loss_fine.paid %}
-                  <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary mt-1" title="Print Receipt">
-                    <i class="bi bi-receipt"></i> Receipt
-                  </a>
-                  <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}?download=1" class="btn btn-sm btn-outline-primary mt-1" title="Download Receipt">
-                    <i class="bi bi-download"></i>
-                  </a>
-                  {% endif %}
-                  {% endif %}
                 {% endif %}
               </div>
             </div>
@@ -239,6 +220,66 @@
       </div>
     </div>
   </div>
+
+  {% if lost_borrows %}
+  <div class="col-md-6">
+    <div class="card h-100 border-danger">
+      <div class="card-header fw-bold text-danger d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-exclamation-triangle"></i> Lost Books</span>
+        <span class="badge bg-danger">{{ lost_borrows.count }}</span>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for tx in lost_borrows %}
+        <div class="list-group-item">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              {% if tx.copy.book %}
+              <a href="{% url 'book_detail_public' tx.copy.book.pk %}" class="fw-semibold text-decoration-none">{{ tx.copy.book.title|truncatechars:40 }}</a>
+              {% else %}
+              <span class="fw-semibold text-muted">Book not available</span>
+              {% endif %}
+              <div class="small text-muted">Acc: {{ tx.copy.accession_no }}</div>
+              <div class="small mt-1 d-flex flex-wrap gap-1">
+                <span class="badge bg-warning"><i class="bi bi-exclamation-triangle"></i> Book Lost</span>
+                {% if tx.loss_report %}
+                  {% if tx.loss_report.status == 'pending' %}
+                    <span class="badge bg-info text-dark">Loss Report Pending</span>
+                  {% elif tx.loss_report.status == 'confirmed' %}
+                    <span class="badge bg-danger">Loss Confirmed – Awaiting Payment</span>
+                  {% elif tx.loss_report.status == 'resolved' %}
+                    <span class="badge bg-success">Loss Resolved – Fine Paid</span>
+                  {% elif tx.loss_report.status == 'dismissed' %}
+                    <span class="badge bg-secondary">Loss Report Dismissed</span>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+            <div class="text-end small">
+              <div class="text-muted">Due: <strong>{{ tx.due_date|date:"M d, Y" }}</strong></div>
+              <div class="mt-2 d-flex flex-column gap-1 align-items-end">
+                {% if tx.loss_report and tx.loss_report.loss_fine and not tx.loss_report.loss_fine.paid %}
+                <a href="{% url 'pay_loss_fine' tx.loss_report.pk %}" class="btn btn-sm btn-success">
+                  <i class="bi bi-credit-card"></i> Pay Loss Fine
+                </a>
+                {% elif tx.loss_report and tx.loss_report.loss_fine and tx.loss_report.loss_fine.paid %}
+                <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
+                  <i class="bi bi-receipt"></i> Receipt
+                </a>
+                <a href="{% url 'loss_fine_receipt_pdf' tx.loss_report.pk %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
+                  <i class="bi bi-download"></i>
+                </a>
+                {% else %}
+                <span class="text-muted small"><i class="bi bi-clock"></i> Awaiting librarian review</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   {% if expired_softcopies %}
   <div class="col-md-6">
@@ -514,7 +555,7 @@
             <tr>
               <td>{{ fine.transaction.copy.book.title|truncatechars:40 }}</td>
               <td class="fw-bold text-danger">TSh {{ fine.amount }}</td>
-              <td class="small text-success">TSh {{ fine.amount_paid|floatformat:0 }}</td>
+              <td class="small text-success">TSh {{ fine.amount_paid|floatformat:0|intcomma }}</td>
               <td><span class="badge bg-warning text-dark">{{ fine.reason|default:"Overdue" }}</span></td>
               <td class="small">{{ fine.created_at|date:"M d, Y" }}</td>
               <td>

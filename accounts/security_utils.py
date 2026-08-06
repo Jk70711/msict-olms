@@ -181,6 +181,8 @@ DEFAULT_MAGIC_SIGNATURES = {
     '.xlsx': [b'PK\x03\x04'],
     '.pptx': [b'PK\x03\x04'],
     '.zip':  [b'PK\x03\x04'],
+    '.epub': [b'PK\x03\x04'],  # EPUB is a ZIP archive
+    '.doc':  [b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'],  # OLE2 Compound Document
 }
 
 

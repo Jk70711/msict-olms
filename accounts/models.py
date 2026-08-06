@@ -365,6 +365,7 @@ class GuestSession(models.Model):
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     device_info = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    expiry_notification_sent = models.BooleanField(default=False, help_text='True if 15-min pre-expiry SMS/email was sent')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -396,7 +397,6 @@ class VirtualCard(models.Model):
         """Return only the unique number part (e.g., 000001) instead of full card number."""
         if not self.card_no:
             return 'N/A'
-        import re
         m = re.search(r'(\d+)$', self.card_no)
         return m.group(1) if m else self.card_no
 
@@ -408,7 +408,6 @@ class VirtualCard(models.Model):
         Example: MSICT-LIB-26-000009
         Scans both VirtualCard and OLMSUser.card_no to find the true last number.
         """
-        import re
         from django.utils import timezone as _tz
         from accounts.models import OLMSUser
         yy = _tz.now().strftime('%y')          # 2-digit year e.g. '26'

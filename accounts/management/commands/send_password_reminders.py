@@ -17,7 +17,14 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
-        days = getattr(settings, 'PASSWORD_CHANGE_REMINDER_DAYS', 30)
+        try:
+            from accounts.models import SystemPreference
+            days = int(
+                SystemPreference.objects.filter(key='PASSWORD_EXPIRY_DAYS')
+                .values_list('value', flat=True).first() or 90
+            )
+        except Exception:
+            days = getattr(settings, 'PASSWORD_CHANGE_REMINDER_DAYS', 90)
         cutoff = timezone.now() - timezone.timedelta(days=days)
 
         users = OLMSUser.objects.filter(

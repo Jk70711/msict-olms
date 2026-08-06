@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}My Fines{% endblock %}
 {% block content %}
 <h4 class="fw-bold mb-3"><i class="bi bi-cash-coin"></i> My Fines</h4>
@@ -16,7 +17,7 @@
           <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#ffc107 0% {{ unpaid_pct|default:0 }}%, rgba(255, 193, 7, 0.1) {{ unpaid_pct|default:0 }}% 100%); box-shadow: 0 5px 14px rgba(255, 193, 7, 0.3);"></div>
           <div class="rounded-circle position-absolute" style="width: 100px; height: 75px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
           <div class="text-center position-relative z-1">
-            <div class="fs-6 fw-bold" style="color: #c8990dae; font-size: 0.15rem;">TZS {{ total_unpaid|floatformat:2 }}</div>
+            <div class="fs-6 fw-bold" style="color: #c8990dae; font-size: 0.15rem;">TZS {{ total_unpaid|floatformat:2|intcomma }}</div>
           </div>
         </div>
         <div class="text-center mt-2">
@@ -67,7 +68,7 @@
 {% if unpaid_fines %}
 <div class="alert alert-warning border-warning mb-3">
   <h6 class="fw-bold mb-2"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Fines Detected</h6>
-  <p class="mb-2">You have unpaid fines totaling <strong>TZS {{ total_unpaid|floatformat:0 }}</strong>.</p>
+  <p class="mb-2">You have unpaid fines totaling <strong>TZS {{ total_unpaid|floatformat:0|intcomma }}</strong>.</p>
   <p class="mb-0">Click the <strong>Pay</strong> button next to each fine to proceed with payment.</p>
 </div>
 {% endif %}
@@ -95,9 +96,9 @@
             <td>{{ forloop.counter }}</td>
             <td><small>{{ fine.reason }}</small></td>
             <td><small>{% if fine.transaction %}{{ fine.transaction.copy.book.title }}{% else %}—{% endif %}</small></td>
-            <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:0 }}</td>
-            <td><small class="text-success fw-semibold">TZS {{ fine.amount_paid|floatformat:0 }}</small></td>
-            <td><small class="text-danger fw-semibold">TZS {{ fine.remaining_balance|floatformat:0 }}</small></td>
+            <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">TZS {{ fine.amount|floatformat:0|intcomma }}</td>
+            <td><small class="text-success fw-semibold">TZS {{ fine.amount_paid|floatformat:0|intcomma }}</small></td>
+            <td><small class="text-danger fw-semibold">TZS {{ fine.remaining_balance|floatformat:0|intcomma }}</small></td>
             <td>
               {% if fine.paid %}
                 <span class="badge bg-success">Paid</span>

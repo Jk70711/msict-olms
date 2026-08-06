@@ -4,7 +4,7 @@ from django.views.decorators.http import require_POST
 from django.contrib import messages
 import re
 from accounts.views import librarian_required
-from accounts.utils import log_audit, notify_user, create_notification
+from accounts.utils import log_audit, notify_user, create_notification, mark_badge_viewed
 from accounts.models import OLMSUser
 from .models import Vendor, Budget, Fund, PurchaseOrder, PurchaseOrderItem, Invoice, ILLRequest
 
@@ -129,6 +129,7 @@ def purchase_order_delete_item_view(request, item_id):
 @librarian_required
 def ill_request_list_view(request):
     requests_qs = ILLRequest.objects.select_related('user').order_by('-request_date')
+    mark_badge_viewed(request.user, 'pending_ill_requests')
     return render(request, 'acquisitions/ill_list.html', {'ill_requests': requests_qs})
 
 

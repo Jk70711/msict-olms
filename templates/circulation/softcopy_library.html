@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load dict_filters %}
+{% load humanize %}
 {% block title %}Softcopy Library{% endblock %}
 {% block content %}
 
@@ -15,7 +16,7 @@
   <div class="text-dark fw-semibold" style="font-size: 1.05rem; line-height: 1.5;">
     <strong class="text-danger">BORROWING BLOCKED:</strong> You have unpaid fines. 
     <span class="text-dark">Pay at the circulation desk before browsing new borrows.</span>
-    <div class="mt-1 small text-muted">You can still <strong>download free PDFs</strong> and <strong>read already borrowed</strong> soft copies.</div>
+    <div class="mt-1 small text-muted">You can still <strong>read or download free softcopies</strong> and <strong>read already borrowed</strong> soft copies.</div>
   </div>
 </div>
 {% else %}
@@ -27,7 +28,7 @@
     {% else %}
       <strong>Borrowing blocked:</strong> You have reached the maximum of 3 active borrows.
     {% endif %}
-    You can still <strong>download free PDFs</strong> and <strong>read already borrowed</strong> soft copies.
+    You can still <strong>read or download free softcopies</strong> and <strong>read already borrowed</strong> soft copies.
   </div>
 </div>
 {% endif %}
@@ -196,7 +197,7 @@
                   {% elif copy.pk in pending_copy_ids %}
                     <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Request Pending</span>
                   {% else %}
-                    <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special{% if copy.prepaid_fee > 0 %} · TZS {{ copy.prepaid_fee|floatformat:0 }}{% else %} · Fee not set{% endif %}</span>
+                    <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special{% if copy.prepaid_fee > 0 %} · TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}{% else %} · Fee not set{% endif %}</span>
                   {% endif %}
                 {% endif %}
               {% endfor %}
@@ -208,9 +209,14 @@
             {% for copy in book.copies.all %}
               {% if copy.copy_type == 'softcopy' %}
                 {% if copy.access_type == 'free' %}
-                  <a href="{% url 'free_softcopy_download' copy.pk %}" class="btn btn-sm btn-success w-100">
-                    <i class="bi bi-download"></i> Download Free PDF
-                  </a>
+                  <div class="btn-group btn-group-sm w-100">
+                    <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-success" target="_blank">
+                      <i class="bi bi-book-fill"></i> Read Free
+                    </a>
+                    <a href="{% url 'free_softcopy_download' copy.pk %}" class="btn btn-outline-success">
+                      <i class="bi bi-download"></i> Download Free
+                    </a>
+                  </div>
                 {% elif copy.access_type == 'borrow' %}
                   {% if copy.pk in active_borrow_copy_ids %}
                     <a href="{% url 'softcopy_access' active_borrow_tokens|get_item:copy.pk %}" class="btn btn-sm btn-primary w-100" target="_blank">
@@ -234,7 +240,7 @@
                     <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-sm btn-warning w-100">
                       <i class="bi bi-file-earmark-lock"></i> Borrow to Read
                       {% if copy.prepaid_fee > 0 %}
-                        <span class="badge bg-light text-dark ms-1">TZS {{ copy.prepaid_fee|floatformat:0 }}</span>
+                        <span class="badge bg-light text-dark ms-1">TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}</span>
                       {% else %}
                         <span class="badge bg-light text-dark ms-1">Fee not set</span>
                       {% endif %}

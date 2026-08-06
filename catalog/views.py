@@ -23,10 +23,41 @@ from .models import Category, Course, Book, BookCopy, ExternalLibrary, News, Inv
 # ──────────────────────────────────────────────────────────────
 ALLOWED_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
 ALLOWED_PDF_EXTS   = {'.pdf'}
+ALLOWED_EBOOK_EXTS = {'.pdf', '.epub', '.doc', '.docx', '.txt', '.rtf', '.mobi', '.azw', '.azw3', '.fb2'}
 ALLOWED_DOC_EXTS   = {'.pdf', '.docx', '.xlsx', '.pptx'}
 MAX_IMAGE_BYTES = 5 * 1024 * 1024     # 5  MB
 MAX_PDF_BYTES   = 50 * 1024 * 1024    # 50 MB
+MAX_EBOOK_BYTES = 100 * 1024 * 1024   # 100 MB (ebooks can be large)
 MAX_DOC_BYTES   = 25 * 1024 * 1024    # 25 MB
+
+
+# ── eBook content-type map ──────────────────────────────────────
+EBOOK_CONTENT_TYPES = {
+    '.pdf':  'application/pdf',
+    '.epub': 'application/epub+zip',
+    '.doc':  'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.txt':  'text/plain',
+    '.rtf':  'application/rtf',
+    '.mobi': 'application/x-mobipocket-ebook',
+    '.azw':  'application/vnd.amazon.ebook',
+    '.azw3': 'application/vnd.amazon.ebook',
+    '.fb2':  'application/x-fictionalbook+xml',
+}
+
+
+def _ebook_content_type(file_path):
+    """Return the correct content-type for an ebook based on its extension."""
+    name = (file_path.name if hasattr(file_path, 'name') else str(file_path)).lower()
+    ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
+    return EBOOK_CONTENT_TYPES.get(ext, 'application/octet-stream')
+
+
+def _ebook_filename(file_path, base_name):
+    """Return a filename with the correct extension from file_path."""
+    name = (file_path.name if hasattr(file_path, 'name') else str(file_path)).lower()
+    ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else '.pdf'
+    return f'{base_name}{ext}'
 
 
 def _check_upload(request, file, *, allowed_extensions, max_size, label):
@@ -161,7 +192,6 @@ def book_search_ajax(request):
 # ----------------------------------------------------------------------
 def librarian_dashboard_view(request):
     from circulation.models import BorrowRequest, BorrowingTransaction, Reservation, Fine
-    from accounts.models import OLMSUser
     from django.db.models import Count, Sum
     from datetime import datetime, timedelta
     from collections import defaultdict
@@ -453,7 +483,7 @@ def book_create_view(request):
             )
             if 'softcopy_file' in request.FILES:
                 f = request.FILES['softcopy_file']
-                if not _check_upload(request, f, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+                if not _check_upload(request, f, allowed_extensions=ALLOWED_EBOOK_EXTS, max_size=MAX_EBOOK_BYTES, label='Softcopy file'):
                     book.delete()  # rollback the just-created book record
                     return render(request, 'catalog/book_form.html', {'categories': categories, 'courses': courses})
                 softcopy.file_path = f
@@ -467,10 +497,175 @@ def book_create_view(request):
         else:
             messages.success(request, f"Book '{book.title}' created successfully.")
 
-        _notify_new_arrival(book, request.user, request)
+        messages.info(request, 'New book added. Click "Inform Members" on the Book Catalog page to broadcast new arrivals to all members in one message.')
         log_audit(request.user, f"Created book '{book.title}'", request)
         return redirect('book_detail', book_id=book.pk)
     return render(request, 'catalog/book_form.html', {'categories': categories, 'courses': courses})
+
+
+@login_required
+@librarian_required
+# ----------------------------------------------------------------------
+# View ya Tangaza Vitabu VIPya — Mtunzaji anatuma SMS/email kwa wanachama
+# ----------------------------------------------------------------------
+def new_arrival_broadcast_view(request):
+    """One-click broadcast: librarian selects new books and sends a single
+    SMS/email to all approved members. Shows a preview page on GET and
+    sends the broadcast on POST."""
+    from django.utils import timezone as tz
+    from accounts.models import BulkMessage, BulkMessageRecipient
+    from datetime import timedelta
+
+    # ── GET: show pending new arrivals + recent broadcasts ─────────
+    if request.method == 'GET':
+        # Books not yet notified, created in the last 30 days
+        cutoff = tz.now() - timedelta(days=30)
+        pending_books = Book.objects.filter(
+            new_arrival_notified=False,
+            created_at__gte=cutoff,
+        ).order_by('-created_at')
+
+        # Already-notified books (for history display)
+        recent_notified = Book.objects.filter(
+            new_arrival_notified=True,
+        ).order_by('-created_at')[:10]
+
+        # Recent new-arrival broadcasts
+        recent_broadcasts = BulkMessage.objects.filter(
+            is_new_arrival=True,
+            status='sent',
+        ).select_related('sent_by').order_by('-sent_at')[:5]
+
+        # Count eligible members
+        member_count = OLMSUser.objects.filter(
+            role='member',
+            registration_status='approved',
+            is_active=True,
+        ).count()
+
+        return render(request, 'catalog/new_arrival_broadcast.html', {
+            'pending_books': pending_books,
+            'recent_notified': recent_notified,
+            'recent_broadcasts': recent_broadcasts,
+            'member_count': member_count,
+        })
+
+    # ── POST: send the broadcast ───────────────────────────────────
+    selected_ids = request.POST.getlist('book_ids')
+    channels = request.POST.getlist('channels')
+    custom_message = request.POST.get('custom_message', '').strip()
+
+    if not selected_ids:
+        messages.error(request, 'Select at least one book to broadcast.')
+        return redirect('new_arrival_broadcast')
+
+    if not channels:
+        messages.error(request, 'Select at least one channel (SMS and/or Email).')
+        return redirect('new_arrival_broadcast')
+
+    selected_books = Book.objects.filter(pk__in=selected_ids)
+    if not selected_books.exists():
+        messages.error(request, 'No valid books selected.')
+        return redirect('new_arrival_broadcast')
+
+    # ── Build the broadcast message ────────────────────────────────
+    # Show up to 3 titles in the message, with "and X more" if applicable
+    titles = list(selected_books.values_list('title', 'author'))
+    book_count = len(titles)
+
+    if book_count == 1:
+        title_str = f"'{titles[0][0]}'"
+    elif book_count <= 3:
+        title_str = ', '.join(f"'{t[0]}'" for t in titles)
+    else:
+        title_str = ', '.join(f"'{t[0]}'" for t in titles[:3]) + f" and {book_count - 3} more"
+
+    if custom_message:
+        msg_body = custom_message
+    else:
+        msg_body = (
+            f"MSICT Library New Arrivals! {book_count} new book{'s' if book_count > 1 else ''} "
+            f"just arrived: {title_str}. "
+            f"Visit the library to borrow or read online!"
+        )
+
+    subject = f"MSICT OLMS — New Arrivals ({book_count} new book{'s' if book_count > 1 else ''})"
+
+    # ── Get recipients ─────────────────────────────────────────────
+    recipients = OLMSUser.objects.filter(
+        role='member',
+        registration_status='approved',
+        is_active=True,
+    )
+    recipient_count = recipients.count()
+
+    if recipient_count == 0:
+        messages.error(request, 'No approved members to notify.')
+        return redirect('new_arrival_broadcast')
+
+    # ── Create BulkMessage record ──────────────────────────────────
+    bm = BulkMessage.objects.create(
+        subject=subject,
+        body=msg_body,
+        target_roles=['member'],
+        send_via=channels,
+        sent_by=request.user,
+        status='sent',
+        is_new_arrival=True,
+        total_recipients=recipient_count,
+    )
+
+    # ── Send to each recipient ─────────────────────────────────────
+    sent_count = 0
+    failed_count = 0
+    now = tz.now()
+
+    for user in recipients:
+        for ch in channels:
+            recipient_row = BulkMessageRecipient.objects.create(
+                message=bm,
+                user=user,
+                delivered_via='email' if ch == 'email' else 'sms',
+                status='pending',
+            )
+            try:
+                notify_user(
+                    user,
+                    msg_body,
+                    ch,
+                    subject=subject,
+                    priority='normal',
+                    message_type='new_arrival',
+                )
+                recipient_row.status = 'sent'
+                recipient_row.delivered_at = tz.now()
+                recipient_row.save(update_fields=['status', 'delivered_at'])
+                sent_count += 1
+            except Exception as e:
+                recipient_row.status = 'failed'
+                recipient_row.error_message = str(e)[:500]
+                recipient_row.save(update_fields=['status', 'error_message'])
+                failed_count += 1
+
+    bm.sent_at = now
+    bm.total_sent = sent_count
+    bm.total_failed = failed_count
+    bm.save(update_fields=['sent_at', 'total_sent', 'total_failed'])
+
+    # ── Mark selected books as notified ────────────────────────────
+    selected_books.update(new_arrival_notified=True)
+
+    log_audit(
+        request.user,
+        f"New-arrival broadcast sent: {book_count} book(s), {sent_count}/{recipient_count} delivered, {failed_count} failed — '{title_str}'",
+        request,
+    )
+    messages.success(
+        request,
+        f'Broadcast sent to {recipient_count} members via {", ".join(channels).upper()}. '
+        f'{sent_count} delivered, {failed_count} failed.',
+    )
+    return redirect('new_arrival_broadcast')
 
 
 @login_required
@@ -527,7 +722,7 @@ def book_edit_view(request, book_id):
             # Handle file upload if provided
             if 'softcopy_file' in request.FILES:
                 f = request.FILES['softcopy_file']
-                if not _check_upload(request, f, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+                if not _check_upload(request, f, allowed_extensions=ALLOWED_EBOOK_EXTS, max_size=MAX_EBOOK_BYTES, label='Softcopy file'):
                     return render(request, 'catalog/book_form.html', {'book': book, 'categories': categories, 'courses': courses})
                 softcopy.file_path = f
             softcopy.save()
@@ -547,6 +742,7 @@ def book_edit_view(request, book_id):
     })
 
 
+@login_required
 # ----------------------------------------------------------------------
 # View ya Maelezo ya Kitabu — Anaona maelezo kamili ya kitabu
 # ----------------------------------------------------------------------
@@ -592,7 +788,7 @@ def copy_create_view(request, book_id):
         softcopy_file = None
         if copy_type == 'softcopy' and 'file_path' in request.FILES:
             softcopy_file = request.FILES['file_path']
-            if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+            if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_EBOOK_EXTS, max_size=MAX_EBOOK_BYTES, label='Softcopy file'):
                 return redirect('book_detail', book_id=book_id)
 
         copy = BookCopy(
@@ -643,7 +839,7 @@ def copy_add_standalone_view(request):
         softcopy_file = None
         if copy_type == 'softcopy' and 'file_path' in request.FILES:
             softcopy_file = request.FILES['file_path']
-            if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_PDF_EXTS, max_size=MAX_PDF_BYTES, label='Softcopy file'):
+            if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_EBOOK_EXTS, max_size=MAX_EBOOK_BYTES, label='Softcopy file'):
                 return redirect('copy_list')
 
         copy = BookCopy(
@@ -796,11 +992,16 @@ def serve_softcopy_view(request, copy_id):
         if not copy.file_path:
             messages.error(request, 'File not available.')
             return redirect('book_detail', book_id=copy.book_id)
-        response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
-        response['Content-Disposition'] = build_content_disposition(
-            'inline', f'{copy.book.title}.pdf'
-        )
-        return response
+        file_ext = ''
+        if copy.file_path:
+            name = copy.file_path.name.lower()
+            file_ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
+        return render(request, 'catalog/softcopy_viewer.html', {
+            'copy': copy,
+            'tx': None,
+            'file_ext': file_ext,
+            'is_free': True,
+        })
 
     if copy.access_type == 'borrow':
         from circulation.models import BorrowingTransaction
@@ -827,10 +1028,15 @@ def serve_softcopy_view(request, copy_id):
         if not copy.file_path:
             messages.error(request, 'File not available. Contact the librarian.')
             return redirect('member_msict_borrowings')
-        # Render HTML viewer — never serve the raw PDF directly for special copies
+        # Render HTML viewer — never serve the raw file directly for special copies
+        file_ext = ''
+        if copy.file_path:
+            name = copy.file_path.name.lower()
+            file_ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
         return render(request, 'catalog/softcopy_viewer.html', {
             'copy': copy,
             'tx': tx,
+            'file_ext': file_ext,
         })
 
     # Invalid access type
@@ -879,10 +1085,15 @@ def softcopy_access_link_view(request, token):
     except Exception:
         pass
 
+    file_ext = ''
+    if tx.copy.file_path:
+        name = tx.copy.file_path.name.lower()
+        file_ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
     return render(request, 'catalog/softcopy_viewer.html', {
         'copy': tx.copy,
         'tx': tx,
         'access_token': token,
+        'file_ext': file_ext,
     })
 
 
@@ -895,7 +1106,6 @@ def special_pdf_data_view(request, copy_id):
     """
     from circulation.models import BorrowingTransaction
     from django.utils import timezone as tz
-    from django.http import HttpResponseForbidden
     copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='borrow')
     token = request.GET.get('token')
     tx = None
@@ -917,8 +1127,10 @@ def special_pdf_data_view(request, copy_id):
         return HttpResponseForbidden('Access expired.')
     if not copy.file_path:
         return HttpResponseForbidden('File not available.')
-    response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
-    response['Content-Disposition'] = 'inline; filename="document.pdf"'
+    ct = _ebook_content_type(copy.file_path)
+    fname = _ebook_filename(copy.file_path, 'document')
+    response = FileResponse(copy.file_path.open('rb'), content_type=ct)
+    response['Content-Disposition'] = f'inline; filename="{fname}"'
     response['X-Content-Type-Options'] = 'nosniff'
     response['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
     response['Pragma'] = 'no-cache'
@@ -936,10 +1148,30 @@ def free_softcopy_download_view(request, copy_id):
     if not copy.file_path:
         messages.error(request, 'File not available for this copy.')
         return redirect('book_detail_public', book_id=copy.book_id)
-    response = FileResponse(copy.file_path.open('rb'), content_type='application/pdf')
-    response['Content-Disposition'] = build_content_disposition(
-        'attachment', f'{copy.book.title}.pdf'
-    )
+    ct = _ebook_content_type(copy.file_path)
+    fname = _ebook_filename(copy.file_path, copy.book.title)
+    response = FileResponse(copy.file_path.open('rb'), content_type=ct)
+    response['Content-Disposition'] = build_content_disposition('attachment', fname)
+    return response
+
+
+@login_required
+def free_softcopy_data_view(request, copy_id):
+    """Serve raw file bytes for the in-browser viewer (free softcopy).
+    Only called by the viewer — not for direct download.
+    """
+    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='free')
+    if not copy.file_path:
+        return HttpResponseForbidden('File not available.')
+    ct = _ebook_content_type(copy.file_path)
+    fname = _ebook_filename(copy.file_path, 'document')
+    response = FileResponse(copy.file_path.open('rb'), content_type=ct)
+    response['Content-Disposition'] = f'inline; filename="{fname}"'
+    response['X-Content-Type-Options'] = 'nosniff'
+    response['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    response['X-Robots-Tag'] = 'noindex, nofollow'
     return response
 
 
@@ -1057,7 +1289,6 @@ def category_list_view(request):
 # ----------------------------------------------------------------------
 def shelf_location_view(request):
     import json
-    from django.db.models import Count, Q
     from circulation.models import BorrowingTransaction
 
     # Get all categories (treating each as a shelf)
@@ -1158,7 +1389,7 @@ def shelf_detail_view(request, shelf_id):
     shelf = get_object_or_404(Category, pk=shelf_id)
 
     # Get books in this shelf (without annotate to avoid NCLOB GROUP BY issue)
-    from django.db.models import Count, Q, OuterRef, Subquery
+    from django.db.models import Count, OuterRef, Subquery
     books = Book.objects.filter(category=shelf).order_by('title')
 
     # Calculate copy counts in Python to avoid NCLOB issues with GROUP BY
@@ -1377,6 +1608,7 @@ def shelves_by_category_api(request, category_id):
     })
 
 
+@login_required
 # ----------------------------------------------------------------------
 # View ya Tafuta Maktaba za Nje — Proxy kwa federated search
 # ----------------------------------------------------------------------
@@ -1888,4 +2120,173 @@ def login_slideshow_delete_view(request, slide_id):
     log_audit(request.user, f"Deleted login slideshow image: '{title}'", request)
     messages.success(request, f'Slideshow image "{title}" deleted.')
     return redirect('login_content_list')
+
+
+# ──────────────────────────────────────────────────────────────
+# Bulk Book Import (CSV / Excel)
+# ──────────────────────────────────────────────────────────────
+_IMPORT_COLUMNS = [
+    'title', 'author', 'isbn', 'publisher', 'year', 'edition',
+    'description', 'category', 'course', 'language', 'copy_type',
+    'accession_no', 'quantity',
+]
+
+@login_required
+@librarian_required
+def bulk_import_books_template_view(request):
+    """Download a blank CSV template for bulk book import."""
+    import csv as _csv
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="books_import_template.csv"'
+    writer = _csv.writer(response)
+    writer.writerow(_IMPORT_COLUMNS)
+    writer.writerow([
+        'Introduction to Computing', 'John Smith', '978-3-16-148410-0',
+        'Pearson', '2022', '3rd',
+        'Basic computing concepts', 'Computing', 'CS101', 'English',
+        'hardcopy', '', '2',
+    ])
+    return response
+
+
+@login_required
+@librarian_required
+def bulk_import_books_view(request):
+    """Upload and process a CSV or Excel file to bulk-import books."""
+    import csv as _csv
+    import io as _io
+
+    if request.method == 'GET':
+        categories = Category.objects.all().order_by('name')
+        courses = Course.objects.all().order_by('course_name')
+        return render(request, 'catalog/bulk_import_books.html', {
+            'categories': categories, 'courses': courses,
+        })
+
+    uploaded = request.FILES.get('import_file')
+    if not uploaded:
+        messages.error(request, 'Please select a CSV or Excel file to upload.')
+        return redirect('bulk_import_books')
+
+    ext = uploaded.name.rsplit('.', 1)[-1].lower() if '.' in uploaded.name else ''
+    if ext not in ('csv', 'xlsx', 'xls'):
+        messages.error(request, 'Only CSV and Excel (.xlsx/.xls) files are accepted.')
+        return redirect('bulk_import_books')
+
+    # ── Parse rows ──────────────────────────────────────────────
+    rows = []
+    try:
+        if ext == 'csv':
+            text = uploaded.read().decode('utf-8-sig')
+            reader = _csv.DictReader(_io.StringIO(text))
+            rows = list(reader)
+        else:
+            from openpyxl import load_workbook
+            wb = load_workbook(uploaded, read_only=True, data_only=True)
+            ws = wb.active
+            headers = [str(c.value or '').strip().lower() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                if all(v is None for v in row):
+                    continue
+                rows.append(dict(zip(headers, [str(v).strip() if v is not None else '' for v in row])))
+    except Exception as exc:
+        messages.error(request, f'Could not parse file: {exc}')
+        return redirect('bulk_import_books')
+
+    if not rows:
+        messages.error(request, 'The file appears to be empty.')
+        return redirect('bulk_import_books')
+
+    # ── Process each row ─────────────────────────────────────────
+    created_books = 0
+    created_copies = 0
+    skipped = []
+
+    category_cache = {c.name.strip().lower(): c for c in Category.objects.all()}
+    course_cache   = {c.course_name.strip().lower(): c for c in Course.objects.all()}
+
+    for idx, row in enumerate(rows, start=2):
+        def g(col):
+            return (row.get(col) or '').strip()
+
+        title = g('title')
+        if not title:
+            skipped.append({'row': idx, 'reason': 'Title is required', 'data': row})
+            continue
+
+        author = g('author') or 'Unknown'
+        isbn   = g('isbn') or None
+
+        # Detect duplicate by ISBN (if provided) or title+author combo
+        if isbn:
+            book = Book.objects.filter(isbn=isbn).first()
+        else:
+            book = Book.objects.filter(title__iexact=title, author__iexact=author).first()
+
+        if not book:
+            cat_name = g('category')
+            cat = category_cache.get(cat_name.lower()) if cat_name else None
+
+            try:
+                year_val = int(g('year')) if g('year').isdigit() else None
+            except Exception:
+                year_val = None
+
+            book = Book.objects.create(
+                title=title,
+                author=author,
+                isbn=isbn,
+                publisher=g('publisher') or '',
+                year=year_val,
+                edition=g('edition') or '',
+                description=g('description') or '',
+                category=cat,
+                language=g('language') or 'English',
+            )
+            # Assign course if provided
+            course_name = g('course')
+            if course_name:
+                course = course_cache.get(course_name.lower())
+                if course:
+                    book.courses.add(course)
+
+            created_books += 1
+
+        # ── Add copies ───────────────────────────────────────────
+        qty_str = g('quantity')
+        try:
+            qty = max(1, int(qty_str)) if qty_str.isdigit() else 1
+        except Exception:
+            qty = 1
+
+        copy_type = g('copy_type') if g('copy_type') in ('hardcopy', 'softcopy') else 'hardcopy'
+
+        from accounts.utils import log_audit as _la
+        for _ in range(qty):
+            accession = g('accession_no') or None
+            if accession and BookCopy.objects.filter(accession_no=accession).exists():
+                accession = None  # Auto-generate if duplicate
+            BookCopy.objects.create(
+                book=book,
+                copy_type=copy_type,
+                accession_no=accession,
+                status='available',
+            )
+            created_copies += 1
+
+    log_audit(
+        request.user,
+        f'Bulk import: {created_books} books, {created_copies} copies created; {len(skipped)} rows skipped.',
+        request,
+    )
+
+    if skipped:
+        request.session['import_skipped'] = skipped[:50]
+
+    messages.success(
+        request,
+        f'Import complete: {created_books} new book(s) and {created_copies} copy/copies added.'
+        + (f' {len(skipped)} row(s) were skipped — see details below.' if skipped else ''),
+    )
+    return redirect('bulk_import_books')
 

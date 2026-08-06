@@ -10,6 +10,7 @@
     <a href="{% url 'export_members_pdf' %}?role={{ role_filter }}{% if member_type_filter %}&member_type={{ member_type_filter }}{% endif %}"
        class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
     <a href="{% url 'export_members_csv' %}?role={{ role_filter }}{% if member_type_filter %}&member_type={{ member_type_filter }}{% endif %}" class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-csv"></i> Export CSV</a>
+    <a href="{% url 'export_members_xlsx' %}?role={{ role_filter }}{% if member_type_filter %}&member_type={{ member_type_filter }}{% endif %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
   </div>
 </div>
 <div class="row g-3 mb-3">

@@ -206,6 +206,9 @@
       <div class="ai-sub">English &amp; Kiswahili • powered by Gemini</div>
     </div>
     <div class="ai-actions">
+      <button id="aiClearBtn" title="Clear chats" aria-label="Clear conversation">
+        <i class="bi bi-eraser"></i>
+      </button>
       <button id="aiResetBtn" title="Start new chat" aria-label="Reset conversation">
         <i class="bi bi-arrow-clockwise"></i>
       </button>
@@ -247,6 +250,7 @@
   const panel    = document.getElementById('aiPanel');
   const closeBtn = document.getElementById('aiCloseBtn');
   const resetBtn = document.getElementById('aiResetBtn');
+  const clearBtn = document.getElementById('aiClearBtn');
   const msgsBox  = document.getElementById('aiMessages');
   const welcome  = document.getElementById('aiWelcome');
   const composer = document.getElementById('aiComposer');
@@ -256,6 +260,7 @@
   const HISTORY_URL = '{% url "assistant_history" %}';
   const SEND_URL    = '{% url "assistant_send" %}';
   const RESET_URL   = '{% url "assistant_reset" %}';
+  const CLEAR_URL   = '{% url "assistant_clear" %}';
 
   function getCsrf() {
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -371,11 +376,26 @@
   btn.addEventListener('click', openPanel);
   closeBtn.addEventListener('click', closePanel);
 
-  // Reset
+  // Reset (new chat)
   resetBtn.addEventListener('click', async () => {
     if (!confirm('Start a new conversation? This clears the current chat.')) return;
     try {
       await fetch(RESET_URL, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'X-CSRFToken': getCsrf() },
+      });
+      msgsBox.innerHTML = '';
+      msgsBox.appendChild(welcome);
+      welcome.style.display = '';
+      historyLoaded = true;
+    } catch (e) {}
+  });
+
+  // Clear chats (keep session, just remove messages)
+  clearBtn.addEventListener('click', async () => {
+    if (!confirm('Clear all messages? The chat will remain open.')) return;
+    try {
+      await fetch(CLEAR_URL, {
         method: 'POST', credentials: 'same-origin',
         headers: { 'X-CSRFToken': getCsrf() },
       });

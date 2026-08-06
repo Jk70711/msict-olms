@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}My Dashboard{% endblock %}
 {% block content %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -133,10 +134,10 @@
       <div class="flex-grow-1">
         <strong class="text-dark">Borrowing Blocked - Unpaid Fines</strong>
         <p class="small text-dark mb-0">
-          {% if total_unpaid > 0 %}Overdue fines: <strong>TZS {{ total_unpaid|floatformat:0 }}</strong>{% endif %}
+          {% if total_unpaid > 0 %}Overdue fines: <strong>TZS {{ total_unpaid|floatformat:0|intcomma }}</strong>{% endif %}
           {% if total_unpaid > 0 and total_loss_unpaid > 0 %} + {% endif %}
-          {% if total_loss_unpaid > 0 %}Loss fines: <strong>TZS {{ total_loss_unpaid|floatformat:0 }}</strong>{% endif %}
-          {% if total_all_unpaid > 0 %} = Total: <strong>TZS {{ total_all_unpaid|floatformat:0 }}</strong>{% endif %}
+          {% if total_loss_unpaid > 0 %}Loss fines: <strong>TZS {{ total_loss_unpaid|floatformat:0|intcomma }}</strong>{% endif %}
+          {% if total_all_unpaid > 0 %} = Total: <strong>TZS {{ total_all_unpaid|floatformat:0|intcomma }}</strong>{% endif %}
         </p>
         {% if total_loss_unpaid > 0 %}
         <p class="small text-muted mb-0">
@@ -221,7 +222,7 @@
               </div>
             </div>
             <div class="mt-2">
-              <div class="fs-3 fw-bold" style="color: #7c3aed;">{{ total_fines|floatformat:0 }}</div>
+              <div class="fs-3 fw-bold" style="color: #7c3aed;">{{ total_fines|floatformat:0|intcomma }}</div>
               <div class="small text-muted">Unpaid Fines</div>
             </div>
           </div>
@@ -623,19 +624,19 @@
           <div class="col-4">
             <div class="text-center p-2 bg-light rounded">
               <div class="small text-muted">Total</div>
-              <div class="fw-bold text-danger fs-5">TZS {{ total_fine_amount|floatformat:0 }}</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_fine_amount|floatformat:0|intcomma }}</div>
             </div>
           </div>
           <div class="col-4">
             <div class="text-center p-2 bg-light rounded">
               <div class="small text-muted">Paid</div>
-              <div class="fw-bold text-success fs-5">TZS {{ total_paid|floatformat:0 }}</div>
+              <div class="fw-bold text-success fs-5">TZS {{ total_paid|floatformat:0|intcomma }}</div>
             </div>
           </div>
           <div class="col-4">
             <div class="text-center p-2 bg-light rounded">
               <div class="small text-muted">Remaining</div>
-              <div class="fw-bold text-danger fs-5">TZS {{ total_unpaid|floatformat:0 }}</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_unpaid|floatformat:0|intcomma }}</div>
             </div>
           </div>
         </div>
@@ -649,7 +650,7 @@
               <br><small class="text-muted">Book: {{ fine.transaction.copy.book.title|truncatechars:30 }}</small>
               {% endif %}
             </div>
-            <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0 }}</small>
+            <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0|intcomma }}</small>
           </div>
           <div class="d-flex justify-content-between align-items-center mt-1">
             <div class="small">
@@ -681,19 +682,19 @@
           <div class="col-4">
             <div class="text-center p-2 bg-light rounded">
               <div class="small text-muted">Total</div>
-              <div class="fw-bold text-danger fs-5">TZS {{ total_loss_fine_amount|floatformat:0 }}</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_loss_fine_amount|floatformat:0|intcomma }}</div>
             </div>
           </div>
           <div class="col-4">
             <div class="text-center p-2 bg-light rounded">
               <div class="small text-muted">Paid</div>
-              <div class="fw-bold text-success fs-5">TZS {{ total_loss_paid|floatformat:0 }}</div>
+              <div class="fw-bold text-success fs-5">TZS {{ total_loss_paid|floatformat:0|intcomma }}</div>
             </div>
           </div>
           <div class="col-4">
             <div class="text-center p-2 bg-light rounded">
               <div class="small text-muted">Remaining</div>
-              <div class="fw-bold text-danger fs-5">TZS {{ total_loss_unpaid|floatformat:0 }}</div>
+              <div class="fw-bold text-danger fs-5">TZS {{ total_loss_unpaid|floatformat:0|intcomma }}</div>
             </div>
           </div>
         </div>
@@ -710,7 +711,7 @@
               {% endwith %}
               {% endif %}
             </div>
-            <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0 }}</small>
+            <small class="fw-bold text-danger fs-5">TZS {{ fine.amount|floatformat:0|intcomma }}</small>
           </div>
           <div class="d-flex justify-content-between align-items-center mt-1">
             <div class="small">
@@ -778,7 +779,7 @@
             <div class="small text-muted"><i class="bi bi-tag me-1"></i>{{ rpt.circumstances }}</div>
             {% endif %}
             {% if rpt.loss_fine %}
-            <div class="small text-danger fw-bold mt-1"><i class="bi bi-cash me-1"></i>Fine: TZS {{ rpt.loss_fine.amount|floatformat:0 }}
+            <div class="small text-danger fw-bold mt-1"><i class="bi bi-cash me-1"></i>Fine: TZS {{ rpt.loss_fine.amount|floatformat:0|intcomma }}
               {% if rpt.loss_fine.paid %}<span class="badge bg-success ms-1">Paid</span>{% else %}<span class="badge bg-danger ms-1">Unpaid</span>{% endif %}
             </div>
             {% if not rpt.loss_fine.paid %}
@@ -828,7 +829,7 @@
             <div class="small text-muted"><i class="bi bi-tag me-1"></i>{{ rpt.damage_description|truncatechars:60 }}</div>
             {% endif %}
             {% if rpt.damage_fine %}
-            <div class="small fw-bold mt-1" style="color: #ea580c;"><i class="bi bi-cash me-1"></i>Fine: TZS {{ rpt.damage_fine.amount|floatformat:0 }}
+            <div class="small fw-bold mt-1" style="color: #ea580c;"><i class="bi bi-cash me-1"></i>Fine: TZS {{ rpt.damage_fine.amount|floatformat:0|intcomma }}
               {% if rpt.damage_fine.paid %}<span class="badge bg-success ms-1">Paid</span>{% else %}<span class="badge bg-danger ms-1">Unpaid</span>{% endif %}
             </div>
             {% if not rpt.damage_fine.paid %}

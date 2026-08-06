@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% block title %}Issued Records{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="d-flex align-items-center gap-2">
+    <a href="{% url 'all_requests' %}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Back to Requests
+    </a>
+    <h4 class="fw-bold mb-0"><i class="bi bi-journal-check"></i> Issued Records</h4>
+  </div>
+  <span class="text-muted small" id="rowCount"></span>
+</div>
+<div class="mb-2 d-flex flex-wrap gap-2 align-items-center">
+  <a href="{% url 'issued_records' %}" class="btn btn-sm {% if not status_filter %}btn-dark{% else %}btn-outline-secondary{% endif %}">All</a>
+  <a href="{% url 'issued_records' %}?status=borrowed" class="btn btn-sm {% if status_filter == 'borrowed' %}btn-primary{% else %}btn-outline-primary{% endif %}"><i class="bi bi-book"></i> Borrowed</a>
+  <a href="{% url 'issued_records' %}?status=overdue" class="btn btn-sm {% if status_filter == 'overdue' %}btn-danger{% else %}btn-outline-danger{% endif %}"><i class="bi bi-exclamation-triangle"></i> Overdue</a>
+  <a href="{% url 'issued_records' %}?status=returned" class="btn btn-sm {% if status_filter == 'returned' %}btn-success{% else %}btn-outline-success{% endif %}"><i class="bi bi-check-circle"></i> Returned</a>
+  <a href="{% url 'issued_records' %}?status=lost" class="btn btn-sm {% if status_filter == 'lost' %}btn-dark{% else %}btn-outline-dark{% endif %}"><i class="bi bi-x-circle"></i> Lost</a>
+  <div class="input-group input-group-sm ms-auto" style="max-width:280px;">
+    <span class="input-group-text bg-white border-end-0"><i class="bi bi-search text-muted"></i></span>
+    <input type="text" id="txSearch" class="form-control border-start-0 ps-0"
+           placeholder="Search member, book, accession…"
+           autofocus autocomplete="off">
+    <button class="btn btn-outline-secondary" type="button" id="clearSearch" style="display:none" title="Clear">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+</div>
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover mb-0">
+      <thead>
+        <tr>
+          <th>S/N</th><th>Member</th><th>Book</th><th>Type</th>
+          <th>Issued</th><th>Due Date</th><th>Returned</th><th>Status</th><th>Issued By</th>
+        </tr>
+      </thead>
+      <tbody id="txTable">
+        {% for tx in transactions %}
+        <tr data-search="{{ tx.user.get_full_name|lower }} {{ tx.user.army_no|lower }} {{ tx.copy.book.title|lower }} {{ tx.copy.display_id|lower }} {{ tx.status }}">
+          <td>{{ forloop.counter }}</td>
+          <td>
+            <small class="fw-semibold">{{ tx.user.get_full_name }}</small><br>
+            <small class="text-muted">{{ tx.user.army_no }}</small>
+            {% if tx.user.rank %}<small class="badge bg-dark ms-1">{{ tx.user.rank.rank_name }}</small>{% endif %}
+          </td>
+          <td>
+            <small>
+              {{ tx.copy.book.title|truncatechars:40 }}<br>
+              <code class="text-muted">{{ tx.copy.display_id }}</code>
+            </small>
+          </td>
+          <td>
+            <span class="badge {% if tx.borrow_type == 'softcopy' %}bg-info text-dark{% else %}bg-secondary{% endif %}">{{ tx.borrow_type }}</span>
+          </td>
+          <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y H:i" }}</small></td>
+          <td>
+            <small class="{% if tx.status == 'overdue' %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+              {{ tx.due_date|date:"d M Y" }}
+            </small>
+            {% if tx.renewed_count > 0 %}
+            <br><span class="badge bg-light text-dark" style="font-size:.6rem">Renewed ×{{ tx.renewed_count }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if tx.return_date %}
+              <small class="text-success">{{ tx.return_date|date:"d M Y" }}</small>
+            {% else %}
+              <small class="text-muted">—</small>
+            {% endif %}
+          </td>
+          <td>
+            {% if tx.status == 'borrowed' %}
+              <span class="badge bg-primary">Borrowed</span>
+            {% elif tx.status == 'overdue' %}
+              <span class="badge bg-danger">Overdue</span>
+              {% if tx.days_overdue > 0 %}
+              <br><small class="text-danger">{{ tx.days_overdue }}d overdue</small>
+              {% endif %}
+            {% elif tx.status == 'returned' %}
+              <span class="badge bg-success">Returned</span>
+            {% elif tx.status == 'lost' %}
+              <span class="badge bg-dark">Lost</span>
+            {% else %}
+              <span class="badge bg-secondary">{{ tx.status|title }}</span>
+            {% endif %}
+          </td>
+          <td><small class="text-muted">{{ tx.approved_by.get_full_name|default:"—" }}</small></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center py-4 text-muted">No issued records found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if page_obj.has_other_pages %}
+    <nav class="d-flex justify-content-between align-items-center mt-3">
+      <span class="text-muted small">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }} ({{ page_obj.paginator.count }} total)</span>
+      <ul class="pagination pagination-sm mb-0">
+        {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">&laquo;</a></li>{% endif %}
+        {% for n in page_obj.paginator.page_range %}
+          {% if n == page_obj.number %}<li class="page-item active"><span class="page-link">{{ n }}</span></li>
+          {% elif n > page_obj.number|add:'-3' and n < page_obj.number|add:'3' %}<li class="page-item"><a class="page-link" href="?page={{ n }}{% if status_filter %}&status={{ status_filter }}{% endif %}">{{ n }}</a></li>{% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}">&raquo;</a></li>{% endif %}
+      </ul>
+    </nav>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  const input    = document.getElementById('txSearch');
+  const clearBtn = document.getElementById('clearSearch');
+  const counter  = document.getElementById('rowCount');
+  const tbody    = document.getElementById('txTable');
+  const rows     = tbody ? Array.from(tbody.querySelectorAll('tr[data-search]')) : [];
+
+  function updateCount(visible) {
+    counter.textContent = visible === rows.length
+      ? rows.length + ' record' + (rows.length !== 1 ? 's' : '')
+      : visible + ' of ' + rows.length + ' shown';
+  }
+
+  function filter() {
+    const q = input.value.trim().toLowerCase();
+    clearBtn.style.display = q ? '' : 'none';
+    let visible = 0;
+    rows.forEach(function(row) {
+      const match = !q || row.dataset.search.includes(q);
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    });
+    updateCount(visible);
+  }
+
+  input.addEventListener('input', filter);
+  clearBtn.addEventListener('click', function() { input.value = ''; input.focus(); filter(); });
+  filter();
+})();
+</script>
+{% endblock %}

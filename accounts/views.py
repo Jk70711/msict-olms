@@ -12,7 +12,7 @@
 import re
 import logging
 from decimal import Decimal
-from datetime import timedelta
+from datetime import datetime, timedelta
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Sum, Max, Count, Q
+from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -354,17 +355,18 @@ def login_view(request):
                     messages.error(request, 'You must change your password via "Forgot Password" before your second login.')
                     return redirect('forgot_password')
 
-                # Suspension gate-check: dynamic threshold from preferences
+                # Suspension gate-check: dynamic thresholds from preferences
                 _lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
-                _suspend_at = max(1, _lock_at // 2)
+                _suspend_at = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3) or 3)
+                _suspend_duration = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10) or 10)
                 if db_user.failed_attempts == _suspend_at:
                     last_fail = LoginAttempt.objects.filter(
                         username=username, status='failed'
                     ).order_by('-timestamp').first()
                     if last_fail:
                         elapsed = (timezone.now() - last_fail.timestamp).total_seconds()
-                        if elapsed < 600:  # still within 10-minute suspension
-                            remaining_min = max(1, int((600 - elapsed) / 60) + 1)
+                        if elapsed < _suspend_duration * 60:
+                            remaining_min = max(1, int((_suspend_duration * 60 - elapsed) / 60) + 1)
                             messages.error(request, f'Account suspended. Please try again in ~{remaining_min} minute(s).')
                             return render(request, 'accounts/login.html', {'form': form})
                         # Suspension expired → group 2 starts, allow attempt
@@ -378,9 +380,13 @@ def login_view(request):
                 if remember_me:
                     # Set session to expire in 30 days
                     request.session.set_expiry(60 * 60 * 24 * 30)
+                    request.session['remember_me'] = True
                 else:
-                    # Session expires when browser closes (default)
-                    request.session.set_expiry(0)
+                    # Session idle-timeout controlled by SessionTimeoutMiddleware
+                    # using the SESSION_TIMEOUT_MINUTES system preference
+                    request.session.pop('remember_me', None)
+                    timeout_min = int(SystemPreference.get('SESSION_TIMEOUT_MINUTES', 30) or 30)
+                    request.session.set_expiry(timeout_min * 60)
                 if user.failed_attempts > 0:
                     user.failed_attempts = 0
                     user.save(update_fields=['failed_attempts'])
@@ -421,7 +427,8 @@ def login_view(request):
                     # Read dynamic thresholds from system preferences
                     auto_lockout = SystemPreference.get('ENABLE_AUTO_LOCKOUT', '1') != '0'
                     lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
-                    suspend_at = max(1, lock_at // 2)  # suspension at midpoint
+                    suspend_at = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3) or 3)
+                    suspend_duration = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10) or 10)
 
                     if not auto_lockout:
                         # Lockout disabled — just warn the user
@@ -456,11 +463,11 @@ def login_view(request):
                     elif total == suspend_at:
                         susp_msg_user = (
                             f"MSICT OLMS: Your account '{username}' has been temporarily "
-                            f"SUSPENDED for 10 minutes after {suspend_at} failed login attempts from IP {ip}. "
-                            f"After 10 minutes, you may try again ({lock_at - suspend_at} more attempts before permanent lock)."
+                            f"SUSPENDED for {suspend_duration} minutes after {suspend_at} failed login attempts from IP {ip}. "
+                            f"After {suspend_duration} minutes, you may try again ({lock_at - suspend_at} more attempts before permanent lock)."
                         )
                         susp_msg_admin = (
-                            f"Security Notice: Account '{username}' temporarily suspended (10 min) "
+                            f"Security Notice: Account '{username}' temporarily suspended ({suspend_duration} min) "
                             f"after {suspend_at} failed attempts from IP {ip} at {now.strftime('%Y-%m-%d %H:%M:%S')}."
                         )
                         notify_user(db_user, susp_msg_user, 'sms', priority='high', is_security_alert=True, message_type='suspended')
@@ -468,7 +475,7 @@ def login_view(request):
                         for admin in admins:
                             notify_user(admin, susp_msg_admin, 'sms', priority='high', is_security_alert=True, message_type='suspended')
                             notify_user(admin, susp_msg_admin, 'email', subject='Security Notice – Account Suspended', priority='high', is_security_alert=True, message_type='suspended')
-                        messages.error(request, f'Account suspended for 10 minutes after {suspend_at} failed attempts. Try again after 10 minutes.')
+                        messages.error(request, f'Account suspended for {suspend_duration} minutes after {suspend_at} failed attempts. Try again after {suspend_duration} minutes.')
 
                     # ── Before suspension: count down ─────────────────────────
                     else:
@@ -533,7 +540,8 @@ def forgot_password_view(request):
                 return render(request, 'accounts/forgot_password.html')
 
             otp = create_otp_for_user(user)
-            msg = f"MSICT OLMS: Your password reset OTP is {otp.otp_code}. Valid for 10 minutes."
+            _otp_mins = getattr(otp, '_validity_minutes', int(SystemPreference.get('OTP_VALIDITY_MINUTES', 10) or 10))
+            msg = f"MSICT OLMS: Your password reset OTP is {otp.otp_code}. Valid for {_otp_mins} minute(s)."
 
             # Always attempt OTP delivery on BOTH channels for every user.
             sms_notif = notify_user(
@@ -698,7 +706,7 @@ def guest_dashboard_view(request):
             request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(active_session.duration_hours))
             request.user.save(update_fields=['total_guest_hours'])
             # Revenue already recorded at payment time — no new RevenueTransaction
-            log_audit(request.user, f"Guest session auto-expired ({active_session.duration_hours}h, TZS {active_session.amount_paid} already paid)", request)
+            log_audit(request.user, f"Guest session auto-expired ({active_session.duration_hours}h, TZS {active_session.amount_paid:,.0f} already paid)", request)
             messages.warning(request, f'Your previous session has expired. Duration: {active_session.duration_hours} hour(s). Amount paid: TZS {active_session.amount_paid:,.0f}.')
             active_session = None
 
@@ -953,7 +961,7 @@ def end_guest_session_view(request):
 
     # Revenue already recorded at payment time — no new RevenueTransaction here
 
-    log_audit(request.user, f"Guest session {'auto-expired' if auto_expired else 'ended'} ({session.duration_hours}h, TZS {session.amount_paid} already paid)", request)
+    log_audit(request.user, f"Guest session {'auto-expired' if auto_expired else 'ended'} ({session.duration_hours}h, TZS {session.amount_paid:,.0f} already paid)", request)
 
     # SMS + Email notification
     event_label = 'expired' if auto_expired else 'ended'
@@ -1143,7 +1151,8 @@ def guest_session_renew_pay_view(request):
     active_session.payment_method = payment_method
     active_session.status = 'renewed'
     active_session.renewed = True
-    active_session.save(update_fields=['paid_hours', 'amount_paid', 'payment_method', 'status', 'renewed'])
+    active_session.expiry_notification_sent = False
+    active_session.save(update_fields=['paid_hours', 'amount_paid', 'payment_method', 'status', 'renewed', 'expiry_notification_sent'])
 
     # Record revenue for renewal
     try:
@@ -1404,7 +1413,6 @@ def change_password_view(request):
 # View ya Wasifu — Mtumiaji anaona na kuhariri wasifu wake
 # ----------------------------------------------------------------------
 def profile_view(request):
-    from accounts.models import Rank
     if request.method == 'POST':
         user = request.user
         is_admin = user.role == 'admin'
@@ -1544,6 +1552,7 @@ def guest_manage_view(request):
     # Guest users
     guest_users = OLMSUser.objects.filter(is_guest=True).order_by('-created_at')
 
+    mark_badge_viewed(request.user, 'active_guest_sessions')
     return render(request, 'accounts/guest_manage.html', {
         'active_sessions': active_sessions,
         'history': history,
@@ -1560,7 +1569,7 @@ def guest_mark_paid_view(request, session_id):
     session = get_object_or_404(GuestSession, pk=session_id)
     session.payment_status = 'paid'
     session.save(update_fields=['payment_status'])
-    log_audit(request.user, f"Marked guest session #{session.id} as paid (TZS {session.amount_paid})", request)
+    log_audit(request.user, f"Marked guest session #{session.id} as paid (TZS {session.amount_paid:,.0f})", request)
     messages.success(request, f'Session #{session.id} marked as paid.')
     return redirect('guest_manage')
 
@@ -2081,7 +2090,6 @@ def user_list_view(request):
         messages.error(request, 'Access denied.')
         return redirect('dashboard')
         
-    from django.core.paginator import Paginator
     query = request.GET.get('q', '')
     status = request.GET.get('status', '')
     role_filter = request.GET.get('role', '')
@@ -2418,7 +2426,6 @@ def admin_dashboard_view(request):
     from circulation.models import BorrowingTransaction, Fine
     from django.db.models.functions import TruncDay
     from catalog.models import Book, BookCopy
-    from datetime import datetime, timedelta
     from collections import defaultdict
     
     # Check if user is admin
@@ -2453,10 +2460,24 @@ def admin_dashboard_view(request):
 
     recent_logs = AuditLog.objects.select_related('user').order_by('-timestamp')[:20]
 
-    # Find users with failed attempts (temporarily suspended or locked)
-    # Users with 3+ failed attempts are considered suspended/locked
+    # Find users currently suspended (within suspend_duration) or permanently locked
+    _suspend_at = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3) or 3)
+    _suspend_dur = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10) or 10)
+    _lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
+    _cutoff = timezone.now() - timedelta(minutes=_suspend_dur)
+    _suspended_unames = set(
+        LoginAttempt.objects.filter(status='failed', timestamp__gte=_cutoff)
+        .values_list('username', flat=True)
+    )
     recent_suspended = OLMSUser.objects.filter(
-        failed_attempts__gte=3, role='member'
+        Q(
+            failed_attempts__gte=_suspend_at,
+            username__in=_suspended_unames,
+            is_active=True,
+        ) | Q(
+            is_active=False,
+            failed_attempts__gte=_lock_at,
+        )
     ).select_related('virtual_card').order_by('-failed_attempts', '-created_at')[:5]
 
     # All users with ANY failed login attempts — for suspicious activity alert panel
@@ -2492,7 +2513,6 @@ def admin_dashboard_view(request):
     ).order_by('-created_at')[:5]
 
     # Suspicious IPs (last 1 hour, >=5 failed attempts)
-    from accounts.models import LoginAttempt
     window_1h = timezone.now() - timedelta(hours=1)
     suspicious_ips_qs = (
         LoginAttempt.objects.filter(status='failed', timestamp__gte=window_1h)
@@ -2585,7 +2605,6 @@ def admin_dashboard_view(request):
     import json as _json
 
     # Security: login attempts last 7 days (success vs failed)
-    from accounts.models import LoginAttempt
     login_chart_labels = []
     login_success = []
     login_failed = []
@@ -2696,54 +2715,107 @@ def admin_dashboard_view(request):
 # View ya Shughuli za Tuhuma — Anaona jaribio zilizoshindwa za kuingia
 # ----------------------------------------------------------------------
 def suspicious_activity_view(request):
-    from django.db.models import Max
     window_24h = timezone.now() - timedelta(days=1)
-    failed_logins = LoginAttempt.objects.filter(
-        status='failed', timestamp__gte=window_24h
-    ).order_by('-timestamp')[:100]
 
     known_usernames = set(OLMSUser.objects.values_list('username', flat=True))
 
-    # Build username → {role, member_type} map for enriching failed login rows
-    user_info_map = {
-        u['username']: {'role': u['role'], 'member_type': u['member_type']}
-        for u in OLMSUser.objects.values('username', 'role', 'member_type')
-    }
+    # Build lookup map keyed by username, email, and phone so login attempts
+    # using email or phone can be resolved to the actual user's info.
+    user_info_map = {}
+    for u in OLMSUser.objects.values('username', 'email', 'phone', 'role', 'member_type', 'is_guest'):
+        info = {'role': u['role'], 'member_type': u['member_type'], 'is_guest': u['is_guest']}
+        user_info_map[u['username']] = info
+        if u['email']:
+            user_info_map[u['email']] = info
+            known_usernames.add(u['email'])
+        if u['phone']:
+            user_info_map[u['phone']] = info
+            known_usernames.add(u['phone'])
 
-    window_1h = timezone.now() - timedelta(hours=1)
+    # Suspicious IPs: use configurable suspend_duration window and suspend_at threshold
+    # so that suspended users' IPs appear while suspended and disappear when suspension expires
+    suspend_at = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3) or 3)
+    suspend_duration = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10) or 10)
+    suspicious_window = timezone.now() - timedelta(minutes=suspend_duration)
     suspicious_ips_qs = (
-        LoginAttempt.objects.filter(status='failed', timestamp__gte=window_1h)
+        LoginAttempt.objects.filter(status='failed', timestamp__gte=suspicious_window)
         .values('ip_address')
         .annotate(total=Sum('attempt_count'), last_attempt=Max('timestamp'))
-        .filter(total__gte=5)
+        .filter(total__gte=suspend_at)
         .order_by('-total')
     )
 
     suspicious_ips = []
     for row in suspicious_ips_qs:
-        usernames = list(
+        per_user = (
             LoginAttempt.objects.filter(
-                status='failed', timestamp__gte=window_1h, ip_address=row['ip_address']
-            ).values_list('username', flat=True).distinct()
+                status='failed', timestamp__gte=suspicious_window, ip_address=row['ip_address']
+            )
+            .values('username')
+            .annotate(
+                user_fails=Sum('attempt_count'),
+                user_last=Max('timestamp'),
+            )
+            .order_by('-user_fails')
         )
-        is_known = any(u in known_usernames for u in usernames)
-        suspicious_ips.append({
-            'ip_address': row['ip_address'],
-            'total': row['total'],
-            'last_attempt': row['last_attempt'],
-            'usernames': usernames,
-            'user_count': len(usernames),
-            'is_known': is_known,
-        })
+        for urow in per_user:
+            uname = urow['username'] or '(empty)'
+            info = user_info_map.get(uname, {})
+            is_guest = info.get('is_guest', False)
+            role = info.get('role', '')
+            if is_guest and not role:
+                role = 'guest'
+            suspicious_ips.append({
+                'ip_address': row['ip_address'],
+                'ip_total': row['total'],
+                'ip_last_attempt': row['last_attempt'],
+                'username': uname,
+                'user_fails': urow['user_fails'],
+                'user_last_attempt': urow['user_last'],
+                'is_known': uname in known_usernames,
+                'role': role,
+                'member_type': info.get('member_type', '') or '',
+                'is_guest': is_guest,
+            })
+
+    # Group failed logins by username + IP to avoid duplicate rows
+    failed_logins_qs = (
+        LoginAttempt.objects.filter(status='failed', timestamp__gte=window_24h)
+        .values('username', 'ip_address')
+        .annotate(
+            total_attempts=Sum('attempt_count'),
+            last_attempt=Max('timestamp'),
+        )
+        .order_by('-last_attempt')[:100]
+    )
+
+    # Build a map of (username, ip_address) → password_chars from the most recent attempt
+    last_attempt_pws = {}
+    for la in LoginAttempt.objects.filter(
+        status='failed', timestamp__gte=window_24h
+    ).order_by('-timestamp').values('username', 'ip_address', 'password_chars'):
+        key = (la['username'], la['ip_address'])
+        if key not in last_attempt_pws:
+            last_attempt_pws[key] = la['password_chars']
 
     enriched_logins = []
-    for fl in failed_logins:
-        info = user_info_map.get(fl.username, {})
+    for row in failed_logins_qs:
+        uname = row['username'] or '(empty)'
+        info = user_info_map.get(uname, {})
+        is_guest = info.get('is_guest', False)
+        role = info.get('role', '')
+        if is_guest and not role:
+            role = 'guest'
         enriched_logins.append({
-            'obj': fl,
-            'role': info.get('role', ''),
+            'username': uname,
+            'ip_address': row['ip_address'],
+            'total_attempts': row['total_attempts'],
+            'last_attempt': row['last_attempt'],
+            'password_chars': last_attempt_pws.get((row['username'], row['ip_address'])),
+            'role': role,
             'member_type': info.get('member_type', '') or '',
-            'is_known': fl.username in known_usernames,
+            'is_known': uname in known_usernames,
+            'is_guest': is_guest,
         })
 
     # Get security alerts related to suspicious activity
@@ -2775,11 +2847,13 @@ def suspicious_activity_view(request):
         'failed_logins': enriched_logins,
         'suspicious_ips': suspicious_ips,
         'suspicious_ips_count': len(suspicious_ips),
-        'recent_failed_logins_count': len(failed_logins),
+        'recent_failed_logins_count': len(enriched_logins),
         'known_usernames': known_usernames,
         'security_alerts': security_alerts,
         'users_with_failed_attempts': users_with_failed_attempts,
         'all_blocked_ips': all_blocked_ips,
+        'suspend_at': suspend_at,
+        'suspend_duration': suspend_duration,
     })
 
 
@@ -2789,10 +2863,31 @@ def suspicious_activity_view(request):
 # View ya Wanachama Waliofungiwa — Anaona wanachama waliozuiwa
 # ----------------------------------------------------------------------
 def suspended_members_view(request):
-    # Find users with failed attempts (temporarily suspended or locked)
-    # Users with 3+ failed attempts are considered suspended/locked
+    # Read dynamic thresholds from system preferences
+    suspend_at = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3) or 3)
+    suspend_duration = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10) or 10)
+    lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
+
+    # Currently suspended: failed_attempts >= suspend_at AND last failed attempt within suspend_duration
+    # Permanently locked: is_active=False AND failed_attempts >= lock_at
+    cutoff = timezone.now() - timedelta(minutes=suspend_duration)
+
+    # Get usernames with recent failed attempts (within suspension window)
+    suspended_usernames = set(
+        LoginAttempt.objects.filter(
+            status='failed', timestamp__gte=cutoff
+        ).values_list('username', flat=True)
+    )
+
     suspended = OLMSUser.objects.filter(
-        failed_attempts__gte=3, role='member'
+        Q(
+            failed_attempts__gte=suspend_at,
+            username__in=suspended_usernames,
+            is_active=True,
+        ) | Q(
+            is_active=False,
+            failed_attempts__gte=lock_at,
+        )
     ).select_related('virtual_card').order_by('-failed_attempts', '-created_at')
 
     # Get security alerts related to suspensions
@@ -2810,6 +2905,9 @@ def suspended_members_view(request):
     return render(request, 'accounts/suspended_members.html', {
         'suspended': suspended,
         'security_alerts': security_alerts,
+        'suspend_at': suspend_at,
+        'suspend_duration': suspend_duration,
+        'lock_at': lock_at,
     })
 
 
@@ -2910,20 +3008,31 @@ def clear_audit_logs_view(request):
 # ----------------------------------------------------------------------
 def audit_log_view(request):
     logs = AuditLog.objects.select_related('user').all()
-    
+
     q = request.GET.get('q', '').strip()
     user_q = request.GET.get('user', '').strip()
     date_q = request.GET.get('date', '').strip()
-    
+
     if q:
         logs = logs.filter(action__icontains=q)
     if user_q:
         logs = logs.filter(user__username__icontains=user_q)
     if date_q:
         logs = logs.filter(timestamp__date=date_q)
-        
-    logs = logs.order_by('-timestamp')[:200]
-    return render(request, 'accounts/audit_logs.html', {'logs': logs})
+
+    logs = logs.order_by('-timestamp')
+    paginator = Paginator(logs, 50)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    return render(request, 'accounts/audit_logs.html', {
+        'logs': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'q': q,
+        'user_q': user_q,
+        'date_q': date_q,
+    })
 
 
 @login_required
@@ -3000,11 +3109,14 @@ def system_preferences_view(request):
         ('SOFTCOPY_PREPAID_FEE',       '0',     'decimal', 'Default prepaid fee for softcopy access (0 = free)'),
         # ── Security ──────────────────────────────────────────────────────────
         ('ENABLE_AUTO_LOCKOUT',        '1',     'boolean', 'Lock account after max failed login attempts (1=yes, 0=no)'),
-        ('MAX_LOGIN_ATTEMPTS',         '5',     'integer', 'Failed login attempts before account lockout'),
+        ('MAX_LOGIN_ATTEMPTS',         '6',     'integer', 'Failed login attempts before permanent account lockout'),
+        ('SUSPEND_ATTEMPTS',           '3',     'integer', 'Failed login attempts before temporary suspension (first session)'),
+        ('SUSPEND_DURATION_MINUTES',   '10',    'minutes', 'Suspension duration in minutes before second session begins'),
         ('OTP_VALIDITY_MINUTES',       '10',    'minutes', 'OTP validity period (minutes)'),
         # ── Sessions & Passwords ──────────────────────────────────────────────
         ('SESSION_TIMEOUT_MINUTES',    '30',    'minutes', 'Inactivity timeout before session expires (minutes)'),
         ('PASSWORD_EXPIRY_DAYS',       '90',    'days',    'Days before password change is prompted'),
+        ('PASSWORD_HISTORY_DEPTH',     '5',     'integer', 'Number of previous passwords remembered to prevent reuse'),
         # ── Notifications ─────────────────────────────────────────────────────
         ('NEW_ARRIVAL_NOTIFY_ENABLED', '1',     'boolean', 'Send automatic new arrival notifications (1=yes, 0=no)'),
         ('NEW_ARRIVAL_NOTIFY_CHANNEL', 'sms',   'text',    'Notification channel for new arrivals: sms or email'),
@@ -3027,6 +3139,10 @@ def system_preferences_view(request):
                 pref.save(update_fields=update_fields)
 
     if request.method == 'POST':
+        # Boolean prefs rendered as checkboxes: HTML only submits them when checked.
+        # Any boolean pref key absent from POST means the checkbox was unchecked → force '0'.
+        BOOLEAN_PREF_KEYS = ['ENABLE_AUTO_LOCKOUT', 'NEW_ARRIVAL_NOTIFY_ENABLED']
+
         changed = []
         for post_key, raw_value in request.POST.items():
             if not post_key.startswith('pref_'):
@@ -3044,6 +3160,22 @@ def system_preferences_view(request):
                 pref_obj.save(update_fields=['value', 'updated_by', 'updated_at'])
                 changed.append(f"{pref_key}: {old_value} → {new_value}")
                 log_audit(request.user, f"System preference changed — {pref_key}: '{old_value}' → '{new_value}'", request)
+
+        # Handle unchecked boolean checkboxes (not present in POST → set to '0')
+        for bool_key in BOOLEAN_PREF_KEYS:
+            if f'pref_{bool_key}' not in request.POST:
+                try:
+                    pref_obj = SystemPreference.objects.get(key=bool_key)
+                    if pref_obj.value != '0':
+                        old_value = pref_obj.value
+                        pref_obj.value = '0'
+                        pref_obj.updated_by = request.user
+                        pref_obj.save(update_fields=['value', 'updated_by', 'updated_at'])
+                        changed.append(f"{bool_key}: {old_value} → 0")
+                        log_audit(request.user, f"System preference changed — {bool_key}: '{old_value}' → '0'", request)
+                except SystemPreference.DoesNotExist:
+                    pass
+
         if changed:
             messages.success(request, f'Saved {len(changed)} change(s): ' + ', '.join(changed[:3]) + ('…' if len(changed) > 3 else ''))
         else:
@@ -3076,6 +3208,13 @@ def block_ip_view(request):
         else:
             messages.error(request, 'Invalid IP address.')
     return redirect('suspicious_activity')
+
+
+@login_required
+@require_POST
+def clear_import_skipped_view(request):
+    request.session.pop('import_skipped', None)
+    return JsonResponse({'ok': True})
 
 
 @login_required

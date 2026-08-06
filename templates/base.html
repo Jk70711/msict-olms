@@ -1009,6 +1009,28 @@
 @keyframes loaderSpin { to { transform: rotate(360deg); } }
 </style>
 
+<!-- ── Guest Session Expiry Popup ─────────────────────────── -->
+{% if guest_session_expiry_iso %}
+<div id="guestExpiryModal" class="modal fade" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-warning">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title"><i class="bi bi-clock-history"></i> Session Expiring Soon</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body text-center">
+        <p class="fs-5">Your guest session will expire in <span id="guestExpiryCountdown" class="fw-bold text-danger">5:00</span> minutes.</p>
+        <p class="text-muted">Renew now to continue using the library without interruption.</p>
+      </div>
+      <div class="modal-footer justify-content-center">
+        <a href="{% url 'guest_dashboard' %}" class="btn btn-outline-secondary" data-bs-dismiss="modal">Dismiss</a>
+        <a href="{% url 'guest_session_renew' %}" class="btn btn-warning fw-bold"><i class="bi bi-arrow-repeat"></i> Renew Session</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <!-- ============================================================
      11. SIDEBAR YA DESKTOP (Upau wa Kando — Kompyuta)
      Inaonekana upande wa kushoto kwa watumiaji waliokuingia.
@@ -1935,6 +1957,149 @@
   } else {
     initAll();
   }
+})();
+</script>
+
+<!-- ── Guest Session Real-time Countdown ──────────────────── -->
+{% if guest_session_expiry_iso %}
+<script>
+(function() {
+  var expiryIso = "{{ guest_session_expiry_iso }}";
+  var sessionId = "{{ guest_session_id }}";
+  var expiryDate = new Date(expiryIso);
+  var popupShown = false;
+  var redirecting = false;
+
+  function tick() {
+    if (redirecting) return;
+    var now = new Date();
+    var diff = expiryDate - now;
+
+    if (diff <= 0) {
+      // Session expired — submit end_guest_session form with auto_expire
+      redirecting = true;
+      clearInterval(timerId);
+
+      // Try to find an existing end_guest_session form (guest_dashboard)
+      var form = document.querySelector('form[action*="end_guest_session"]');
+      if (form) {
+        var btn = document.createElement('input');
+        btn.type = 'hidden';
+        btn.name = 'auto_expire';
+        btn.value = '1';
+        form.appendChild(btn);
+        if (window.showGlobalLoader) window.showGlobalLoader();
+        form.submit();
+      } else {
+        // No form on this page — redirect to start-session (middleware will handle it)
+        if (window.showGlobalLoader) window.showGlobalLoader();
+        window.location.href = "{% url 'guest_start_session' %}";
+      }
+      return;
+    }
+
+    // 5-minute popup
+    if (diff <= 5 * 60 * 1000 && !popupShown) {
+      popupShown = true;
+      var modalEl = document.getElementById('guestExpiryModal');
+      if (modalEl) {
+        var bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        bsModal.show();
+      }
+    }
+
+    // Update countdown text inside modal
+    var cdEl = document.getElementById('guestExpiryCountdown');
+    if (cdEl && popupShown) {
+      var totalSec = Math.floor(diff / 1000);
+      var m = Math.floor(totalSec / 60);
+      var s = totalSec % 60;
+      cdEl.textContent = String(m) + ':' + String(s).padStart(2, '0');
+    }
+  }
+
+  var timerId = setInterval(tick, 1000);
+  tick();
+})();
+</script>
+{% endif %}
+
+<!-- ── Back-to-top button ─────────────────────────────────── -->
+<button id="backToTop" title="Back to top" aria-label="Back to top"
+  style="display:none;position:fixed;bottom:1.5rem;right:1.5rem;z-index:1055;
+         width:42px;height:42px;border-radius:50%;border:none;cursor:pointer;
+         background:var(--accent,#2563eb);color:#fff;font-size:1.15rem;
+         box-shadow:0 4px 16px rgba(37,99,235,.35);transition:opacity .2s,transform .2s;
+         align-items:center;justify-content:center;">
+  <i class="bi bi-chevron-up"></i>
+</button>
+
+<!-- ── Top-of-page progress bar ──────────────────────────── -->
+<div id="pageProgress" style="position:fixed;top:0;left:0;z-index:9999;height:3px;
+     width:0;background:linear-gradient(90deg,var(--accent,#2563eb),#a855f7);
+     transition:width .3s ease;pointer-events:none;"></div>
+
+<style>
+  /* ── Print styles — hide chrome, show content only ──────── */
+  @media print {
+    .sidebar, .topbar, #mobileSidebar, .offcanvas, .offcanvas-sidebar,
+    #backToTop, #pageProgress, footer, .btn, .btn-group,
+    .no-print, nav, .pagination, .alert-dismissible .btn-close,
+    form[data-no-auto-submit] { display: none !important; }
+    .main-content { margin-left: 0 !important; padding: .5rem !important; }
+    body { background: #fff !important; color: #000 !important; font-size: 11pt; }
+    .card { border: 1px solid #ddd !important; box-shadow: none !important; }
+    table { border-collapse: collapse !important; }
+    table th, table td { border: 1px solid #ccc !important; padding: 4px 8px !important; }
+    a[href]::after { content: none; }
+    .badge { border: 1px solid #999 !important; }
+    h1, h2, h3, h4 { page-break-after: avoid; }
+    tr { page-break-inside: avoid; }
+  }
+</style>
+
+<script>
+/* ── Back-to-top ─────────────────────────────────────────── */
+(function () {
+  var btn = document.getElementById('backToTop');
+  if (!btn) return;
+  btn.style.display = 'flex';
+  btn.style.opacity = '0';
+  btn.style.pointerEvents = 'none';
+  window.addEventListener('scroll', function () {
+    var visible = window.scrollY > 300;
+    btn.style.opacity  = visible ? '1' : '0';
+    btn.style.pointerEvents = visible ? 'auto' : 'none';
+  }, { passive: true });
+  btn.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+})();
+
+/* ── Page-load progress bar ──────────────────────────────── */
+(function () {
+  var bar = document.getElementById('pageProgress');
+  if (!bar) return;
+  var w = 0;
+  var iv = setInterval(function () {
+    w = Math.min(w + Math.random() * 15, 85);
+    bar.style.width = w + '%';
+  }, 120);
+  window.addEventListener('load', function () {
+    clearInterval(iv);
+    bar.style.width = '100%';
+    setTimeout(function () { bar.style.opacity = '0'; }, 300);
+  });
+  /* Also trigger on form submits to show activity */
+  document.addEventListener('submit', function () {
+    bar.style.opacity = '1';
+    bar.style.width = '40%';
+    var fiv = setInterval(function () {
+      w = Math.min(parseFloat(bar.style.width) + 5, 85);
+      bar.style.width = w + '%';
+    }, 200);
+    window.addEventListener('beforeunload', function () { clearInterval(fiv); bar.style.width = '100%'; });
+  });
 })();
 </script>
 </body>

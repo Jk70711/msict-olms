@@ -160,3 +160,11 @@ def reset(request):
     sess.title = ''
     sess.save()
     return JsonResponse({'ok': True})
+
+
+@require_POST
+def clear(request):
+    """Clear all messages from the current session but keep the session active."""
+    sess = _get_or_create_session(request)
+    sess.messages.all().delete()
+    return JsonResponse({'ok': True})

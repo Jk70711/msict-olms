@@ -195,6 +195,8 @@ def get_library_info():
     soft_fee       = float(_p('SOFTCOPY_PREPAID_FEE',   0))
     otp_validity   = int(_p('OTP_VALIDITY_MINUTES',     10))
     max_attempts   = int(_p('MAX_LOGIN_ATTEMPTS',       6))
+    suspend_at     = int(_p('SUSPEND_ATTEMPTS',         3))
+    suspend_dur    = int(_p('SUSPEND_DURATION_MINUTES', 10))
     session_tmout  = int(_p('SESSION_TIMEOUT_MINUTES',  30))
     pwd_expiry     = int(_p('PASSWORD_EXPIRY_DAYS',     90))
     auto_lockout   = _p('ENABLE_AUTO_LOCKOUT',          '1') == '1'
@@ -285,13 +287,16 @@ def get_library_info():
         'security': {
             'otp_validity_minutes':   otp_validity,
             'max_login_attempts':     max_attempts,
+            'suspend_attempts':       suspend_at,
+            'suspend_duration_minutes': suspend_dur,
             'session_timeout_minutes': session_tmout,
             'password_expiry_days':   pwd_expiry,
             'auto_lockout_enabled':   auto_lockout,
             'note': (
                 f"OTP codes expire after {otp_validity} minute(s). "
                 f"{'Accounts are locked after ' + str(max_attempts) + ' failed login attempts. ' if auto_lockout else 'Auto-lockout is currently disabled. '}"
-                f"Suspension (10-min cooldown) occurs at {max(1, max_attempts // 2)} failed attempts. "
+                f"Suspension ({suspend_dur}-min cooldown) occurs at {suspend_at} failed attempts. "
+                f"After suspension expires, {max_attempts - suspend_at} more attempts remain before permanent lock. "
                 f"Sessions expire after {session_tmout} minute(s) of inactivity. "
                 f"Password change is prompted every {pwd_expiry} day(s). "
                 f"Locked accounts can only be unlocked by an administrator."

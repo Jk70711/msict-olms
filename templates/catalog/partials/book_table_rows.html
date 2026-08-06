@@ -1,3 +1,4 @@
+{% load humanize %}
 {% for book in books %}
 <tr>
   <td>{{ forloop.counter }}</td>
@@ -20,7 +21,7 @@
   <td class="text-end">
     {% if book.has_special_softcopy %}
       {% if book.special_softcopy_fee > 0 %}
-        <span class="text-warning fw-semibold">TZS {{ book.special_softcopy_fee|floatformat:0 }}</span>
+        <span class="text-warning fw-semibold">TZS {{ book.special_softcopy_fee|floatformat:0|intcomma }}</span>
       {% else %}
         <span class="text-warning">Fee not set</span>
       {% endif %}
@@ -32,7 +33,7 @@
   </td>
   <td class="text-end">
     {% if book.lost_fine %}
-      <span class="text-danger fw-semibold">{{ book.lost_fine|floatformat:0 }}</span>
+      <span class="text-danger fw-semibold">{{ book.lost_fine|floatformat:0|intcomma }}</span>
     {% else %}
       <span class="text-muted">—</span>
     {% endif %}

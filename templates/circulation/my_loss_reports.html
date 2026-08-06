@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}My Loss Reports{% endblock %}
 {% block content %}
 <h4 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle-fill"></i> My Loss Reports</h4>
@@ -16,7 +17,7 @@
           <div class="rounded-circle position-absolute" style="width: 100px; height: 100px; background: conic-gradient(#dc2626 0% {{ unpaid_pct|default:0 }}%, rgba(220, 38, 38, 0.1) {{ unpaid_pct|default:0 }}% 100%); box-shadow: 0 5px 14px rgba(220, 38, 38, 0.3);"></div>
           <div class="rounded-circle position-absolute" style="width: 100px; height: 75px; background: white; box-shadow: inset 0 2px 7px rgba(0,0,0,0.1);"></div>
           <div class="text-center position-relative z-1">
-            <div class="fs-6 fw-bold" style="color: #dc2626; font-size: 0.15rem;">TZS {{ total_unpaid_loss_fine|floatformat:2 }}</div>
+            <div class="fs-6 fw-bold" style="color: #dc2626; font-size: 0.15rem;">TZS {{ total_unpaid_loss_fine|floatformat:2|intcomma }}</div>
           </div>
         </div>
         <div class="text-center mt-2">
@@ -67,7 +68,7 @@
 {% if unpaid_loss_reports %}
 <div class="alert alert-danger border-danger mb-3">
   <h6 class="fw-bold mb-2"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Loss Fines Detected</h6>
-  <p class="mb-2">You have unpaid loss fines totaling <strong>TZS {{ total_unpaid_loss_fine|floatformat:0 }}</strong>.</p>
+  <p class="mb-2">You have unpaid loss fines totaling <strong>TZS {{ total_unpaid_loss_fine|floatformat:0|intcomma }}</strong>.</p>
   <p class="mb-0">Click the <strong>Pay</strong> button next to each loss report to proceed with payment.</p>
 </div>
 {% endif %}
@@ -98,13 +99,13 @@
             <td><small>{{ report.transaction.copy.book.title }}<br><code>{{ report.transaction.copy.accession_no }}</code></small></td>
             <td><small>{{ report.circumstances|default:"—" }}</small></td>
             <td class="fw-bold text-danger">
-              {% if report.loss_fine %}TZS {{ report.loss_fine.amount|floatformat:0 }}{% else %}—{% endif %}
+              {% if report.loss_fine %}TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}{% else %}—{% endif %}
             </td>
             <td><small class="text-success fw-semibold">
-              {% if report.loss_fine %}TZS {{ report.loss_fine.amount_paid|floatformat:0 }}{% else %}—{% endif %}
+              {% if report.loss_fine %}TZS {{ report.loss_fine.amount_paid|floatformat:0|intcomma }}{% else %}—{% endif %}
             </small></td>
             <td><small class="text-danger fw-semibold">
-              {% if report.loss_fine %}TZS {{ report.loss_fine.remaining_balance|floatformat:0 }}{% else %}—{% endif %}
+              {% if report.loss_fine %}TZS {{ report.loss_fine.remaining_balance|floatformat:0|intcomma }}{% else %}—{% endif %}
             </small></td>
             <td>
               {% if report.status == 'confirmed' %}

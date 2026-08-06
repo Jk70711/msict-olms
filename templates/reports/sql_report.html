@@ -25,8 +25,8 @@
       <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#previewModal">
         <i class="bi bi-eye"></i> Preview
       </button>
-      <a href="{% url 'export_sql_pdf' %}?sql={{ sql|urlencode }}" class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
-      <a href="{% url 'export_sql_csv' %}?sql={{ sql|urlencode }}" class="btn btn-sm btn-outline-success"><i class="bi bi-filetype-csv"></i> Export CSV</a>
+      <form method="post" action="{% url 'export_sql_pdf' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="sql" value="{{ sql }}"><button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button></form>
+      <form method="post" action="{% url 'export_sql_csv' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="sql" value="{{ sql }}"><button type="submit" class="btn btn-sm btn-outline-success"><i class="bi bi-filetype-csv"></i> Export CSV</button></form>
     </div>
   </div>
   <div class="table-responsive" style="max-height:400px;overflow-y:auto">
@@ -71,7 +71,7 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <a href="{% url 'export_sql_pdf' %}?sql={{ sql|urlencode }}" class="btn btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
+        <form method="post" action="{% url 'export_sql_pdf' %}" class="d-inline">{% csrf_token %}<input type="hidden" name="sql" value="{{ sql }}"><button type="submit" class="btn btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</button></form>
       </div>
     </div>
   </div>

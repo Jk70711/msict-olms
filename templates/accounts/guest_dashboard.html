@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Guest Dashboard - MSICT OLMS{% endblock %}
 {% block content %}
 <div class="container py-4">
@@ -24,7 +25,7 @@
             </p>
             <p class="mb-1"><strong>Session #:</strong> #{{ active_session.pk }}</p>
             <p class="mb-1"><strong>Signed in:</strong> {{ active_session.sign_in_time|date:"d M Y H:i" }}</p>
-            <p class="mb-1"><strong>Total Hours:</strong> {{ active_session.paid_hours|floatformat:0 }}h</p>
+            <p class="mb-1"><strong>Total Hours:</strong> {{ active_session.paid_hours|floatformat:0|intcomma }}h</p>
             <p class="mb-1"><strong>Expires at:</strong> <span id="expiry-time">—</span></p>
 
             <!-- Countdown timer -->
@@ -83,7 +84,7 @@
           </ul>
           <hr>
           <h6 class="text-muted mb-2">Upgrade to Member</h6>
-          <p class="small text-muted mb-2">Get borrowing rights, virtual card, and full access to all library resources.</p>
+          <p class="small text-muted mb-2">Get borrowing rights and full access to all library resources.</p>
           <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-primary w-100">
             <i class="bi bi-arrow-up-circle me-1"></i> Become a Member
           </a>
@@ -116,7 +117,7 @@
               <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
               <td>{{ s.sign_out_time|date:"d M Y H:i"|default:'—' }}</td>
               <td>{{ s.duration_hours }}</td>
-              <td>{{ s.amount_paid|floatformat:0 }}</td>
+              <td>{{ s.amount_paid|floatformat:0|intcomma }}</td>
               <td>
                 {% if s.status == 'active' %}<span class="badge bg-success">Active</span>
                 {% elif s.status == 'renewed' %}<span class="badge bg-primary">Renewed</span>
@@ -163,14 +164,14 @@
 {% if active_session %}
 <script>
 (function() {
-  // Compute expiry timestamp from sign_in_time + paid_hours
+  // Display expiry time and countdown on the dashboard.
+  // Global redirect + popup are handled by base.html.
   var signInStr = "{{ active_session.sign_in_time|date:'c' }}";
   var paidHours = parseFloat("{{ active_session.paid_hours }}") || 0;
   var signInDate = new Date(signInStr);
   var expiryDate = new Date(signInDate.getTime() + paidHours * 3600 * 1000);
   var warned15 = false, warned5 = false;
 
-  // Display expiry time
   var expiryEl = document.getElementById('expiry-time');
   if (expiryEl) {
     expiryEl.textContent = expiryDate.toLocaleString('en-GB', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
@@ -181,25 +182,19 @@
     var diff = expiryDate - now;
 
     if (diff <= 0) {
-      document.getElementById('countdown-display').textContent = '00:00:00';
-      document.getElementById('countdown-display').classList.remove('text-primary','text-warning','text-danger');
-      document.getElementById('countdown-display').classList.add('text-danger');
-      var warn = document.getElementById('countdown-warning');
-      warn.style.display = 'block';
-      warn.className = 'small mt-1 text-danger fw-bold';
-      warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Session expired. Redirecting to payment…';
-      // Auto-submit sign out (server will redirect to payment page)
-      clearInterval(timerId);
-      var form = document.querySelector('form[action*="end_guest_session"]');
-      if (form) {
-        var btn = document.createElement('input');
-        btn.type = 'hidden';
-        btn.name = 'auto_expire';
-        btn.value = '1';
-        form.appendChild(btn);
-        if (window.showGlobalLoader) window.showGlobalLoader();
-        form.submit();
+      var cdEl = document.getElementById('countdown-display');
+      if (cdEl) {
+        cdEl.textContent = '00:00:00';
+        cdEl.classList.remove('text-primary','text-warning','text-danger');
+        cdEl.classList.add('text-danger');
       }
+      var warn = document.getElementById('countdown-warning');
+      if (warn) {
+        warn.style.display = 'block';
+        warn.className = 'small mt-1 text-danger fw-bold';
+        warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Session expired. Redirecting to payment…';
+      }
+      clearInterval(timerId);
       return;
     }
 
@@ -209,26 +204,29 @@
     var s = totalSec % 60;
     var display = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
     var cdEl = document.getElementById('countdown-display');
-    cdEl.textContent = display;
+    if (cdEl) cdEl.textContent = display;
 
     var warn = document.getElementById('countdown-warning');
 
-    // Color changes
     if (diff < 5 * 60 * 1000) {
-      cdEl.className = 'fs-3 fw-bold text-danger';
+      if (cdEl) cdEl.className = 'fs-3 fw-bold text-danger';
       if (!warned5) {
         warned5 = true;
-        warn.style.display = 'block';
-        warn.className = 'small mt-1 text-danger fw-bold';
-        warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Your session will expire soon. Please sign out.';
+        if (warn) {
+          warn.style.display = 'block';
+          warn.className = 'small mt-1 text-danger fw-bold';
+          warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Your session will expire soon. Renew now!';
+        }
       }
     } else if (diff < 15 * 60 * 1000) {
-      cdEl.className = 'fs-3 fw-bold text-warning';
+      if (cdEl) cdEl.className = 'fs-3 fw-bold text-warning';
       if (!warned15) {
         warned15 = true;
-        warn.style.display = 'block';
-        warn.className = 'small mt-1 text-warning';
-        warn.innerHTML = '<i class="bi bi-clock-fill"></i> Your session ends in 15 minutes.';
+        if (warn) {
+          warn.style.display = 'block';
+          warn.className = 'small mt-1 text-warning';
+          warn.innerHTML = '<i class="bi bi-clock-fill"></i> Your session ends in 15 minutes.';
+        }
       }
     }
   }

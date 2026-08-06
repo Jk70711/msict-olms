@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 {% block title %}Return Desk{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -264,10 +265,10 @@
                     {% if tid == tx.id %}
                       {% if fine_info.amount > 0 %}
                         <div class="text-danger fs-6 fw-bold mb-1">
-                          TZS {{ fine_info.amount|floatformat:0 }}
+                          TZS {{ fine_info.amount|floatformat:0|intcomma }}
                         </div>
                         {% if fine_info.remaining > 0 %}
-                          <div class="text-warning fw-semibold">Unpaid: TZS {{ fine_info.remaining|floatformat:0 }}</div>
+                          <div class="text-warning fw-semibold">Unpaid: TZS {{ fine_info.remaining|floatformat:0|intcomma }}</div>
                         {% endif %}
                       {% else %}
                         <span class="text-muted fs-6">—</span>
@@ -281,7 +282,7 @@
                   {% if tx.status == 'overdue' %}
                     {% for tid, fine_info in tx_fines.items %}
                       {% if tid == tx.id and fine_info.remaining > 0 %}
-                      <button class="btn btn-sm btn-danger fw-semibold" disabled title="Pay fine first: TZS {{ fine_info.remaining|floatformat:0 }}">
+                      <button class="btn btn-sm btn-danger fw-semibold" disabled title="Pay fine first: TZS {{ fine_info.remaining|floatformat:0|intcomma }}">
                         <i class="bi bi-exclamation-triangle"></i> Blocked
                       </button>
                       {% elif tid == tx.id and fine_info.remaining == 0 %}

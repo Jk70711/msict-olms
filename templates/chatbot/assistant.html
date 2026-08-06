@@ -75,9 +75,14 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="fw-bold mb-0"><i class="bi bi-robot"></i> AI Library Assistant</h4>
-  <button class="btn btn-outline-secondary btn-sm" id="resetBtn">
-    <i class="bi bi-arrow-clockwise"></i> New Chat
-  </button>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-warning btn-sm" id="clearBtn">
+      <i class="bi bi-eraser"></i> Clear Chats
+    </button>
+    <button class="btn btn-outline-secondary btn-sm" id="resetBtn">
+      <i class="bi bi-arrow-clockwise"></i> New Chat
+    </button>
+  </div>
 </div>
 
 <div class="assistant-shell">
@@ -126,12 +131,14 @@
 (function() {
   const SEND_URL  = '{% url "assistant_send"  %}';
   const RESET_URL = '{% url "assistant_reset" %}';
+  const CLEAR_URL = '{% url "assistant_clear" %}';
 
   const box = document.getElementById('msgsBox');
   const composer = document.getElementById('composer');
   const input  = document.getElementById('input');
   const sendBtn= document.getElementById('sendBtn');
   const resetBtn = document.getElementById('resetBtn');
+  const clearBtn = document.getElementById('clearBtn');
 
   function csrf() {
     const meta = document.querySelector('meta[name="csrf-token"]');
@@ -213,6 +220,13 @@
   resetBtn.addEventListener('click', async () => {
     if (!confirm('Start a new conversation?')) return;
     await fetch(RESET_URL, { method:'POST', credentials:'same-origin', headers:{'X-CSRFToken':csrf()} });
+    box.innerHTML = '';
+    location.reload();
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    if (!confirm('Clear all messages? The chat will remain open.')) return;
+    await fetch(CLEAR_URL, { method:'POST', credentials:'same-origin', headers:{'X-CSRFToken':csrf()} });
     box.innerHTML = '';
     location.reload();
   });

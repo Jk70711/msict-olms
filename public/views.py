@@ -259,7 +259,7 @@ def catalog_search_view(request):
 # Kwa mwanachama aliyeingia: inaonyesha hali ya mkopo wake wa kitabu hiki
 @login_required
 def book_detail_public_view(request, book_id):
-    from circulation.models import BorrowingTransaction, BorrowRequest
+    from circulation.models import BorrowRequest
     from django.conf import settings as _settings
     book = get_object_or_404(Book, pk=book_id)  # Tafuta kitabu au onyesha ukurasa wa 404
     copies = book.copies.exclude(status__in=['lost', 'damaged'])
@@ -311,7 +311,6 @@ def book_detail_public_view(request, book_id):
 # Inarudisha JSON na taarifa muhimu za kitabu
 @login_required
 def book_modal_data_view(request, book_id):
-    from django.http import JsonResponse
     book = get_object_or_404(Book, pk=book_id)
     data = {
         'id': book.pk,

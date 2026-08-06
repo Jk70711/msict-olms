@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Purchase Orders{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -22,7 +23,7 @@
             {% elif order.status == 'draft' %}<span class="badge bg-secondary">Draft</span>
             {% else %}<span class="badge bg-danger">{{ order.status|title }}</span>{% endif %}
           </td>
-          <td>TZS {{ order.total_amount|floatformat:0 }}</td>
+          <td>TZS {{ order.total_amount|floatformat:0|intcomma }}</td>
           <td><span class="badge bg-info">{{ order.items.count }}</span></td>
           <td><a href="{% url 'purchase_order_detail' order.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
         </tr>

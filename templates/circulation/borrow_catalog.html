@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Borrow a Book{% endblock %}
 {% block content %}
 <h4 class="fw-bold mb-3"><i class="bi bi-plus-circle"></i> Borrow a Book</h4>
@@ -80,16 +81,21 @@
           <a href="{% url 'request_borrow_softcopy' book.pk %}" class="btn btn-sm btn-warning w-100">
             <i class="bi bi-file-earmark-lock"></i> Borrow Special Soft Copy
             {% if book.special_softcopy_fee > 0 %}
-              <span class="badge bg-light text-dark ms-1">TZS {{ book.special_softcopy_fee|floatformat:0 }}</span>
+              <span class="badge bg-light text-dark ms-1">TZS {{ book.special_softcopy_fee|floatformat:0|intcomma }}</span>
             {% else %}
               <span class="badge bg-light text-dark ms-1">Fee not set</span>
             {% endif %}
           </a>
         {% endif %}
         {% if book.soft_free %}
-          <a href="{% url 'download_free_book' book.pk %}" class="btn btn-sm btn-success w-100">
-            <i class="bi bi-download"></i> Download Free PDF
-          </a>
+          <div class="btn-group btn-group-sm w-100">
+            <a href="{% url 'read_free_book' book.pk %}" class="btn btn-success" target="_blank">
+              <i class="bi bi-book-fill"></i> Read Free
+            </a>
+            <a href="{% url 'download_free_book' book.pk %}" class="btn btn-outline-success">
+              <i class="bi bi-download"></i> Download Free
+            </a>
+          </div>
         {% endif %}
         <a href="{% url 'book_detail_public' book.pk %}" class="btn btn-sm btn-outline-secondary w-100">
           <i class="bi bi-eye"></i> Details

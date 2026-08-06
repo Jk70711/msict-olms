@@ -25,26 +25,29 @@
 ### High Priority
 - [ ] Write unit tests for: login/OTP flow, borrow/return cycle, fine calculation
 - [ ] Write integration test for: overdue_check management command
-- [ ] Add `.env.example` file for easy setup
-- [ ] Add pagination to book_list, user_list, all_requests, fine_list views
+- [ ] Bulk import books via CSV/Excel upload (librarian tool)
 
 ### Medium Priority
-- [ ] Add barcode/QR scanner library (e.g. html5-qrcode) to return_desk for real scanning
-- [ ] Export reports as Excel (openpyxl is already in requirements.txt)
-- [ ] Bulk import books via CSV/Excel upload (librarian tool)
 - [ ] Add MARC XML import for catalog records
 - [ ] Member photo capture via webcam on profile page
-- [ ] Print receipt for fine payment (ReportLab PDF)
-- [ ] Admin IP blocking UI (currently only view, no block action)
-
-### Low Priority
 - [ ] Add Z39.50 protocol support for real federated catalog search
-- [ ] Dark mode toggle in base template
-- [ ] Email templates as HTML (currently plain text)
 - [ ] Add book rating/review system for members
 - [ ] REST API endpoints for mobile app (future phase)
 - [ ] Docker/docker-compose setup for easier deployment
 - [ ] CI/CD pipeline configuration
+
+### Low Priority
+- [ ] Print receipt for fine payment (additional POS-style thermal format)
+
+## ✅ Recently Completed (Audit Jul 2026)
+- [x] `.env.example` file present
+- [x] Pagination: book_list, user_list, all_requests, fine_list, audit_log (all paginated)
+- [x] Barcode/QR scanner (html5-qrcode@2.3.8) integrated in return_desk
+- [x] Excel export for all standard reports (members, books, circulation, fines)
+- [x] Admin IP blocking UI — block_ip_view and unblock_ip_view fully implemented
+- [x] HTML email support — EmailMultiAlternatives auto-detects HTML body and sends rich email
+- [x] All system preferences dynamically applied (OTP, password history, session timeout, etc.)
+- [x] Fine receipt PDF on payment completion
 
 ## 🐛 Known Limitations
 

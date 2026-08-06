@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}My Damage Reports{% endblock %}
 {% block content %}
 <h4 class="fw-bold mb-3"><i class="bi bi-exclamation-triangle-fill" style="color: #ea580c;"></i> My Damage Reports</h4>
@@ -17,7 +18,7 @@
     {% if total_unpaid_damage_fine > 0 %}
     <div class="alert alert-warning">
       <i class="bi bi-exclamation-triangle"></i>
-      You have unpaid damage fines totalling <strong>TZS {{ total_unpaid_damage_fine|floatformat:0 }}</strong>.
+      You have unpaid damage fines totalling <strong>TZS {{ total_unpaid_damage_fine|floatformat:0|intcomma }}</strong>.
       Please pay to continue borrowing books.
     </div>
     {% endif %}
@@ -49,11 +50,11 @@
             <td><small class="text-muted">{{ rpt.reported_at|date:"d M Y" }}</small></td>
             <td>
               {% if rpt.damage_fine %}
-                <div class="fw-bold" style="color: #ea580c;">TZS {{ rpt.damage_fine.amount|floatformat:0 }}</div>
+                <div class="fw-bold" style="color: #ea580c;">TZS {{ rpt.damage_fine.amount|floatformat:0|intcomma }}</div>
                 {% if rpt.damage_fine.paid %}
                   <span class="badge bg-success">Paid</span>
                 {% elif rpt.damage_fine.amount_paid > 0 %}
-                  <span class="badge bg-warning text-dark">Partial: TZS {{ rpt.damage_fine.remaining_balance|floatformat:0 }} left</span>
+                  <span class="badge bg-warning text-dark">Partial: TZS {{ rpt.damage_fine.remaining_balance|floatformat:0|intcomma }} left</span>
                 {% else %}
                   <span class="badge bg-danger">Unpaid</span>
                 {% endif %}

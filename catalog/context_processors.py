@@ -15,16 +15,25 @@ def security_badges(request):
     recent_failed_logins_count = 0
     pending_requests_count = 0
     pending_registrations_count = 0
+    pending_loss_reports_count = 0
+    pending_reservations_count = 0
+    unpaid_fines_count = 0
+    pending_damage_reports_count = 0
+    pending_ill_requests_count = 0
+    active_guest_sessions_count = 0
     member_active_borrowings = 0
     member_reservations = 0
     member_unpaid_fines = 0
+    member_ill_pending = 0
+    member_loss_fines = 0
+    member_damage_fines = 0
     try:
         if request.user.is_authenticated:
             from circulation.models import (
                 Notification, BorrowRequest, Reservation,
-                BorrowingTransaction, Fine, LossReport,
+                BorrowingTransaction, Fine, LossReport, DamageReport,
             )
-            from accounts.models import OLMSUser, LoginAttempt
+            from accounts.models import OLMSUser, LoginAttempt, GuestSession, SystemPreference
             from django.db.models import Q, Count, Sum
             from datetime import timedelta
             from django.utils import timezone
@@ -39,10 +48,29 @@ def security_badges(request):
                     sa_qs = sa_qs.filter(created_at__gt=sa_last)
                 security_alerts_count = sa_qs.count()
 
-                # Suspicious/Suspended Members: match suspended_members_view
-                # (failed_attempts >= 3, role='member')
+                # Suspicious/Suspended Members: match suspended_members_view logic
+                # Only count users currently suspended (within suspend_duration) or permanently locked
+                from datetime import timedelta as _td
+                _suspend_at = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3) or 3)
+                _suspend_dur = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10) or 10)
+                _lock_at = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6) or 6)
+                _cutoff = timezone.now() - _td(minutes=_suspend_dur)
+                _suspended_unames = set(
+                    LoginAttempt.objects.filter(
+                        status='failed', timestamp__gte=_cutoff
+                    ).values_list('username', flat=True)
+                )
                 su_last = _badge_last_viewed(request.user, 'suspicious_users')
-                su_qs = OLMSUser.objects.filter(failed_attempts__gte=3, role='member')
+                su_qs = OLMSUser.objects.filter(
+                    Q(
+                        failed_attempts__gte=_suspend_at,
+                        username__in=_suspended_unames,
+                        is_active=True,
+                    ) | Q(
+                        is_active=False,
+                        failed_attempts__gte=_lock_at,
+                    )
+                )
                 if su_last:
                     su_qs = su_qs.filter(created_at__gt=su_last)
                 suspicious_users_count = su_qs.count()
@@ -57,29 +85,21 @@ def security_badges(request):
                     la_qs = la_qs.filter(created_at__gt=la_last)
                 locked_accounts_count = la_qs.count()
 
-                # Suspicious IPs: last 1h with >=5 failed attempts (match suspicious_activity_view)
-                window_1h = timezone.now() - timedelta(hours=1)
+                # Suspicious IPs: match suspicious_activity_view (configurable window and threshold)
+                _si_window = timezone.now() - timedelta(minutes=_suspend_dur)
                 si_last = _badge_last_viewed(request.user, 'suspicious_ips')
-                si_qs = LoginAttempt.objects.filter(status='failed', timestamp__gte=window_1h)
-                if si_last and si_last > window_1h:
+                si_qs = LoginAttempt.objects.filter(status='failed', timestamp__gte=_si_window)
+                if si_last and si_last > _si_window:
                     si_qs = si_qs.filter(timestamp__gt=si_last)
                 suspicious_ips_count = si_qs.values('ip_address').annotate(
                     total=Sum('attempt_count')
-                ).filter(total__gte=5).count()
+                ).filter(total__gte=_suspend_at).count()
 
                 # Recent failed logins: match suspicious_activity_view (last 24h)
                 window_24h = timezone.now() - timedelta(days=1)
                 recent_failed_logins_count = LoginAttempt.objects.filter(
                     status='failed', timestamp__gte=window_24h
                 ).count()
-
-                # Pending Registrations: match public_registrations_view
-                # (role='member', registration_status='pending')
-                pr_last = _badge_last_viewed(request.user, 'pending_registrations')
-                pr_qs = OLMSUser.objects.filter(role='member', registration_status='pending')
-                if pr_last:
-                    pr_qs = pr_qs.filter(created_at__gt=pr_last)
-                pending_registrations_count = pr_qs.count()
 
             # ── Librarian/Admin counts ──
             if request.user.role in ('admin', 'librarian'):
@@ -90,15 +110,68 @@ def security_badges(request):
                     br_qs = br_qs.filter(request_date__gt=br_last)
                 pending_requests_count = br_qs.count()
 
+                # Pending Registrations: match public_registrations_view
+                # (role='member', registration_status='pending')
+                pr_last = _badge_last_viewed(request.user, 'pending_registrations')
+                pr_qs = OLMSUser.objects.filter(role='member', registration_status='pending')
+                if pr_last:
+                    pr_qs = pr_qs.filter(created_at__gt=pr_last)
+                pending_registrations_count = pr_qs.count()
+
+                # Pending Loss Reports: match loss_report_list_view with status='pending'
+                lr_last = _badge_last_viewed(request.user, 'pending_loss_reports')
+                lr_qs = LossReport.objects.filter(status='pending')
+                if lr_last:
+                    lr_qs = lr_qs.filter(reported_at__gt=lr_last)
+                pending_loss_reports_count = lr_qs.count()
+
+                # Pending Reservations: match reservation_list_view (pending + notified)
+                res_last = _badge_last_viewed(request.user, 'pending_reservations')
+                res_qs = Reservation.objects.filter(status__in=['pending', 'notified'])
+                if res_last:
+                    res_qs = res_qs.filter(created_at__gt=res_last)
+                pending_reservations_count = res_qs.count()
+
+                # Unpaid Fines: match fine_list_view (paid=False)
+                uf_last = _badge_last_viewed(request.user, 'unpaid_fines')
+                uf_qs = Fine.objects.filter(paid=False)
+                if uf_last:
+                    uf_qs = uf_qs.filter(created_at__gt=uf_last)
+                unpaid_fines_count = uf_qs.count()
+
+                # Pending Damage Reports: DamageReport with unpaid damage fines
+                dr_last = _badge_last_viewed(request.user, 'pending_damage_reports')
+                dr_qs = DamageReport.objects.filter(
+                    damage_fine__isnull=False, damage_fine__paid=False
+                )
+                if dr_last:
+                    dr_qs = dr_qs.filter(reported_at__gt=dr_last)
+                pending_damage_reports_count = dr_qs.count()
+
+                # Pending ILL Requests: match ill_request_list_view with status='pending'
+                from acquisitions.models import ILLRequest
+                ill_last = _badge_last_viewed(request.user, 'pending_ill_requests')
+                ill_qs = ILLRequest.objects.filter(status='pending')
+                if ill_last:
+                    ill_qs = ill_qs.filter(request_date__gt=ill_last)
+                pending_ill_requests_count = ill_qs.count()
+
+                # Active Guest Sessions: match guest_manage_view
+                gs_last = _badge_last_viewed(request.user, 'active_guest_sessions')
+                gs_qs = GuestSession.objects.filter(status__in=['active', 'renewed'])
+                if gs_last:
+                    gs_qs = gs_qs.filter(sign_in_time__gt=gs_last)
+                active_guest_sessions_count = gs_qs.count()
+
             # ── Member-specific counts (match actual page queries) ──
             if request.user.role == 'member':
                 # Active Borrowings: match member_msict_borrowings_view
-                # (borrowed/overdue/lost, exclude expired special softcopies)
+                # (borrowed/overdue only, exclude expired special softcopies)
                 now = timezone.now()
                 mb_last = _badge_last_viewed(request.user, 'member_active_borrowings')
                 mb_qs = BorrowingTransaction.objects.filter(
                     user=request.user,
-                    status__in=['borrowed', 'overdue', 'lost'],
+                    status__in=['borrowed', 'overdue'],
                     copy__book__isnull=False,
                 ).exclude(
                     copy__copy_type='softcopy',
@@ -127,6 +200,32 @@ def security_badges(request):
                 if mf_last:
                     mf_qs = mf_qs.filter(created_at__gt=mf_last)
                 member_unpaid_fines = mf_qs.count()
+
+                # ILL Pending: match member_ill_borrowings_view (pending status)
+                from acquisitions.models import ILLRequest
+                mil_last = _badge_last_viewed(request.user, 'member_ill_pending')
+                mil_qs = ILLRequest.objects.filter(user=request.user, status='pending')
+                if mil_last:
+                    mil_qs = mil_qs.filter(request_date__gt=mil_last)
+                member_ill_pending = mil_qs.count()
+
+                # Loss Fines: match my_loss_reports_view (unpaid loss fines)
+                ml_last = _badge_last_viewed(request.user, 'member_loss_fines')
+                ml_qs = LossReport.objects.filter(
+                    user=request.user, loss_fine__isnull=False, loss_fine__paid=False
+                )
+                if ml_last:
+                    ml_qs = ml_qs.filter(reported_at__gt=ml_last)
+                member_loss_fines = ml_qs.count()
+
+                # Damage Fines: match my_damage_reports_view (unpaid damage fines)
+                md_last = _badge_last_viewed(request.user, 'member_damage_fines')
+                md_qs = DamageReport.objects.filter(
+                    user=request.user, damage_fine__isnull=False, damage_fine__paid=False
+                )
+                if md_last:
+                    md_qs = md_qs.filter(reported_at__gt=md_last)
+                member_damage_fines = md_qs.count()
     except Exception:
         pass
     return {
@@ -137,9 +236,18 @@ def security_badges(request):
         'recent_failed_logins_count': recent_failed_logins_count,
         'pending_requests_count': pending_requests_count,
         'pending_registrations_count': pending_registrations_count,
+        'pending_loss_reports_count': pending_loss_reports_count,
+        'pending_reservations_count': pending_reservations_count,
+        'unpaid_fines_count': unpaid_fines_count,
+        'pending_damage_reports_count': pending_damage_reports_count,
+        'pending_ill_requests_count': pending_ill_requests_count,
+        'active_guest_sessions_count': active_guest_sessions_count,
         'member_active_borrowings': member_active_borrowings,
         'member_reservations': member_reservations,
         'member_unpaid_fines': member_unpaid_fines,
+        'member_ill_pending': member_ill_pending,
+        'member_loss_fines': member_loss_fines,
+        'member_damage_fines': member_damage_fines,
     }
 
 

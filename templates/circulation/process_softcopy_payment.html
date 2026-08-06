@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Process Payment — {{ copy.book.title }}{% endblock %}
 
 {% block content %}
@@ -21,7 +22,7 @@
           </div>
 
           <div class="text-center mb-4">
-            <div class="display-4 fw-bold text-warning">TZS {{ amount|floatformat:0 }}</div>
+            <div class="display-4 fw-bold text-warning">TZS {{ amount|floatformat:0|intcomma }}</div>
             <div class="text-muted">Access Fee</div>
           </div>
 
@@ -253,7 +254,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     const confirmMessage =
-      'Confirm payment of TZS {{ amount|floatformat:0 }} via ' +
+      'Confirm payment of TZS {{ amount|floatformat:0|intcomma }} via ' +
       methodSelect.options[methodSelect.selectedIndex].text +
       '.\n\nAfter payment, the member will receive a temporary access link valid for 7 days.';
     if (!window.confirm(confirmMessage)) {

@@ -13,6 +13,9 @@ urlpatterns = [
     # ── Vitabu ────────────────────────────────────────────
     path('books/', views.book_list_view, name='book_list'),                                    # Orodha ya vitabu
     path('books/create/', views.book_create_view, name='book_create'),                         # Unda kitabu kipya
+    path('books/bulk-import/', views.bulk_import_books_view, name='bulk_import_books'),         # Ingiza vitabu wingi
+    path('books/bulk-import/template/', views.bulk_import_books_template_view, name='bulk_import_template'),  # Pakua templeti ya CSV
+    path('books/new-arrival-broadcast/', views.new_arrival_broadcast_view, name='new_arrival_broadcast'),  # Tangaza vitabu vipya
     path('books/<int:book_id>/', views.book_detail_view, name='book_detail'),                  # Maelezo ya kitabu
     path('books/<int:book_id>/edit/', views.book_edit_view, name='book_edit'),                 # Hariri kitabu
     path('books/<int:book_id>/delete/', views.book_delete_view, name='book_delete'),           # Futa kitabu
@@ -28,6 +31,7 @@ urlpatterns = [
     path('copies/<int:copy_id>/read/', views.serve_softcopy_view, name='serve_softcopy'),                          # Soma PDF online
     path('copies/access/<uuid:token>/', views.softcopy_access_link_view, name='softcopy_access'),                    # Tokenized access link
     path('copies/<int:copy_id>/pdf-data/', views.special_pdf_data_view, name='special_pdf_data'),                 # Raw PDF bytes (viewer only)
+    path('copies/<int:copy_id>/free-data/', views.free_softcopy_data_view, name='free_softcopy_data'),              # Raw bytes for free softcopy viewer
     path('copies/<int:copy_id>/download/', views.free_softcopy_download_view, name='free_softcopy_download'),     # Pakua PDF bure
 
     # ── Kozi na Makategoria ────────────────────────────────

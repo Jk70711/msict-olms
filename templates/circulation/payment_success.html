@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Payment Successful{% endblock %}
 
 {% block content %}
@@ -24,7 +25,7 @@
               </div>
               <div class="row mb-2">
                 <div class="col-5 text-muted small">Amount Paid:</div>
-                <div class="col-7 fw-semibold small">TZS {{ amount|floatformat:0 }}</div>
+                <div class="col-7 fw-semibold small">TZS {{ amount|floatformat:0|intcomma }}</div>
               </div>
               <div class="row mb-2">
                 <div class="col-5 text-muted small">Transaction ID:</div>

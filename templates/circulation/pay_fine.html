@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Pay Fine{% endblock %}
 {% block content %}
 <h4 class="fw-bold mb-3"><i class="bi bi-credit-card"></i> Pay Fine</h4>
@@ -15,7 +16,7 @@
           </div>
           <div class="col-6">
             <small class="text-muted">Amount</small>
-            <div class="fw-bold text-danger fs-4">TZS {{ fine.amount|floatformat:0 }}</div>
+            <div class="fw-bold text-danger fs-4">TZS {{ fine.amount|floatformat:0|intcomma }}</div>
           </div>
         </div>
         {% if fine.transaction %}
@@ -27,11 +28,11 @@
         <div class="row mb-3">
           <div class="col-6">
             <small class="text-muted">Paid</small>
-            <div class="fw-bold text-success">TZS {{ fine.amount_paid|floatformat:0 }}</div>
+            <div class="fw-bold text-success">TZS {{ fine.amount_paid|floatformat:0|intcomma }}</div>
           </div>
           <div class="col-6">
             <small class="text-muted">Remaining</small>
-            <div class="fw-bold text-danger">TZS {{ fine.remaining_balance|floatformat:0 }}</div>
+            <div class="fw-bold text-danger">TZS {{ fine.remaining_balance|floatformat:0|intcomma }}</div>
           </div>
         </div>
       </div>
@@ -88,9 +89,9 @@
               <div class="mb-3">
                 <label class="form-label fw-semibold">Amount to Pay (TZS)</label>
                 <input type="number" name="payment_amount" class="form-control" id="payment-amount"
-                       value="{{ fine.remaining_balance|floatformat:0 }}" min="1"
-                       max="{{ fine.remaining_balance|floatformat:0 }}" required>
-                <small class="text-muted">Remaining balance: TZS {{ fine.remaining_balance|floatformat:0 }}</small>
+                       value="{{ fine.remaining_balance|floatformat:0|intcomma }}" min="1"
+                       max="{{ fine.remaining_balance|floatformat:0|intcomma }}" required>
+                <small class="text-muted">Remaining balance: TZS {{ fine.remaining_balance|floatformat:0|intcomma }}</small>
               </div>
 
               <!-- Mobile Money Fields -->

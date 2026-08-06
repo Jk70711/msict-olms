@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Loss Reports{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -82,15 +83,15 @@
               <td class="small text-muted">{{ report.reported_at|date:"d M Y" }}<br>{{ report.reported_at|time:"H:i" }}</td>
               <td>
                 {% if report.loss_fine %}
-                <div class="text-danger">Loss: TZS {{ report.loss_fine.amount|floatformat:0 }}</div>
+                <div class="text-danger">Loss: TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}</div>
                 {% endif %}
                 {% if report.overdue_fine %}
-                <div class="text-warning">Overdue: TZS {{ report.overdue_fine.amount|floatformat:0 }}</div>
+                <div class="text-warning">Overdue: TZS {{ report.overdue_fine.amount|floatformat:0|intcomma }}</div>
                 {% endif %}
                 {% if not report.loss_fine and not report.overdue_fine %}<span class="text-muted">—</span>{% endif %}
               </td>
               <td>
-                <strong class="text-danger">TZS {{ report.total_remaining|floatformat:0 }}</strong>
+                <strong class="text-danger">TZS {{ report.total_remaining|floatformat:0|intcomma }}</strong>
               </td>
               <td>
                 <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}bg-danger{% elif report.status == 'resolved' %}bg-success{% else %}bg-secondary{% endif %}">{{ report.get_status_display }}</span>
@@ -256,7 +257,7 @@
                       </ul>
                     </li>
                     {% if report.loss_fine and not report.loss_fine.paid and report.loss_fine.amount_paid == 0 %}
-                    <li class="text-success">Unpaid loss fine of <strong>TZS {{ report.loss_fine.amount|floatformat:0 }}</strong> will be <strong>cancelled</strong>.</li>
+                    <li class="text-success">Unpaid loss fine of <strong>TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}</strong> will be <strong>cancelled</strong>.</li>
                     {% endif %}
                   </ul>
                   <div class="mb-3">
@@ -304,26 +305,26 @@
                       {% if report.loss_fine %}
                       <tr>
                         <td><span class="badge bg-danger">Loss Fine</span></td>
-                        <td>TZS {{ report.loss_fine.amount|floatformat:0 }}</td>
-                        <td>TZS {{ report.loss_fine.amount_paid|floatformat:0 }}</td>
-                        <td class="fw-semibold text-danger">TZS {{ report.loss_fine.remaining_balance|floatformat:0 }}</td>
+                        <td>TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}</td>
+                        <td>TZS {{ report.loss_fine.amount_paid|floatformat:0|intcomma }}</td>
+                        <td class="fw-semibold text-danger">TZS {{ report.loss_fine.remaining_balance|floatformat:0|intcomma }}</td>
                         <td>{% if report.loss_fine.paid %}<span class="badge bg-success">Paid</span>{% elif report.loss_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
                       </tr>
                       {% endif %}
                       {% if report.overdue_fine %}
                       <tr>
                         <td><span class="badge bg-warning text-dark">Overdue Fine</span></td>
-                        <td>TZS {{ report.overdue_fine.amount|floatformat:0 }}</td>
-                        <td>TZS {{ report.overdue_fine.amount_paid|floatformat:0 }}</td>
-                        <td class="fw-semibold text-danger">TZS {{ report.overdue_fine.remaining_balance|floatformat:0 }}</td>
+                        <td>TZS {{ report.overdue_fine.amount|floatformat:0|intcomma }}</td>
+                        <td>TZS {{ report.overdue_fine.amount_paid|floatformat:0|intcomma }}</td>
+                        <td class="fw-semibold text-danger">TZS {{ report.overdue_fine.remaining_balance|floatformat:0|intcomma }}</td>
                         <td>{% if report.overdue_fine.paid %}<span class="badge bg-success">Paid</span>{% elif report.overdue_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
                       </tr>
                       {% endif %}
                       <tr class="table-dark">
                         <td><strong>TOTAL</strong></td>
-                        <td><strong>TZS {{ report.total_amount|floatformat:0 }}</strong></td>
+                        <td><strong>TZS {{ report.total_amount|floatformat:0|intcomma }}</strong></td>
                         <td></td>
-                        <td class="text-warning fw-bold">TZS {{ report.total_remaining|floatformat:0 }}</td>
+                        <td class="text-warning fw-bold">TZS {{ report.total_remaining|floatformat:0|intcomma }}</td>
                         <td></td>
                       </tr>
                     </tbody>
@@ -336,16 +337,16 @@
                       onchange="olmsSetPayAmount('{{ report.pk }}',
                         {{ report.loss_fine.remaining_balance|floatformat:2|default:'0' }},
                         {{ report.overdue_fine.remaining_balance|floatformat:2|default:'0' }},
-                        {{ report.total_remaining|floatformat:2 }})">
+                        {{ report.total_remaining|floatformat:2|intcomma }})">
                       <option value="">— Select —</option>
                       {% if report.loss_fine and not report.loss_fine.paid %}
-                      <option value="loss">Loss Fine only — TZS {{ report.loss_fine.remaining_balance|floatformat:0 }} remaining</option>
+                      <option value="loss">Loss Fine only — TZS {{ report.loss_fine.remaining_balance|floatformat:0|intcomma }} remaining</option>
                       {% endif %}
                       {% if report.overdue_fine and not report.overdue_fine.paid %}
-                      <option value="overdue">Overdue Fine only — TZS {{ report.overdue_fine.remaining_balance|floatformat:0 }} remaining</option>
+                      <option value="overdue">Overdue Fine only — TZS {{ report.overdue_fine.remaining_balance|floatformat:0|intcomma }} remaining</option>
                       {% endif %}
                       {% if report.loss_fine and not report.loss_fine.paid and report.overdue_fine and not report.overdue_fine.paid %}
-                      <option value="both">Both Fines — TZS {{ report.total_remaining|floatformat:0 }} total</option>
+                      <option value="both">Both Fines — TZS {{ report.total_remaining|floatformat:0|intcomma }} total</option>
                       {% endif %}
                     </select>
                   </div>

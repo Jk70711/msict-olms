@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Record Loss Fine Payment — {{ report.user.get_full_name }}{% endblock %}
 {% block content %}
 <div class="row justify-content-center">
@@ -57,7 +58,7 @@
             <div class="small text-muted">Total Outstanding</div>
             {% with total_rem=fine.remaining_balance|add:overdue_fine.remaining_balance %}
             <div class="fw-bold text-danger fs-5">
-              TZS {{ fine.remaining_balance|floatformat:0 }}{% if overdue_fine %} + {{ overdue_fine.remaining_balance|floatformat:0 }}{% endif %}
+              TZS {{ fine.remaining_balance|floatformat:0|intcomma }}{% if overdue_fine %} + {{ overdue_fine.remaining_balance|floatformat:0|intcomma }}{% endif %}
             </div>
             {% endwith %}
           </div>
@@ -72,17 +73,17 @@
           <tbody>
             <tr>
               <td><span class="badge bg-danger">Loss Fine</span></td>
-              <td>TZS {{ fine.amount|floatformat:0 }}</td>
-              <td>TZS {{ fine.amount_paid|floatformat:0 }}</td>
-              <td class="fw-semibold text-danger">TZS {{ fine.remaining_balance|floatformat:0 }}</td>
+              <td>TZS {{ fine.amount|floatformat:0|intcomma }}</td>
+              <td>TZS {{ fine.amount_paid|floatformat:0|intcomma }}</td>
+              <td class="fw-semibold text-danger">TZS {{ fine.remaining_balance|floatformat:0|intcomma }}</td>
               <td>{% if fine.paid %}<span class="badge bg-success">Paid</span>{% elif fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
             </tr>
             {% if overdue_fine %}
             <tr>
               <td><span class="badge bg-warning text-dark">Overdue Fine</span></td>
-              <td>TZS {{ overdue_fine.amount|floatformat:0 }}</td>
-              <td>TZS {{ overdue_fine.amount_paid|floatformat:0 }}</td>
-              <td class="fw-semibold text-danger">TZS {{ overdue_fine.remaining_balance|floatformat:0 }}</td>
+              <td>TZS {{ overdue_fine.amount|floatformat:0|intcomma }}</td>
+              <td>TZS {{ overdue_fine.amount_paid|floatformat:0|intcomma }}</td>
+              <td class="fw-semibold text-danger">TZS {{ overdue_fine.remaining_balance|floatformat:0|intcomma }}</td>
               <td>{% if overdue_fine.paid %}<span class="badge bg-success">Paid</span>{% elif overdue_fine.amount_paid > 0 %}<span class="badge bg-warning text-dark">Partial</span>{% else %}<span class="badge bg-danger">Unpaid</span>{% endif %}</td>
             </tr>
             {% endif %}
@@ -114,18 +115,18 @@
               <label class="form-label fw-bold">Fine to Pay <span class="text-danger">*</span></label>
               <select name="fine_type" id="detailFineType" class="form-select" required
                 onchange="detailSetAmount(
-                  '{{ fine.remaining_balance|floatformat:2 }}',
+                  '{{ fine.remaining_balance|floatformat:2|intcomma }}',
                   '{{ overdue_fine.remaining_balance|floatformat:2|default:0 }}')">
                 <option value="">— Select —</option>
                 {% if not fine.paid %}
-                <option value="loss">Loss Fine only — TZS {{ fine.remaining_balance|floatformat:0 }} remaining</option>
+                <option value="loss">Loss Fine only — TZS {{ fine.remaining_balance|floatformat:0|intcomma }} remaining</option>
                 {% endif %}
                 {% if overdue_fine and not overdue_fine.paid %}
-                <option value="overdue">Overdue Fine only — TZS {{ overdue_fine.remaining_balance|floatformat:0 }} remaining</option>
+                <option value="overdue">Overdue Fine only — TZS {{ overdue_fine.remaining_balance|floatformat:0|intcomma }} remaining</option>
                 {% endif %}
                 {% if not fine.paid and overdue_fine and not overdue_fine.paid %}
                 {% with total=fine.remaining_balance|add:overdue_fine.remaining_balance %}
-                <option value="both">Both Fines — TZS {{ total|floatformat:0 }} total</option>
+                <option value="both">Both Fines — TZS {{ total|floatformat:0|intcomma }} total</option>
                 {% endwith %}
                 {% endif %}
               </select>

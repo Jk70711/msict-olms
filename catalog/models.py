@@ -80,6 +80,7 @@ class Book(models.Model):
     cover_image = models.ImageField(upload_to='book_covers/', null=True, blank=True)
     marc_xml = models.TextField(blank=True)
     show_in_carousel = models.BooleanField(default=False)
+    new_arrival_notified = models.BooleanField(default=False, help_text='True if a new-arrival broadcast was sent for this book')
     lost_fine = models.DecimalField(max_digits=10, decimal_places=2, default=0)  # Fine if copy is lost
     courses = models.ManyToManyField(Course, through='BookCourse', blank=True, related_name='books')
     created_at = models.DateTimeField(auto_now_add=True)

@@ -1,4 +1,5 @@
 {% load static %}
+{% load humanize %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -240,15 +241,15 @@
     <div class="summary-card">
       <div class="summary-row">
         <span class="summary-label">Hours</span>
-        <span class="summary-value">{{ paid_hours|floatformat:0 }}h</span>
+        <span class="summary-value">{{ paid_hours|floatformat:0|intcomma }}h</span>
       </div>
       <div class="summary-row">
         <span class="summary-label">Hourly Rate</span>
-        <span class="summary-value">TZS {{ hourly_rate|floatformat:0 }}/h</span>
+        <span class="summary-value">TZS {{ hourly_rate|floatformat:0|intcomma }}/h</span>
       </div>
       <div class="summary-row">
         <span class="summary-label">Total to Pay</span>
-        <span class="summary-value text-success fs-5">TZS {{ total_amount|floatformat:0 }}</span>
+        <span class="summary-value text-success fs-5">TZS {{ total_amount|floatformat:0|intcomma }}</span>
       </div>
     </div>
 
@@ -353,7 +354,7 @@
       <div class="border-top pt-3 mt-2">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <span class="fw-bold">Total:</span>
-          <span class="fw-bold fs-4 text-success">TZS {{ total_amount|floatformat:0 }}</span>
+          <span class="fw-bold fs-4 text-success">TZS {{ total_amount|floatformat:0|intcomma }}</span>
         </div>
         <div class="d-grid gap-2">
           <button type="submit" class="btn btn-primary btn-lg">
@@ -377,7 +378,7 @@
     <div class="summary-card mb-3">
       <div class="summary-row">
         <span class="summary-label">Hourly Rate</span>
-        <span class="summary-value">TZS {{ hourly_rate|floatformat:0 }}/h</span>
+        <span class="summary-value">TZS {{ hourly_rate|floatformat:0|intcomma }}/h</span>
       </div>
       <div class="summary-row">
         <span class="summary-label">Max Hours / Day</span>

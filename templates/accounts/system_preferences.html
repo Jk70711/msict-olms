@@ -233,20 +233,6 @@
         </div>
         {% endwith %}
 
-        {% with p=prefs.OTP_VALIDITY_MINUTES %}
-        <div class="col-md-4 col-sm-6">
-          <div class="pref-card">
-            <div class="pref-label"><i class="bi bi-shield-lock text-primary"></i> OTP Validity <span class="badge bg-primary badge-unit">minutes</span></div>
-            <div class="input-group">
-              <input type="number" name="pref_OTP_VALIDITY_MINUTES" class="form-control" value="{{ p.value|default:'10' }}" min="1" max="60" step="1" required>
-              <span class="input-group-text">min</span>
-            </div>
-            <div class="pref-desc">{{ p.description|default:'OTP validity period in minutes' }}</div>
-            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
-          </div>
-        </div>
-        {% endwith %}
-
       </div>
     </div>
 
@@ -282,7 +268,35 @@
               <input type="number" name="pref_MAX_LOGIN_ATTEMPTS" class="form-control" value="{{ p.value|default:'6' }}" min="2" max="20" step="1" required>
               <span class="input-group-text">attempts</span>
             </div>
-            <div class="pref-desc">{{ p.description|default:'Failed attempts before permanent account lockout. Suspension occurs at half this value.' }}</div>
+            <div class="pref-desc">{{ p.description|default:'Failed attempts before permanent account lockout' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.SUSPEND_ATTEMPTS %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-pause-circle text-info"></i> Suspend After Attempts <span class="badge bg-info text-dark badge-unit">integer</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_SUSPEND_ATTEMPTS" class="form-control" value="{{ p.value|default:'3' }}" min="1" max="10" step="1" required>
+              <span class="input-group-text">attempts</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Failed attempts before temporary suspension (first session)' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.SUSPEND_DURATION_MINUTES %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-hourglass-split text-info"></i> Suspension Duration <span class="badge bg-info text-dark badge-unit">minutes</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_SUSPEND_DURATION_MINUTES" class="form-control" value="{{ p.value|default:'10' }}" min="1" max="120" step="1" required>
+              <span class="input-group-text">min</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Suspension duration in minutes before second session begins' }}</div>
             {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
           </div>
         </div>
@@ -302,6 +316,20 @@
         </div>
         {% endwith %}
 
+        {% with p=prefs.OTP_VALIDITY_MINUTES %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-shield-lock text-primary"></i> OTP Validity <span class="badge bg-primary badge-unit">minutes</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_OTP_VALIDITY_MINUTES" class="form-control" value="{{ p.value|default:'10' }}" min="1" max="60" step="1" required>
+              <span class="input-group-text">min</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'OTP validity period in minutes' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
         {% with p=prefs.PASSWORD_EXPIRY_DAYS %}
         <div class="col-md-4 col-sm-6">
           <div class="pref-card">
@@ -311,6 +339,20 @@
               <span class="input-group-text">days</span>
             </div>
             <div class="pref-desc">{{ p.description|default:'Days before password change is prompted' }}</div>
+            {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
+          </div>
+        </div>
+        {% endwith %}
+
+        {% with p=prefs.PASSWORD_HISTORY_DEPTH %}
+        <div class="col-md-4 col-sm-6">
+          <div class="pref-card">
+            <div class="pref-label"><i class="bi bi-clock-history text-secondary"></i> Password History Depth <span class="badge bg-secondary badge-unit">integer</span></div>
+            <div class="input-group">
+              <input type="number" name="pref_PASSWORD_HISTORY_DEPTH" class="form-control" value="{{ p.value|default:'5' }}" min="1" max="20" step="1" required>
+              <span class="input-group-text">passwords</span>
+            </div>
+            <div class="pref-desc">{{ p.description|default:'Number of previous passwords remembered to prevent reuse' }}</div>
             {% if p.updated_at %}<div class="pref-meta"><i class="bi bi-clock"></i>{{ p.updated_at|date:"d M Y H:i" }}{% if p.updated_by %} · {{ p.updated_by.get_full_name|default:p.updated_by.username }}{% endif %}</div>{% endif %}
           </div>
         </div>

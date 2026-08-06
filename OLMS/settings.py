@@ -114,6 +114,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django.contrib.humanize',
     'django.contrib.sites',
     'accounts.apps.AccountsConfig',
     'catalog.apps.CatalogConfig',
@@ -139,6 +140,10 @@ MIDDLEWARE = [
     'accounts.middleware.LoginRateLimitMiddleware',
     # Single session enforcement (must be after MessageMiddleware since it uses messages).
     'accounts.middleware.SingleSessionMiddleware',
+    # Dynamic idle timeout from SESSION_TIMEOUT_MINUTES system preference.
+    'accounts.middleware.SessionTimeoutMiddleware',
+    # Guest session expiry enforcement (redirect on expiry, 15-min notification).
+    'accounts.middleware.GuestSessionMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # Defence-in-depth response headers (CSP, Permissions-Policy, COOP, …).
     # Must be LAST so it sees the final response and can set headers on it.
@@ -163,6 +168,7 @@ TEMPLATES = [
                 'catalog.context_processors.category_menu',
                 'catalog.context_processors.overdue_counter',
                 'catalog.context_processors.security_badges',
+                'accounts.context_processors.guest_session_context',
             ],
         },
     },

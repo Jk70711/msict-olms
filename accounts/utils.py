@@ -10,6 +10,8 @@ import string
 import requests
 from django.conf import settings
 from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
+import re as _re
 from django.utils import timezone
 from datetime import timedelta
 
@@ -29,10 +31,16 @@ def generate_otp():
 
 def create_otp_for_user(user):
     """Unda OTP mpya kwa mtumiaji na izima zote zilizopo"""
-    from .models import OTPRecord
+    from .models import OTPRecord, SystemPreference
     OTPRecord.objects.filter(user=user, used=False).update(used=True)
-    expiry = timezone.now() + timedelta(minutes=getattr(settings, 'OTP_EXPIRY_MINUTES', 10))
-    return OTPRecord.objects.create(user=user, otp_code=generate_otp(), expires_at=expiry)
+    try:
+        otp_minutes = int(SystemPreference.objects.filter(key='OTP_VALIDITY_MINUTES').values_list('value', flat=True).first() or 10)
+    except Exception:
+        otp_minutes = getattr(settings, 'OTP_EXPIRY_MINUTES', 10)
+    expiry = timezone.now() + timedelta(minutes=otp_minutes)
+    otp = OTPRecord.objects.create(user=user, otp_code=generate_otp(), expires_at=expiry)
+    otp._validity_minutes = otp_minutes  # attach for caller use in notification text
+    return otp
 
 
 def format_phone_for_sms(phone):
@@ -94,7 +102,7 @@ def send_sms(phone, message):
                 else:
                     logger.error(f"BEEM API error: {data}")
                     return False
-            except:
+            except Exception:
                 return True
         else:
             logger.error(f"SMS failed: HTTP {resp.status_code} - {resp.text[:200]}")
@@ -104,12 +112,39 @@ def send_sms(phone, message):
         return False
 
 
+def _html_to_plain(html: str) -> str:
+    """Strip HTML tags to produce a plain-text fallback."""
+    text = _re.sub(r'<br\s*/?>', '\n', html, flags=_re.IGNORECASE)
+    text = _re.sub(r'<[^>]+>', '', text)
+    text = _re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
 def send_email_notification(to_email, subject, body):
-    """Tuma barua pepe kwa kutumia Django mail"""
+    """Tuma barua pepe kwa kutumia Django mail.
+    Kama body ina HTML tags itatumwa kama HTML na plain-text fallback.
+    """
     import logging
     logger = logging.getLogger(__name__)
     try:
-        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=False)
+        is_html = bool(_re.search(r'<[a-zA-Z][^>]*>', body))
+        if is_html:
+            plain = _html_to_plain(body)
+            html_body = (
+                f'<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;'
+                f'font-size:14px;color:#222;line-height:1.6;max-width:600px;margin:auto;padding:20px;">'
+                f'{body}</body></html>'
+            )
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=plain,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[to_email],
+            )
+            msg.attach_alternative(html_body, 'text/html')
+            msg.send(fail_silently=False)
+        else:
+            send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [to_email], fail_silently=False)
         logger.info(f"Email sent to {to_email}: {subject}")
         return True
     except Exception as e:
@@ -152,7 +187,6 @@ def log_credentials_fallback(user, password, login_url):
     """Andika credentials kwenye file log kama SMS/email zote zimeshindwa"""
     import logging
     import os
-    from django.conf import settings
     logger = logging.getLogger('accounts.credentials')
     cred_log = os.path.join(settings.BASE_DIR, 'guest_credentials.log')
     from django.utils import timezone as tz
@@ -297,11 +331,13 @@ def generate_virtual_card_pdf(user):
 
 def is_password_reused(user, raw_password):
     """Angalia kama nywila imetumika awali (historia ya PASSWORD_HISTORY_DEPTH za mwisho)"""
-    from .models import PasswordHistory
+    from .models import PasswordHistory, SystemPreference
     from django.contrib.auth.hashers import check_password
-    from django.conf import settings
 
-    depth = getattr(settings, 'PASSWORD_HISTORY_DEPTH', 5)
+    try:
+        depth = int(SystemPreference.objects.filter(key='PASSWORD_HISTORY_DEPTH').values_list('value', flat=True).first() or 5)
+    except Exception:
+        depth = 5
 
     # Pata nywila za mwisho za mtumiaji huyu kulingana na depth
     recent_passwords = PasswordHistory.objects.filter(
@@ -324,10 +360,12 @@ def add_password_to_history(user, password_hash):
         user.save(...)
         add_password_to_history(user, old_hash) # rekodi ya zamani
     """
-    from .models import PasswordHistory
-    from django.conf import settings
-    
-    depth = getattr(settings, 'PASSWORD_HISTORY_DEPTH', 5)
+    from .models import PasswordHistory, SystemPreference
+
+    try:
+        depth = int(SystemPreference.objects.filter(key='PASSWORD_HISTORY_DEPTH').values_list('value', flat=True).first() or 5)
+    except Exception:
+        depth = 5
     
     # Unda rekodi mpya ya historia ya nywila
     PasswordHistory.objects.create(

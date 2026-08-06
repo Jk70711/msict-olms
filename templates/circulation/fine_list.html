@@ -1,10 +1,11 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Fines (POS){% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h4 class="fw-bold mb-0"><i class="bi bi-cash-coin"></i> Fines — Point of Sale</h4>
   <div class="alert alert-info py-1 px-3 mb-0">
-    <small><i class="bi bi-info-circle"></i> Fine Rate: <strong>TZS {{ fine_per_day|floatformat:0 }}</strong> per day | Fines accumulate daily until paid</small>
+    <small><i class="bi bi-info-circle"></i> Fine Rate: <strong>TZS {{ fine_per_day|floatformat:0|intcomma }}</strong> per day | Fines accumulate daily until paid</small>
   </div>
 </div>
 
@@ -29,7 +30,7 @@
             <td><small class="text-muted">{{ u.army_no }}</small></td>
             <td><small class="badge bg-dark">{{ u.rank|default:"—" }}</small></td>
             <td><span class="badge bg-warning text-dark">{{ u.fine_count }}</span></td>
-            <td class="fw-bold text-danger">{{ u.remaining|floatformat:2 }}</td>
+            <td class="fw-bold text-danger">{{ u.remaining|floatformat:2|intcomma }}</td>
             <td><a href="{% url 'user_fines' u.user_id %}" class="btn btn-sm btn-success py-0"><i class="bi bi-cash-stack"></i> Pay</a></td>
           </tr>
           {% endfor %}
@@ -84,7 +85,7 @@
             {% endif %}
           </td>
           <td class="fw-bold {% if not fine.paid %}text-danger{% else %}text-success{% endif %}">
-            TZS {{ fine.amount|floatformat:2 }}
+            TZS {{ fine.amount|floatformat:2|intcomma }}
           </td>
           <td>
             {% if fine.paid %}
@@ -100,10 +101,10 @@
           </td>
           <td>
             <small>
-              <strong>Due:</strong> TZS {{ fine.amount|floatformat:2 }}<br>
+              <strong>Due:</strong> TZS {{ fine.amount|floatformat:2|intcomma }}<br>
               {% if fine.amount_paid > 0 %}
-                <strong>Paid:</strong> TZS {{ fine.amount_paid|floatformat:2 }}<br>
-                <strong class="{% if fine.remaining_balance > 0 %}text-danger{% else %}text-success{% endif %}">Remaining:</strong> TZS {{ fine.remaining_balance|floatformat:2 }}
+                <strong>Paid:</strong> TZS {{ fine.amount_paid|floatformat:2|intcomma }}<br>
+                <strong class="{% if fine.remaining_balance > 0 %}text-danger{% else %}text-success{% endif %}">Remaining:</strong> TZS {{ fine.remaining_balance|floatformat:2|intcomma }}
               {% endif %}
             </small>
           </td>
@@ -153,7 +154,7 @@
   <h6 class="fw-bold"><i class="bi bi-exclamation-triangle"></i> How Fines Work</h6>
   <ul class="mb-0 small">
     <li><strong>Day 1–{{ loan_period_days }}:</strong> Borrow period — no fine charged</li>
-    <li><strong>Day {{ fine_start_day }} onwards:</strong> Fine starts at <strong>TZS {{ fine_per_day|floatformat:0 }} per day</strong> and <strong>accumulates daily</strong></li>
+    <li><strong>Day {{ fine_start_day }} onwards:</strong> Fine starts at <strong>TZS {{ fine_per_day|floatformat:0|intcomma }} per day</strong> and <strong>accumulates daily</strong></li>
     <li>Fines automatically increase every day until the book is returned and fine is paid</li>
     <li>Click <strong>"Pay"</strong> to record payment and stop fine accumulation</li>
   </ul>

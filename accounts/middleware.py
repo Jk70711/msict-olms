@@ -268,3 +268,146 @@ class LoginRateLimitMiddleware:
                 return resp
 
         return self.get_response(request)
+
+
+class SessionTimeoutMiddleware:
+    """
+    Enforces the SESSION_TIMEOUT_MINUTES system preference as the idle timeout
+    for non-remember-me sessions. On every authenticated request the session
+    expiry is refreshed to the current preference value so that admin changes
+    take effect immediately for new activity.
+
+    Sessions created with "Remember me" (session['remember_me'] = True) are
+    left at their 30-day expiry and are not affected by this middleware.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.user.is_authenticated
+            and not request.session.get('remember_me', False)
+            and request.session.session_key
+        ):
+            try:
+                from accounts.models import SystemPreference
+                minutes = int(
+                    SystemPreference.objects.filter(key='SESSION_TIMEOUT_MINUTES')
+                    .values_list('value', flat=True).first() or 30
+                )
+            except Exception:
+                minutes = 30
+            request.session.set_expiry(minutes * 60)
+        return self.get_response(request)
+
+
+class GuestSessionMiddleware:
+    """
+    Checks guest session status on every request:
+    1. If session has expired -> end it and redirect to payment page immediately.
+    2. If session expires within 15 minutes -> send SMS/email notification (once).
+    3. Injects guest_session_expiry_iso into request for template context use.
+    """
+
+    # Paths exempt from redirect (avoid loops)
+    _EXEMPT_PATHS = {
+        '/accounts/login/', '/accounts/logout/', '/',
+        '/accounts/guest/start-session/',
+    }
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        user = getattr(request, 'user', None)
+        is_guest = (
+            user
+            and user.is_authenticated
+            and (getattr(user, 'is_guest', False) or getattr(user, 'role', '') == 'guest')
+        )
+
+        if is_guest:
+            from accounts.models import GuestSession
+            from django.utils import timezone
+            from datetime import timedelta
+            from decimal import Decimal
+
+            active = GuestSession.objects.filter(
+                user=user, status__in=['active', 'renewed']
+            ).order_by('-sign_in_time').first()
+
+            if active:
+                now = timezone.now()
+                expiry = active.sign_in_time + timedelta(hours=float(active.paid_hours))
+
+                # --- Session expired -> end and redirect ---
+                if now >= expiry:
+                    duration_hours = max(
+                        0.01,
+                        (now - active.sign_in_time).total_seconds() / 3600,
+                    )
+                    active.sign_out_time = now
+                    active.duration_hours = round(duration_hours, 2)
+                    active.status = 'expired'
+                    active.save(update_fields=[
+                        'sign_out_time', 'duration_hours', 'status',
+                    ])
+                    user.total_guest_hours = (
+                        user.total_guest_hours or Decimal('0')
+                    ) + Decimal(str(active.duration_hours))
+                    user.save(update_fields=['total_guest_hours'])
+
+                    # Avoid redirect loop on exempt paths
+                    if not any(request.path.startswith(p) for p in self._EXEMPT_PATHS):
+                        messages.warning(
+                            request,
+                            f'Your guest session has expired. '
+                            f'Amount paid: TZS {active.amount_paid:,.0f}. '
+                            f'Please start a new session to continue.',
+                        )
+                        return redirect('guest_start_session')
+
+                # --- 15-min pre-expiry notification ---
+                elif not active.expiry_notification_sent:
+                    mins_to_expiry = (expiry - now).total_seconds() / 60
+                    if mins_to_expiry <= 15:
+                        try:
+                            from accounts.utils import notify_user
+                            remaining = int(mins_to_expiry)
+                            sms_msg = (
+                                f"MSICT OLMS: Your session expires in {remaining} min. "
+                                f"Please renew or save your work. Session #{active.id}."
+                            )
+                            notify_user(
+                                user, sms_msg, 'sms',
+                                message_type='guest_session_expiry_warning',
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            from accounts.utils import notify_user
+                            email_body = (
+                                f"Dear {user.get_full_name()},\n\n"
+                                f"Your guest session will expire in approximately "
+                                f"{int(mins_to_expiry)} minute(s).\n\n"
+                                f"  Session # : {active.id}\n"
+                                f"  Expires at: {expiry.strftime('%d %b %Y, %H:%M')}\n\n"
+                                f"Please renew your session or save your work."
+                            )
+                            notify_user(
+                                user, email_body, 'email',
+                                subject='MSICT OLMS — Session Expiry Warning',
+                                message_type='guest_session_expiry_warning',
+                            )
+                        except Exception:
+                            pass
+
+                        active.expiry_notification_sent = True
+                        active.save(update_fields=['expiry_notification_sent'])
+
+                # Store expiry ISO timestamp for template context use
+                request.guest_session_expiry = expiry.isoformat()
+                request.guest_session_id = active.id
+
+        return self.get_response(request)

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Loss Reports – Report{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -72,10 +73,10 @@
   </div>
   <div class="col-md-2 col-6">
     <div class="card text-center border-0 shadow-sm p-3">
-      <div class="small fw-bold text-danger">TZS {{ loss_fine_total|floatformat:0 }}</div>
+      <div class="small fw-bold text-danger">TZS {{ loss_fine_total|floatformat:0|intcomma }}</div>
       <div class="small text-muted">Loss Fines Total</div>
-      <div class="small text-success">Paid: TZS {{ loss_fine_paid|floatformat:0 }}</div>
-      <div class="small text-danger">Unpaid: TZS {{ loss_fine_unpaid|floatformat:0 }}</div>
+      <div class="small text-success">Paid: TZS {{ loss_fine_paid|floatformat:0|intcomma }}</div>
+      <div class="small text-danger">Unpaid: TZS {{ loss_fine_unpaid|floatformat:0|intcomma }}</div>
     </div>
   </div>
 </div>
@@ -139,8 +140,8 @@
           <td>
             {% with overdue_fines=tx.fines.all %}
             {% for f in overdue_fines %}{% if not f.loss_report %}
-              <div class="small fw-semibold text-danger">TZS {{ f.amount|floatformat:0 }}</div>
-              <div class="small text-muted">Paid: {{ f.amount_paid|floatformat:0 }}</div>
+              <div class="small fw-semibold text-danger">TZS {{ f.amount|floatformat:0|intcomma }}</div>
+              <div class="small text-muted">Paid: {{ f.amount_paid|floatformat:0|intcomma }}</div>
             {% endif %}{% endfor %}
             {% if not overdue_fines %}<span class="text-muted small">—</span>{% endif %}
             {% endwith %}
@@ -149,8 +150,8 @@
           <!-- Loss Fine -->
           <td>
             {% if report.loss_fine %}
-            <div class="small fw-semibold text-danger">TZS {{ report.loss_fine.amount|floatformat:0 }}</div>
-            <div class="small text-muted">Paid: {{ report.loss_fine.amount_paid|floatformat:0 }}</div>
+            <div class="small fw-semibold text-danger">TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}</div>
+            <div class="small text-muted">Paid: {{ report.loss_fine.amount_paid|floatformat:0|intcomma }}</div>
             {% else %}
             <span class="text-muted small">—</span>
             {% endif %}
@@ -160,8 +161,8 @@
           <td>
             {% with total_fine=0 %}
             <div class="small fw-bold text-danger">
-              TZS {% with tx.fines.all as allfines %}{% for f in allfines %}{% if not f.loss_report %}{{ f.amount|floatformat:0 }}{% endif %}{% endfor %}{% endwith %}
-              {% if report.loss_fine %}+ {{ report.loss_fine.amount|floatformat:0 }}{% endif %}
+              TZS {% with tx.fines.all as allfines %}{% for f in allfines %}{% if not f.loss_report %}{{ f.amount|floatformat:0|intcomma }}{% endif %}{% endfor %}{% endwith %}
+              {% if report.loss_fine %}+ {{ report.loss_fine.amount|floatformat:0|intcomma }}{% endif %}
             </div>
             {% endwith %}
           </td>
@@ -260,13 +261,13 @@
                 <td>{{ tx.due_date|date:"d M Y" }}</td>
                 <td>
                   {% with overdue_fines=tx.fines.all %}
-                  {% for f in overdue_fines %}{% if not f.loss_report %}TZS {{ f.amount|floatformat:0 }}{% endif %}{% endfor %}
+                  {% for f in overdue_fines %}{% if not f.loss_report %}TZS {{ f.amount|floatformat:0|intcomma }}{% endif %}{% endfor %}
                   {% endwith %}
                 </td>
-                <td>{% if report.loss_fine %}TZS {{ report.loss_fine.amount|floatformat:0 }}{% else %}—{% endif %}</td>
+                <td>{% if report.loss_fine %}TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}{% else %}—{% endif %}</td>
                 <td>
-                  TZS {% with tx.fines.all as allfines %}{% for f in allfines %}{% if not f.loss_report %}{{ f.amount|floatformat:0 }}{% endif %}{% endfor %}{% endwith %}
-                  {% if report.loss_fine %}+ {{ report.loss_fine.amount|floatformat:0 }}{% endif %}
+                  TZS {% with tx.fines.all as allfines %}{% for f in allfines %}{% if not f.loss_report %}{{ f.amount|floatformat:0|intcomma }}{% endif %}{% endfor %}{% endwith %}
+                  {% if report.loss_fine %}+ {{ report.loss_fine.amount|floatformat:0|intcomma }}{% endif %}
                 </td>
                 <td>
                   {% with tx.fines.all as allfines %}

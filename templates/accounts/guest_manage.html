@@ -1,10 +1,11 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Guest Management - MSICT OLMS{% endblock %}
 {% block content %}
 <div class="container py-4">
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h4 class="fw-bold mb-0"><i class="bi bi-people me-2"></i>Guest Management</h4>
-    <span class="badge bg-info text-dark">Rate: TZS {{ hourly_rate|floatformat:0 }}/hr</span>
+    <span class="badge bg-info text-dark">Rate: TZS {{ hourly_rate|floatformat:0|intcomma }}/hr</span>
   </div>
 
   {# ── Active Sessions ── #}
@@ -37,7 +38,7 @@
               </td>
               <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
               <td>{{ s.paid_hours }}</td>
-              <td>TZS {{ s.amount_paid|floatformat:0 }}</td>
+              <td>TZS {{ s.amount_paid|floatformat:0|intcomma }}</td>
               <td>
                 {% if s.payment_status == 'paid' %}<span class="badge bg-success">Paid</span>
                 {% elif s.payment_status == 'waived' %}<span class="badge bg-info text-dark">Waived</span>
@@ -107,8 +108,8 @@
               <td>{{ g.first_name }} {{ g.surname }}</td>
               <td>{{ g.username }}</td>
               <td>{{ g.phone|default:'—' }}</td>
-              <td>{{ g.total_guest_hours|floatformat:1 }}</td>
-              <td>TZS {{ g.total_guest_paid|floatformat:0 }}</td>
+              <td>{{ g.total_guest_hours|floatformat:1|intcomma }}</td>
+              <td>TZS {{ g.total_guest_paid|floatformat:0|intcomma }}</td>
               <td>
                 {% if g.is_active %}<span class="badge bg-success">Active</span>
                 {% else %}<span class="badge bg-danger">Suspended</span>{% endif %}
@@ -187,7 +188,7 @@
               <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
               <td>{{ s.sign_out_time|date:"d M Y H:i"|default:'—' }}</td>
               <td>{{ s.duration_hours|floatformat:1 }}</td>
-              <td>TZS {{ s.amount_paid|floatformat:0 }}</td>
+              <td>TZS {{ s.amount_paid|floatformat:0|intcomma }}</td>
               <td>
                 {% if s.status == 'ended' %}<span class="badge bg-secondary">Ended</span>
                 {% elif s.status == 'expired' %}<span class="badge bg-warning text-dark">Expired</span>

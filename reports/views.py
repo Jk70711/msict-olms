@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.db.models import Count, Sum, Q
 from django.http import HttpResponse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 from datetime import timedelta
 
 from accounts.views import librarian_required, admin_required
@@ -115,7 +116,10 @@ def _render_report_pdf(filename, report_title, subtitle, summary_pairs,
         if not rows:
             return Paragraph('<i>No data available.</i>', cell_s)
         ncol = len(headers)
-        cw = widths if widths else [pw / ncol] * ncol
+        if widths:
+            cw = [w * mm for w in widths]
+        else:
+            cw = [pw / ncol] * ncol
         hdr = [Paragraph(h, hdr_s) for h in headers]
         body = [[Paragraph(str(cell), cell_s) for cell in row] for row in rows]
         tdata = [hdr] + body
@@ -221,7 +225,6 @@ def report_books_view(request):
     category_stats = Category.objects.annotate(book_count=Count('books')).order_by('-book_count')[:10]
     
     # Loss fine statistics for lost copies
-    from circulation.models import LossReport, Fine
     loss_reports = LossReport.objects.filter(status='confirmed').select_related('loss_fine', 'transaction__copy__book')
     total_loss_fine = sum(lr.loss_fine.amount for lr in loss_reports if lr.loss_fine)
     loss_fine_paid = sum(lr.loss_fine.amount_paid for lr in loss_reports if lr.loss_fine)
@@ -267,7 +270,6 @@ def report_circulation_view(request):
     total_lost = transactions.filter(status='lost').count()
     
     # Loss fine statistics
-    from circulation.models import LossReport, Fine
     loss_reports = LossReport.objects.filter(status='confirmed', reported_at__gte=since).select_related('loss_fine')
     total_loss_fine = sum(lr.loss_fine.amount for lr in loss_reports if lr.loss_fine)
     loss_fine_paid = sum(lr.loss_fine.amount_paid for lr in loss_reports if lr.loss_fine)
@@ -312,7 +314,6 @@ def report_fines_view(request):
     partial = fines.filter(amount_paid__gt=0, paid=False).count()
     
     # Loss fine statistics
-    from circulation.models import LossReport
     loss_reports = LossReport.objects.filter(loss_fine__isnull=False).select_related('loss_fine')
     loss_fine_ids = [lr.loss_fine_id for lr in loss_reports]
     
@@ -842,10 +843,11 @@ def sql_report_view(request):
 
 @login_required
 @admin_required
+@require_POST
 def export_sql_pdf_view(request):
     """Export SQL query results to PDF"""
     from django.db import connection
-    sql = request.GET.get('sql', '').strip()
+    sql = request.POST.get('sql', '').strip()
     is_valid, err_msg = _validate_select_sql(sql)
     if not is_valid:
         return HttpResponse(f'Invalid SQL query: {err_msg}', status=400)
@@ -878,10 +880,11 @@ def export_sql_pdf_view(request):
 
 @login_required
 @admin_required
+@require_POST
 def export_sql_csv_view(request):
     """Export SQL query results to CSV"""
     from django.db import connection
-    sql = request.GET.get('sql', '').strip()
+    sql = request.POST.get('sql', '').strip()
     is_valid, err_msg = _validate_select_sql(sql)
     if not is_valid:
         return HttpResponse(f'Invalid SQL query: {err_msg}', status=400)
@@ -1114,6 +1117,7 @@ def save_report_template_view(request):
 
 @login_required
 @librarian_required
+@require_POST
 def delete_report_template_view(request, template_id):
     tmpl = ReportTemplate.objects.filter(pk=template_id, created_by=request.user).first()
     if tmpl:
@@ -1128,7 +1132,7 @@ def delete_report_template_view(request, template_id):
 @librarian_required
 def report_loss_view(request):
     """Loss report summary for librarians and admins."""
-    from django.db.models import DecimalField, Value, Q
+    from django.db.models import DecimalField, Value
     from django.db.models.functions import Coalesce
     from decimal import Decimal
 
@@ -1192,7 +1196,6 @@ def report_loss_view(request):
 @librarian_required
 def export_loss_pdf_view(request):
     """Export loss reports to PDF with optional filters."""
-    from django.db.models import Q
     from decimal import Decimal
 
     period = request.GET.get('period', 'all')
@@ -1242,29 +1245,27 @@ def export_loss_pdf_view(request):
         copy = report.transaction.copy
         
         # Calculate overdue fine
-        overdue_fine_amount = '0'
-        overdue_fine_paid = '0'
+        overdue_fine_amount = 0
+        overdue_fine_paid = 0
         for f in tx.fines.all():
-            if not f.loss_report:
-                overdue_fine_amount = str(int(f.amount))
-                overdue_fine_paid = str(int(f.amount_paid))
+            if not hasattr(f, 'loss_report') or f.loss_report is None:
+                overdue_fine_amount = float(f.amount)
+                overdue_fine_paid = float(f.amount_paid)
                 break
         
         # Calculate loss fine
-        loss_fine_amount = str(int(report.loss_fine.amount)) if report.loss_fine else '—'
-        loss_fine_paid_amount = str(int(report.loss_fine.amount_paid)) if report.loss_fine else '—'
+        loss_fine_amount = float(report.loss_fine.amount) if report.loss_fine else 0
+        loss_fine_paid_amount = float(report.loss_fine.amount_paid) if report.loss_fine else 0
         
         # Calculate total fine
-        total_fine = overdue_fine_amount
-        if report.loss_fine:
-            total_fine = str(int(overdue_fine_amount) + int(report.loss_fine.amount))
+        total_fine = overdue_fine_amount + loss_fine_amount
         
         # Payment status
         payment_status = 'No Fines'
         if tx.fines.exists() or report.loss_fine:
             payment_status = ''
             for f in tx.fines.all():
-                if not f.loss_report:
+                if not hasattr(f, 'loss_report') or f.loss_report is None:
                     if f.paid:
                         payment_status += 'OD Paid '
                     elif f.amount_paid > 0:
@@ -1289,9 +1290,9 @@ def export_loss_pdf_view(request):
             copy.accession_no,
             tx.borrow_date.strftime('%d %b %Y'),
             tx.due_date.strftime('%d %b %Y'),
-            f'TZS {overdue_fine_amount}',
-            f'TZS {loss_fine_amount}',
-            f'TZS {total_fine}',
+            f'TZS {overdue_fine_amount:,.0f}',
+            f'TZS {loss_fine_amount:,.0f}' if report.loss_fine else '—',
+            f'TZS {total_fine:,.0f}',
             payment_status,
             report.reported_at.strftime('%d %b %Y'),
             report.get_status_display(),
@@ -1325,7 +1326,172 @@ def export_loss_pdf_view(request):
             'Payment Status', 'Reported', 'Status', 'Reviewed By'
         ],
         table_rows=report_rows,
-        col_widths=[8, 12, 25, 15, 15, 40, 15, 15, 15, 15, 15, 15, 20, 15, 15, 20],
+        col_widths=[7, 10, 22, 13, 13, 35, 13, 13, 13, 13, 13, 13, 18, 13, 13, 18],
         landscape=True,
     )
+
+
+# ── Excel (xlsx) exports for standard reports ────────────────────────────────
+
+def _make_xlsx_response(wb, filename):
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    response = HttpResponse(
+        buf.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    stamp = timezone.now().strftime('%Y%m%d_%H%M')
+    response['Content-Disposition'] = f'attachment; filename="{filename}_{stamp}.xlsx"'
+    return response
+
+
+@login_required
+@librarian_required
+def export_members_xlsx_view(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    role_filter = request.GET.get('role', 'all')
+    member_type_filter = request.GET.get('member_type', '')
+    users = OLMSUser.objects.select_related('virtual_card')
+    if role_filter and role_filter != 'all':
+        users = users.filter(role=role_filter)
+    if member_type_filter and role_filter == 'member':
+        users = users.filter(member_type=member_type_filter)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Members'
+    headers = ['#', 'Username', 'Army No', 'Full Name', 'Email', 'Phone',
+               'Role', 'Member Type', 'Status', 'Created']
+    ws.append(headers)
+    hdr_fill = PatternFill('solid', fgColor='1F3864')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal='center')
+    for i, u in enumerate(users, start=1):
+        ws.append([
+            i, u.username, u.army_no or '', u.get_full_name(), u.email or '',
+            u.phone or '', u.get_role_display(),
+            u.get_member_type_display() if u.member_type else '',
+            'Active' if u.is_active else 'Inactive',
+            u.created_at.strftime('%d %b %Y') if u.created_at else '',
+        ])
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = max(
+            len(str(cell.value or '')) for cell in col
+        ) + 4
+    return _make_xlsx_response(wb, 'members_report')
+
+
+@login_required
+@librarian_required
+def export_books_xlsx_view(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    books = Book.objects.select_related('category').prefetch_related('copies')
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Books'
+    headers = ['#', 'Title', 'Author', 'ISBN', 'Publisher', 'Year',
+               'Category', 'Total Copies', 'Available Hardcopies', 'Softcopies']
+    ws.append(headers)
+    hdr_fill = PatternFill('solid', fgColor='1F3864')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal='center')
+    for i, b in enumerate(books, start=1):
+        ws.append([
+            i, b.title, b.author, b.isbn or '', b.publisher or '',
+            b.year or '', b.category.name if b.category else '',
+            b.total_hardcopies(), b.available_hardcopy_count(),
+            b.copies.filter(copy_type='softcopy').count(),
+        ])
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = max(
+            len(str(cell.value or '')) for cell in col
+        ) + 4
+    return _make_xlsx_response(wb, 'books_report')
+
+
+@login_required
+@librarian_required
+def export_circulation_xlsx_view(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    period = request.GET.get('period', '30')
+    days = int(period) if period.isdigit() else 30
+    since = timezone.now() - timedelta(days=days)
+    txs = BorrowingTransaction.objects.filter(
+        borrow_date__gte=since
+    ).select_related('user', 'copy__book', 'approved_by').order_by('-borrow_date')
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Circulation'
+    headers = ['#', 'Member', 'Army No', 'Book Title', 'Accession No',
+               'Copy Type', 'Borrow Date', 'Due Date', 'Returned Date', 'Status']
+    ws.append(headers)
+    hdr_fill = PatternFill('solid', fgColor='1F3864')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal='center')
+    for i, tx in enumerate(txs, start=1):
+        ws.append([
+            i,
+            tx.user.get_full_name() or tx.user.username,
+            tx.user.army_no or '',
+            tx.copy.book.title if tx.copy and tx.copy.book else '',
+            tx.copy.accession_no if tx.copy else '',
+            tx.copy.get_copy_type_display() if tx.copy else '',
+            tx.borrow_date.strftime('%d %b %Y') if tx.borrow_date else '',
+            tx.due_date.strftime('%d %b %Y') if tx.due_date else '',
+            tx.return_date.strftime('%d %b %Y') if tx.return_date else '',
+            tx.get_status_display(),
+        ])
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = max(
+            len(str(cell.value or '')) for cell in col
+        ) + 4
+    return _make_xlsx_response(wb, 'circulation_report')
+
+
+@login_required
+@librarian_required
+def export_fines_xlsx_view(request):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    fines = Fine.objects.select_related(
+        'user', 'transaction__copy__book'
+    ).order_by('-created_at')
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Fines'
+    headers = ['#', 'Member', 'Army No', 'Book Title', 'Reason',
+               'Amount (TZS)', 'Paid (TZS)', 'Remaining (TZS)', 'Status', 'Created']
+    ws.append(headers)
+    hdr_fill = PatternFill('solid', fgColor='1F3864')
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.fill = hdr_fill
+        cell.alignment = Alignment(horizontal='center')
+    for i, f in enumerate(fines, start=1):
+        ws.append([
+            i,
+            f.user.get_full_name() or f.user.username,
+            f.user.army_no or '',
+            f.transaction.copy.book.title if f.transaction and f.transaction.copy and f.transaction.copy.book else '',
+            f.reason or '',
+            float(f.amount),
+            float(f.amount_paid),
+            float(f.remaining_balance),
+            'Paid' if f.paid else ('Partial' if f.amount_paid > 0 else 'Unpaid'),
+            f.created_at.strftime('%d %b %Y') if f.created_at else '',
+        ])
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = max(
+            len(str(cell.value or '')) for cell in col
+        ) + 4
+    return _make_xlsx_response(wb, 'fines_report')
 

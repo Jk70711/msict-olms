@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Book Inventory Report{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -9,6 +10,7 @@
     </button>
     <a href="{% url 'export_books_pdf' %}" class="btn btn-sm btn-danger"><i class="bi bi-file-earmark-pdf"></i> Export PDF</a>
     <a href="{% url 'export_books_csv' %}" class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-csv"></i> Export CSV</a>
+    <a href="{% url 'export_books_xlsx' %}" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-excel"></i> Export Excel</a>
   </div>
 </div>
 <div class="row g-3 mb-3">
@@ -24,8 +26,8 @@
     <div class="card p-3 text-center border-0 shadow-sm">
       <div class="d-flex flex-column align-items-center">
         <div class="fs-4 fw-bold text-warning">Loss Fines Total</div>
-        <div class="small text-danger">TZS {{ total_loss_fine|floatformat:0 }}</div>
-        <div class="small text-muted">Paid: TZS {{ loss_fine_paid|floatformat:0 }} | Unpaid: TZS {{ loss_fine_unpaid|floatformat:0 }}</div>
+        <div class="small text-danger">TZS {{ total_loss_fine|floatformat:0|intcomma }}</div>
+        <div class="small text-muted">Paid: TZS {{ loss_fine_paid|floatformat:0|intcomma }} | Unpaid: TZS {{ loss_fine_unpaid|floatformat:0|intcomma }}</div>
       </div>
     </div>
   </div>

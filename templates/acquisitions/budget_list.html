@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Budgets{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -11,14 +12,14 @@
     <div class="card p-3">
       <div class="d-flex justify-content-between"><h6 class="fw-bold">{{ b.name }}</h6><span class="badge bg-secondary">FY{{ b.fiscal_year }}</span></div>
       <div class="row text-center mt-2">
-        <div class="col"><div class="small text-muted">Total</div><div class="fw-bold">TZS {{ b.total_amount|floatformat:0 }}</div></div>
-        <div class="col"><div class="small text-muted">Spent</div><div class="fw-bold text-warning">TZS {{ b.spent_amount|floatformat:0 }}</div></div>
-        <div class="col"><div class="small text-muted">Remaining</div><div class="fw-bold text-success">TZS {{ b.remaining|floatformat:0 }}</div></div>
+        <div class="col"><div class="small text-muted">Total</div><div class="fw-bold">TZS {{ b.total_amount|floatformat:0|intcomma }}</div></div>
+        <div class="col"><div class="small text-muted">Spent</div><div class="fw-bold text-warning">TZS {{ b.spent_amount|floatformat:0|intcomma }}</div></div>
+        <div class="col"><div class="small text-muted">Remaining</div><div class="fw-bold text-success">TZS {{ b.remaining|floatformat:0|intcomma }}</div></div>
       </div>
       {% if b.funds.all %}
       <div class="mt-2 small">
         <b>Funds:</b>
-        {% for f in b.funds.all %}<span class="badge bg-light text-dark border me-1">{{ f.name }}: TZS{{ f.allocated|floatformat:0 }}</span>{% endfor %}
+        {% for f in b.funds.all %}<span class="badge bg-light text-dark border me-1">{{ f.name }}: TZS{{ f.allocated|floatformat:0|intcomma }}</span>{% endfor %}
       </div>
       {% endif %}
     </div>

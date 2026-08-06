@@ -69,4 +69,5 @@ urlpatterns = [
     path('system-appearance/', views.system_appearance_view, name='system_appearance'),      # Badilisha rangi/fonti
     path('admin/block-ip/', views.block_ip_view, name='block_ip'),                           # Zuia IP
     path('admin/unblock-ip/<int:ip_id>/', views.unblock_ip_view, name='unblock_ip'),         # Fungua IP
+    path('clear-import-skipped/', views.clear_import_skipped_view, name='clear_import_skipped'),  # Futa data ya import
 ]

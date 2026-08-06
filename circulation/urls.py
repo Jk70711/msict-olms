@@ -23,6 +23,7 @@ urlpatterns = [
     path('borrow/request-book/<int:book_id>/', views.request_borrow_book_view, name='request_borrow_book'),         # Auto-pick hardcopy
     path('borrow/request-softcopy/<int:book_id>/', views.request_borrow_softcopy_view, name='request_borrow_softcopy'), # Auto-pick borrowable softcopy
     path('borrow/download-free/<int:book_id>/', views.download_free_book_view, name='download_free_book'),          # Auto-pick free softcopy
+    path('borrow/read-free/<int:book_id>/', views.read_free_book_view, name='read_free_book'),                      # Read free softcopy inline
     path('softcopy/payment/<int:copy_id>/', views.softcopy_payment_view, name='softcopy_payment'),                 # Softcopy payment page
     path('softcopy/renewal-payment/<int:transaction_id>/', views.softcopy_renewal_payment_view, name='softcopy_renewal_payment'),  # Softcopy renewal payment
     path('borrow/cancel/<int:request_id>/', views.cancel_borrow_request_view, name='cancel_borrow_request'), # Futa ombi
@@ -34,6 +35,7 @@ urlpatterns = [
     path('softcopy/cancel-access/<int:tx_id>/', views.cancel_softcopy_access_view, name='cancel_softcopy_access'),  # Cancel softcopy access early
     path('borrow/copy-lookup/', views.copy_lookup_view, name='copy_lookup'),
     path('requests/', views.all_requests_view, name='all_requests'),
+    path('issued-records/', views.issued_records_view, name='issued_records'),
 
     # ── Kurudisha na Kuongeza Muda ──────────────────────────
     path('renew/<int:transaction_id>/', views.renew_transaction_view, name='renew_transaction'), # Ongeza muda wa mkopo

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block title %}Lost & Damaged Copies — MSICT OLMS{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -121,7 +122,7 @@
                   <div class="text-muted" style="font-size:.72rem;">{{ rec.member_id }}</div>
                 </td>
                 <td>
-                  {% if rec.fine_amount %}<span class="badge bg-danger">TZS {{ rec.fine_amount|floatformat:0 }}</span>
+                  {% if rec.fine_amount %}<span class="badge bg-danger">TZS {{ rec.fine_amount|floatformat:0|intcomma }}</span>
                   {% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td>
@@ -211,12 +212,12 @@
                 <td><span class="badge bg-secondary">{{ lr.user.get_role_display }}</span></td>
                 <td><span class="badge bg-{{ lr.status|lower|cut:' '|cut:'–'|cut:'-' }}-subtle text-dark small">{{ lr.get_status_display }}</span></td>
                 <td>
-                  {% if lr.loss_fine %}<span class="badge bg-danger">TZS {{ lr.loss_fine.amount|floatformat:0 }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
+                  {% if lr.loss_fine %}<span class="badge bg-danger">TZS {{ lr.loss_fine.amount|floatformat:0|intcomma }}</span>{% else %}<span class="text-muted">—</span>{% endif %}
                 </td>
                 <td>
                   {% if lr.loss_fine and lr.loss_fine.paid %}
                     <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
-                    <div class="small text-muted">TZS {{ lr.loss_fine.amount_paid|floatformat:0 }}</div>
+                    <div class="small text-muted">TZS {{ lr.loss_fine.amount_paid|floatformat:0|intcomma }}</div>
                   {% elif lr.loss_fine %}
                     <span class="badge bg-danger">Unpaid</span>
                   {% else %}
@@ -313,11 +314,11 @@
                 </td>
                 <td><span class="badge bg-secondary">{{ dr.user.get_role_display }}</span></td>
                 <td><span class="badge bg-secondary">{{ dr.get_damage_type_display }}</span></td>
-                <td><span class="badge" style="background-color: #ea580c;">TZS {{ dr.damage_fine.amount|floatformat:0 }}</span></td>
+                <td><span class="badge" style="background-color: #ea580c;">TZS {{ dr.damage_fine.amount|floatformat:0|intcomma }}</span></td>
                 <td>
                   {% if dr.damage_fine.paid %}
                     <span class="badge bg-success"><i class="bi bi-check-circle"></i> Paid</span>
-                    <div class="small text-muted">TZS {{ dr.damage_fine.amount_paid|floatformat:0 }}</div>
+                    <div class="small text-muted">TZS {{ dr.damage_fine.amount_paid|floatformat:0|intcomma }}</div>
                   {% else %}
                     <span class="badge bg-danger">Unpaid</span>
                   {% endif %}
@@ -402,15 +403,15 @@
                 <td><small class="text-muted">{{ rpt.damage_description|truncatechars:35|default:"—" }}</small></td>
                 <td>
                   {% if rpt.damage_fine %}
-                    <div class="fw-bold" style="color: #ea580c;">TZS {{ rpt.damage_fine.amount|floatformat:0 }}</div>
-                    <div class="small text-muted">Paid: TZS {{ rpt.damage_fine.amount_paid|floatformat:0 }}</div>
+                    <div class="fw-bold" style="color: #ea580c;">TZS {{ rpt.damage_fine.amount|floatformat:0|intcomma }}</div>
+                    <div class="small text-muted">Paid: TZS {{ rpt.damage_fine.amount_paid|floatformat:0|intcomma }}</div>
                   {% else %}
                     <span class="text-muted">—</span>
                   {% endif %}
                 </td>
                 <td>
                   {% if rpt.overdue_fine %}
-                    <div class="text-warning fw-bold">TZS {{ rpt.overdue_fine.amount|floatformat:0 }}</div>
+                    <div class="text-warning fw-bold">TZS {{ rpt.overdue_fine.amount|floatformat:0|intcomma }}</div>
                     {% if rpt.overdue_fine.paid %}
                       <span class="badge bg-success">Paid</span>
                     {% else %}

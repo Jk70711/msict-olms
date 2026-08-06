@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Renewal — {{ copy.book.title }}{% endblock %}
 
@@ -39,7 +40,7 @@
           {% else %}
             {# ── Paid renewal: show payment form ── #}
             <div class="text-center mb-4">
-              <div class="display-4 fw-bold text-success">TZS {{ amount|floatformat:0 }}</div>
+              <div class="display-4 fw-bold text-success">TZS {{ amount|floatformat:0|intcomma }}</div>
               <div class="text-muted">Renewal Fee</div>
             </div>
 
@@ -48,7 +49,7 @@
               <div class="mb-4">
                 <label for="amount" class="form-label fw-semibold">Amount to Pay (TZS)</label>
                 <input type="number" step="1" min="0" name="amount" id="amount" class="form-control" required value="{{ amount|floatformat:0 }}">
-                <div class="form-text">Enter amount (must be at least the renewal fee TZS {{ amount|floatformat:0 }})</div>
+                <div class="form-text">Enter amount (must be at least the renewal fee TZS {{ amount|floatformat:0|intcomma }})</div>
               </div>
 
               <div class="mb-4">
@@ -181,7 +182,7 @@
               </div>
 
               <button type="submit" class="btn btn-success w-100 btn-lg">
-                <i class="bi bi-arrow-clockwise me-2"></i>Pay TZS {{ amount|floatformat:0 }} & Renew
+                <i class="bi bi-arrow-clockwise me-2"></i>Pay TZS {{ amount|floatformat:0|intcomma }} & Renew
               </button>
             </form>
           {% endif %}
@@ -269,7 +270,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // Paid renewal: validate amount and method
-  const requiredFee = parseInt('{{ amount|floatformat:0 }}', 10);
+  const requiredFee = parseInt('{{ amount|floatformat:0|intcomma }}', 10);
   const methodSelect = document.getElementById('paymentMethod');
 
   paymentForm.addEventListener('submit', function (event) {

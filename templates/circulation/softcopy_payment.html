@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load humanize %}
 
 {% block title %}Payment Required — {{ copy.book.title }}{% endblock %}
 
@@ -18,7 +19,7 @@
           </div>
 
           <div class="text-center mb-4">
-            <div class="display-4 fw-bold text-primary">TZS {{ amount|floatformat:0 }}</div>
+            <div class="display-4 fw-bold text-primary">TZS {{ amount|floatformat:0|intcomma }}</div>
             <div class="text-muted">Access Fee</div>
           </div>
 
@@ -28,7 +29,7 @@
               <label for="amount" class="form-label fw-semibold">Amount to Pay (TZS)</label>
               <input type="number" step="1" min="0" name="amount" id="amount" class="form-control" required value="{{ amount|floatformat:0 }}" readonly onfocus="this.blur()" style="background-color:#e9ecef;cursor:not-allowed;">
               <input type="hidden" name="amount" value="{{ amount|floatformat:0 }}">
-              <div class="form-text">Fixed access fee — TZS {{ amount|floatformat:0 }}. Amount cannot be modified.</div>
+              <div class="form-text">Fixed access fee — TZS {{ amount|floatformat:0|intcomma }}. Amount cannot be modified.</div>
             </div>
 
             <div class="mb-4">
@@ -161,7 +162,7 @@
             </div>
 
             <button type="submit" class="btn btn-primary w-100 btn-lg">
-              <i class="bi bi-lock me-2"></i>Pay TZS {{ amount|floatformat:0 }} & Get Access
+              <i class="bi bi-lock me-2"></i>Pay TZS {{ amount|floatformat:0|intcomma }} & Get Access
             </button>
           </form>
 
@@ -235,7 +236,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const paymentForm = document.getElementById('paymentForm');
   const amountInput = document.getElementById('amount');
   const methodSelect = document.getElementById('paymentMethod');
-  const requiredFee = parseInt('{{ amount|floatformat:0 }}', 10);
+  const requiredFee = parseInt('{{ amount|floatformat:0|intcomma }}', 10);
 
   if (!paymentForm || !amountInput) return;
 

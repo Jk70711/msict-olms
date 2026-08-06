@@ -9,9 +9,13 @@
     <div class="d-flex align-items-center gap-2 text-truncate" style="max-width:40%">
       <i class="bi bi-file-earmark-lock-fill text-danger fs-5"></i>
       <span class="fw-semibold text-truncate small">{{ copy.book.title }}</span>
+      {% if file_ext != '.pdf' %}
+      <span class="badge bg-info text-dark small ms-1">{{ file_ext|upper }}</span>
+      {% endif %}
     </div>
 
     <div class="d-flex align-items-center gap-2">
+      {% if file_ext == '.pdf' %}
       <button class="btn btn-sm btn-outline-secondary reader-btn" id="prevPage" title="Previous page">
         <i class="bi bi-chevron-left"></i>
       </button>
@@ -26,26 +30,32 @@
       <button class="btn btn-sm btn-outline-secondary reader-btn" id="zoomIn" title="Zoom in">
         <i class="bi bi-zoom-in"></i>
       </button>
+      {% else %}
+      <span class="small text-muted">In-browser viewer ({{ file_ext|upper }})</span>
+      {% endif %}
     </div>
 
     <div class="d-flex align-items-center gap-2">
+      {% if is_free %}
+      <span class="badge bg-success small">
+        <i class="bi bi-unlock me-1"></i>Free Read
+      </span>
+      {% else %}
       <span class="badge bg-warning text-dark small">
         <i class="bi bi-person-lock me-1"></i>{{ request.user.get_full_name|default:request.user.username }} — Special Access
       </span>
       <span class="badge bg-danger small">
         <i class="bi bi-shield-lock me-1"></i>No Download
       </span>
+      {% endif %}
     </div>
   </div>
 
-  <!-- ── Canvas area ── -->
+  {% if file_ext == '.pdf' %}
+  <!-- ── PDF.js Canvas area ── -->
   <div class="reader-body" id="readerBody">
     <div class="reader-canvas-wrap" id="canvasWrap">
       <canvas id="pdfCanvas"></canvas>
-      <!-- Watermark overlay — rendered in JS too but this is the CSS layer -->
-      <div class="reader-watermark" id="watermark" aria-hidden="true">
-        {{ request.user.get_full_name|default:request.user.username }} &nbsp;·&nbsp; {{ request.user.army_no|default:request.user.username }} &nbsp;·&nbsp; MSICT OLMS &nbsp;·&nbsp; {{ request.user.get_full_name|default:request.user.username }} &nbsp;·&nbsp; {{ request.user.army_no|default:request.user.username }} &nbsp;·&nbsp; MSICT OLMS
-      </div>
     </div>
 
     <!-- Loading spinner -->
@@ -61,12 +71,27 @@
       <a href="{% url 'member_msict_borrowings' %}" class="btn btn-outline-primary btn-sm">Back to My Books</a>
     </div>
   </div>
+  {% else %}
+  <!-- ── Non-PDF iframe viewer ── -->
+  <div class="reader-body" id="readerBody" style="padding:0;">
+    <iframe id="ebookFrame"
+            src="{% if is_free %}{% url 'free_softcopy_data' copy.pk %}{% else %}{% url 'special_pdf_data' copy.pk %}{% if access_token %}?token={{ access_token }}{% endif %}{% endif %}"
+            style="width:100%;height:100%;border:none;background:#fff;"
+            sandbox="allow-same-origin"
+            title="{{ copy.book.title }}">
+    </iframe>
+  </div>
+  {% endif %}
 
   <!-- ── Access info footer ── -->
   <div class="reader-footer text-center small text-muted py-1">
+    {% if is_free %}
+    <i class="bi bi-book me-1"></i>Free reading — you can also download this book from the book detail page.
+    {% else %}
     <i class="bi bi-clock me-1"></i>Access expires: <strong>{{ tx.due_date|date:"d M Y" }}</strong>
     &nbsp;|&nbsp;
     <i class="bi bi-shield-check me-1"></i>This document is protected. Unauthorized sharing is prohibited.
+    {% endif %}
   </div>
 
 </div>
@@ -178,6 +203,7 @@ body { overflow: hidden; }
 
 {% load static %}
 {% block extra_js %}
+{% if file_ext == '.pdf' %}
 <!-- PDF.js library — must load before inline viewer script -->
 <script src="{% static 'js/pdf.min.js' %}"></script>
 <script>
@@ -207,8 +233,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return;
   }
 
-  const PDF_DATA_URL = '{% url "special_pdf_data" copy.pk %}{% if access_token %}?token={{ access_token }}{% endif %}';
-  const WATERMARK_TEXT = '{{ request.user.get_full_name|default:request.user.username|escapejs }} · {{ request.user.army_no|default:""}} · MSICT OLMS';
+  const PDF_DATA_URL = '{% if is_free %}{% url "free_softcopy_data" copy.pk %}{% else %}{% url "special_pdf_data" copy.pk %}{% if access_token %}?token={{ access_token }}{% endif %}{% endif %}';
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = '{% static "js/pdf.worker.min.js" %}';
 
@@ -228,22 +253,6 @@ function renderPage(num) {
     canvas.width  = viewport.width;
 
     page.render({ canvasContext: ctx, viewport }).promise.then(() => {
-      /* Draw watermark directly onto canvas (tamper-proof) */
-      ctx.save();
-      ctx.globalAlpha = 0.12;
-      ctx.fillStyle   = '#cc0000';
-      ctx.font        = `bold ${Math.max(16, viewport.width * 0.025)}px Arial`;
-      ctx.textAlign   = 'center';
-      const step = viewport.height / 4;
-      for (let y = step; y < viewport.height; y += step) {
-        ctx.save();
-        ctx.translate(viewport.width / 2, y);
-        ctx.rotate(-Math.PI / 7);
-        ctx.fillText(WATERMARK_TEXT, 0, 0);
-        ctx.restore();
-      }
-      ctx.restore();
-
       document.getElementById('pageIndicator').textContent =
         `Page ${num} / ${pdfDoc.numPages}`;
     });
@@ -305,4 +314,18 @@ document.addEventListener('keydown', e => {
 });
 }); // end DOMContentLoaded
 </script>
+{% else %}
+<!-- Non-PDF viewer: keyboard protection only (iframe handles display) -->
+<script>
+document.addEventListener('contextmenu', e => e.preventDefault());
+document.addEventListener('keydown', function (e) {
+  const key = e.key.toLowerCase();
+  const ctrl = e.ctrlKey || e.metaKey;
+  if (ctrl && (key === 's' || key === 'p' || key === 'u')) { e.preventDefault(); return false; }
+  if (ctrl && e.shiftKey && (key === 'i' || key === 'j' || key === 'c')) { e.preventDefault(); return false; }
+  if (e.key === 'F12') { e.preventDefault(); return false; }
+});
+window.addEventListener('beforeprint', e => e.preventDefault());
+</script>
+{% endif %}
 {% endblock %}
