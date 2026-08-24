@@ -105,6 +105,9 @@
               {% endif %}
               <div class="small text-muted">{% if tx.copy.copy_type == 'hardcopy' %}Acc: {{ tx.copy.accession_no }}{% else %}<span class="badge bg-info text-dark"><i class="bi bi-link-45deg"></i> Link</span>{% endif %}</div>
               <div class="small mt-1 d-flex flex-wrap gap-1">
+                {% if tx.renewal_status %}
+                  <span class="badge bg-info"><i class="bi bi-arrow-clockwise"></i> {{ tx.renewal_status }}</span>
+                {% endif %}
                 {% if tx.copy.copy_type == 'softcopy' %}
                   {% if tx.is_link_active %}
                     <span class="badge bg-success"><i class="bi bi-wifi"></i> Link Active</span>
@@ -117,7 +120,7 @@
                     {% endif %}
                   {% elif tx.is_link_expired %}
                     <span class="badge bg-dark"><i class="bi bi-wifi-off"></i> Link Expired</span>
-                    {% if tx.has_unpaid_fine %}
+                    {% if tx.has_unpaid_fine and tx.renewed_count == 0 %}
                     <span class="badge bg-danger"><i class="bi bi-cash-coin"></i> Fine: TZS {{ tx.total_fine_remaining }}</span>
                     {% endif %}
                   {% else %}

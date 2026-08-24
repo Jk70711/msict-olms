@@ -133,7 +133,7 @@
                   </form>
                   {% endif %}
                   <form method="post" action="{% url 'reset_user_password' g.id %}" class="d-inline"
-                        onsubmit="return confirm('Reset password for {{ g.username }}? A new password will be sent via SMS/email.');">
+                        onsubmit="return confirm('Initiate password reset for {{ g.username }}? They will receive an OTP to complete the reset.');">
                     {% csrf_token %}
                     <button class="btn btn-outline-secondary btn-sm" title="Reset Password">
                       <i class="bi bi-key"></i>

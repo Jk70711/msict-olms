@@ -144,6 +144,7 @@
           <th>Borrow Date</th>
           <th>Due Date</th>
           <th>Status</th>
+          <th>Renewal</th>
           <th>Fine</th>
           <th>Days Info</th>
           <th>Approved By</th>
@@ -184,19 +185,30 @@
             {% endif %}
           </td>
           <td>
-            {% for tid, fine_info in tx_fines.items %}
-              {% if tid == tx.id %}
-                {% if fine_info.paid %}
-                <span class="badge bg-success">Paid</span>
-                {% elif fine_info.amount_paid > 0 %}
-                <span class="badge bg-warning text-dark">Partial</span>
-                {% else %}
-                <span class="badge bg-danger">Unpaid</span>
+            {% if tx.renewal_status %}
+              <span class="badge bg-info"><i class="bi bi-arrow-clockwise"></i> {{ tx.renewal_status }}</span>
+            {% else %}
+              <span class="text-muted small">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if tx.renewed_count > 0 %}
+              <span class="text-muted small">—</span>
+            {% else %}
+              {% for tid, fine_info in tx_fines.items %}
+                {% if tid == tx.id %}
+                  {% if fine_info.paid %}
+                  <span class="badge bg-success">Paid</span>
+                  {% elif fine_info.amount_paid > 0 %}
+                  <span class="badge bg-warning text-dark">Partial</span>
+                  {% else %}
+                  <span class="badge bg-danger">Unpaid</span>
+                  {% endif %}
                 {% endif %}
-              {% endif %}
-            {% empty %}
-            <span class="text-muted small">—</span>
-            {% endfor %}
+              {% empty %}
+              <span class="text-muted small">—</span>
+              {% endfor %}
+            {% endif %}
           </td>
           <td>
             {% if tx.status == 'returned' and tx.return_date %}
@@ -223,7 +235,7 @@
           </td>
         </tr>
         {% empty %}
-        <tr><td colspan="11" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
+        <tr><td colspan="12" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

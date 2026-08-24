@@ -1051,6 +1051,11 @@ def softcopy_access_link_view(request, token):
     from circulation.models import BorrowingTransaction, SoftcopyAccessLog
     from django.utils import timezone as tz
 
+    # Require login to prevent link sharing
+    if not request.user.is_authenticated:
+        messages.error(request, 'You must be logged in to access this softcopy. Please log in first.')
+        return redirect('login')
+
     tx = get_object_or_404(
         BorrowingTransaction,
         access_token=token,
@@ -1112,6 +1117,12 @@ def special_pdf_data_view(request, copy_id):
     if token:
         try:
             tx = BorrowingTransaction.objects.get(access_token=token, copy=copy)
+            # Ensure logged-in user is the owner of the transaction
+            if request.user.is_authenticated and request.user != tx.user:
+                return HttpResponseForbidden('This link belongs to another user.')
+            # Require login even with token to prevent sharing
+            if not request.user.is_authenticated:
+                return HttpResponseForbidden('Authentication required.')
         except BorrowingTransaction.DoesNotExist:
             return HttpResponseForbidden('Invalid access token.')
     else:

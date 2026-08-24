@@ -3477,9 +3477,9 @@ def member_msict_borrowings_view(request):
         user=user, status__in=['fulfilled', 'cancelled', 'expired']
     ).select_related('book').order_by('-created_at')[:20]
 
-    # Unpaid fines
+    # Unpaid fines - exclude fines from renewed transactions (renewal doesn't incur fines)
     unpaid_fines = Fine.objects.filter(
-        transaction__user=user, paid=False
+        transaction__user=user, paid=False, transaction__renewed_count=0
     ).select_related('transaction__copy__book')
 
     # Get fines for overdue transactions
@@ -3791,7 +3791,11 @@ def all_borrowings_view(request):
     query            = request.GET.get('q', '')
 
     if status_filter:
-        qs = qs.filter(status=status_filter)
+        if status_filter == 'overdue':
+            # Exclude softcopies from overdue filter since they never go overdue (matching count logic)
+            qs = qs.filter(status='overdue').exclude(copy__copy_type='softcopy')
+        else:
+            qs = qs.filter(status=status_filter)
     if copy_type_filter:
         qs = qs.filter(copy__copy_type=copy_type_filter)
     if query:
@@ -3804,12 +3808,35 @@ def all_borrowings_view(request):
             Q(copy__accession_no__icontains=query)
         )
 
+    # Calculate counts based on the filtered queryset (without status filter for accurate totals)
+    # Exclude softcopies from overdue count since they never go overdue (matching _auto_mark_overdue logic)
+    base_qs = BorrowingTransaction.objects.all()
+    if copy_type_filter:
+        base_qs = base_qs.filter(copy__copy_type=copy_type_filter)
+    if query:
+        base_qs = base_qs.filter(
+            Q(user__first_name__icontains=query) |
+            Q(user__surname__icontains=query)    |
+            Q(user__username__icontains=query)   |
+            Q(user__army_no__icontains=query)    |
+            Q(copy__book__title__icontains=query)|
+            Q(copy__accession_no__icontains=query)
+        )
+
     counts = {
-        'all':      BorrowingTransaction.objects.count(),
-        'borrowed': BorrowingTransaction.objects.filter(status='borrowed').count(),
-        'overdue':  BorrowingTransaction.objects.filter(status='overdue').count(),
-        'returned': BorrowingTransaction.objects.filter(status='returned').count(),
+        'all':      base_qs.count(),
+        'borrowed': base_qs.filter(status='borrowed').count(),
+        'overdue':  base_qs.filter(status='overdue').exclude(copy__copy_type='softcopy').count(),
+        'returned': base_qs.filter(status='returned').count(),
+        'lost':     base_qs.filter(status='lost').count(),
     }
+
+    # Debug: log the actual counts and queryset size
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"All Borrowings counts: {counts}")
+    logger.info(f"Queryset size: {qs.count()}")
+    logger.info(f"Status filter: {status_filter}, Copy type filter: {copy_type_filter}, Query: {query}")
 
     # Build fine info dictionary for each transaction
     tx_ids = qs.values_list('id', flat=True)

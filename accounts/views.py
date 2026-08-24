@@ -521,6 +521,9 @@ def logout_view(request):
 # Mtumiaji anaweza kutumia nambari ya jeshi au barua pepe
 # ----------------------------------------------------------------------
 def forgot_password_view(request):
+    # Pre-fill identifier if admin/librarian initiated reset for a specific user
+    prefill_identifier = request.session.pop('reset_for_user_identifier', None)
+
     if request.method == 'POST':
         identifier = request.POST.get('identifier', '').strip()
         try:
@@ -572,7 +575,7 @@ def forgot_password_view(request):
             return redirect('verify_otp')
         except OLMSUser.DoesNotExist:
             messages.error(request, 'No account found with that Army Number or Email.')
-    return render(request, 'accounts/forgot_password.html')
+    return render(request, 'accounts/forgot_password.html', {'prefill_identifier': prefill_identifier})
 
 
 # Thibitisha OTP — inachunguza kama OTP ni sahihi na bado haijaisha muda
@@ -2381,40 +2384,22 @@ def edit_user_view(request, user_id):
 # ----------------------------------------------------------------------
 def reset_user_password_view(request, user_id):
     """
-    Librarian-triggered password reset.
+    Admin/librarian-triggered password reset.
 
-    POST-only — protected by CSRF + librarian role decorator. Generates
-    a strong random temporary password (10 chars, mixed-case + digits,
-    no ambiguous characters) instead of the predictable army_no-derived
-    pattern. The user is required to change it on first login
-    (enforced by the password-age reminder + dashboard banner).
+    Redirects to the normal OTP-based password reset flow (forgot_password → verify_otp → reset_password)
+    instead of generating a temporary password. The target user's identifier is stored in session
+    and pre-filled on the forgot_password page.
     """
-    import secrets
-    import string
-
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
 
-    # Strong random — 10 chars, alphanum, exclude visually similar (0/O, 1/l/I)
-    alphabet = ''.join(c for c in (string.ascii_letters + string.digits)
-                       if c not in '0O1lI')
-    new_pw = ''.join(secrets.choice(alphabet) for _ in range(10))
+    # Use army_no if available, otherwise email
+    identifier = user_obj.army_no if user_obj.army_no else user_obj.email
 
-    user_obj.set_password(new_pw)
-    user_obj.last_password_change = timezone.now()
-    user_obj.save()
-
-    body = (
-        f"MSICT OLMS: Your password has been reset by the librarian.\n"
-        f"Temporary password: {new_pw}\n"
-        f"You must change this password on next login."
-    )
-    send_email_notification(user_obj.email, "MSICT OLMS - Password Reset", body)
-    send_sms(user_obj.phone, f"MSICT OLMS: New password: {new_pw}. Change it on next login.")
-    log_audit(request.user, f"Reset password for user '{user_obj.username}'", request)
-    messages.success(request, f"Password reset to: {new_pw} — sent to user by SMS and email.")
-    if getattr(user_obj, 'is_guest', False) or user_obj.role == 'guest':
-        return redirect('guest_manage')
-    return redirect('user_list')
+    # Store the identifier in session so forgot_password can pre-fill it
+    request.session['reset_for_user_identifier'] = identifier
+    log_audit(request.user, f"Initiated password reset for user '{user_obj.username}' via OTP flow", request)
+    messages.info(request, f"Password reset initiated for {user_obj.username}. The user will receive an OTP to complete the reset.")
+    return redirect('forgot_password')
 
 
 @login_required

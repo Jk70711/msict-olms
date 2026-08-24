@@ -125,6 +125,21 @@ class BorrowingTransaction(models.Model):
         from circulation.models import LossReport as _LR
         return _LR.objects.filter(transaction=self).exists()
 
+    @property
+    def renewal_status(self):
+        """Returns renewal status text: 'Renewed 1' or 'Renewed 2' based on renewed_count."""
+        if self.renewed_count == 1:
+            return "Renewed 1"
+        elif self.renewed_count == 2:
+            return "Renewed 2"
+        return ""
+
+    @property
+    def renewals_left(self):
+        """Returns remaining renewals allowed."""
+        max_renewals = int(_pref('MAX_RENEWALS', 2))
+        return max(0, max_renewals - self.renewed_count)
+
     def is_overdue(self):
         return self.status in ('borrowed', 'overdue') and timezone.now() > self.due_date
 
