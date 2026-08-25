@@ -1,0 +1,465 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load humanize %}
+{% block title %}User Manual – MSICT OLMS{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white">
+          <h2 class="h4 mb-0"><i class="bi bi-book"></i> User Manual</h2>
+          <p class="mb-0 small opacity-75">MSICT Library Management System Guide</p>
+        </div>
+        <div class="card-body">
+          
+          <!-- Table of Contents -->
+          <div class="alert alert-info mb-4">
+            <h6 class="fw-bold mb-2"><i class="bi bi-list"></i> Quick Navigation</h6>
+            <div class="row g-2">
+              <div class="col-md-4"><a href="#getting-started" class="text-decoration-none">Getting Started</a></div>
+              <div class="col-md-4"><a href="#borrowing" class="text-decoration-none">Borrowing Books</a></div>
+              <div class="col-md-4"><a href="#returning" class="text-decoration-none">Returning Books</a></div>
+              <div class="col-md-4"><a href="#renewals" class="text-decoration-none">Renewals</a></div>
+              <div class="col-md-4"><a href="#reservations" class="text-decoration-none">Reservations</a></div>
+              <div class="col-md-4"><a href="#fines" class="text-decoration-none">Fines & Payments</a></div>
+              <div class="col-md-4"><a href="#loss" class="text-decoration-none">Lost Books</a></div>
+              <div class="col-md-4"><a href="#softcopy" class="text-decoration-none">Digital Resources</a></div>
+              <div class="col-md-4"><a href="#notifications" class="text-decoration-none">Notifications</a></div>
+              <div class="col-md-4"><a href="#chat" class="text-decoration-none">Chat & Support</a></div>
+              <div class="col-md-4"><a href="#passwords" class="text-decoration-none">Password Security</a></div>
+              <div class="col-md-4"><a href="#login-attempts" class="text-decoration-none">Login Attempts</a></div>
+              <div class="col-md-4"><a href="#guest" class="text-decoration-none">Guest Access</a></div>
+              <div class="col-md-4"><a href="#ai" class="text-decoration-none">AI Assistant</a></div>
+            </div>
+          </div>
+
+          <!-- System Parameters Display -->
+          <div class="card mb-4 bg-light border">
+            <div class="card-header fw-bold">
+              <i class="bi bi-gear"></i> Current System Parameters
+            </div>
+            <div class="card-body">
+              <div class="row g-3">
+                <div class="col-md-4">
+                  <small class="text-muted">Loan Period</small>
+                  <div class="fw-bold">{{ loan_period_days }} days</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Fine per Day</small>
+                  <div class="fw-bold">TZS {{ fine_per_day|intcomma }}</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Max Borrow Limit</small>
+                  <div class="fw-bold">{{ max_borrow_limit }} items</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Max Renewals</small>
+                  <div class="fw-bold">{{ max_renewals }} times</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Renewal Window</small>
+                  <div class="fw-bold">{{ renewal_window_days }} days before due</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Reservation Expiry</small>
+                  <div class="fw-bold">{{ reservation_expiry_days }} days</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">OTP Validity</small>
+                  <div class="fw-bold">{{ otp_validity_minutes }} minutes</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Password Expiry</small>
+                  <div class="fw-bold">{{ password_expiry_days }} days</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Max Login Attempts</small>
+                  <div class="fw-bold">{{ max_login_attempts }} attempts</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Suspend After</small>
+                  <div class="fw-bold">{{ suspend_attempts }} failed attempts</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Suspend Duration</small>
+                  <div class="fw-bold">{{ suspend_duration_minutes }} minutes</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Session Timeout</small>
+                  <div class="fw-bold">{{ session_timeout_minutes }} minutes</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Guest Max Hours</small>
+                  <div class="fw-bold">{{ guest_max_hours }} hours</div>
+                </div>
+                <div class="col-md-4">
+                  <small class="text-muted">Guest Hourly Rate</small>
+                  <div class="fw-bold">TZS {{ guest_hourly_rate|intcomma }}/hour</div>
+                </div>
+              </div>
+              <div class="mt-2 small text-muted">
+                <i class="bi bi-info-circle"></i> These parameters are set by the library administrator and may change. Check this page for current values.
+              </div>
+            </div>
+          </div>
+
+          <!-- Getting Started -->
+          <section id="getting-started" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-play-circle"></i> Getting Started</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Registration</h6>
+                <ul>
+                  <li>Visit the registration page and fill in your details (Army Number, Name, Email, Phone, Member Type)</li>
+                  <li>You must accept the Terms and Conditions to complete registration</li>
+                  <li>Your account will require approval from a librarian before you can borrow books</li>
+                  <li>You will receive an OTP via SMS/Email to verify your account</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Login</h6>
+                <ul>
+                  <li>Use your Army Number or Email and password to log in</li>
+                  <li>If you forget your password, use the "Forgot Password" link to reset via OTP</li>
+                  <li>For security, passwords expire every {{ password_expiry_days }} days and must be changed</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Borrowing Books -->
+          <section id="borrowing" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-book"></i> Borrowing Books</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">How to Borrow</h6>
+                <ol>
+                  <li>Search for books using the catalog search bar</li>
+                  <li>Click "Borrow Request" on the book you want</li>
+                  <li>Wait for librarian approval (you'll receive a notification)</li>
+                  <li>For softcopies, complete payment to receive access link</li>
+                  <li>For hardcopies, collect the physical book from the library desk</li>
+                </ol>
+                <h6 class="fw-bold mt-3">Borrowing Rules</h6>
+                <ul>
+                  <li>Standard loan period is <strong>{{ loan_period_days }} days</strong></li>
+                  <li>You can borrow up to <strong>{{ max_borrow_limit }} items</strong> at a time</li>
+                  <li>Books must be returned by the due date to avoid fines</li>
+                  <li>Some books may have special borrowing restrictions</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Returning Books -->
+          <section id="returning" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-arrow-return-left"></i> Returning Books</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Hardcopy Returns</h6>
+                <ul>
+                  <li>Bring the physical book to the library desk</li>
+                  <li>The librarian will process the return and update your record</li>
+                  <li>You will receive a confirmation of return</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Softcopy Returns</h6>
+                <ul>
+                  <li>Softcopy access automatically expires after the loan period</li>
+                  <li>No physical return is required</li>
+                  <li>You can renew softcopy access before expiry</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Renewals -->
+          <section id="renewals" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-arrow-clockwise"></i> Renewals</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Renewal Policy</h6>
+                <ul>
+                  <li>You can renew a book up to <strong>{{ max_renewals }} times</strong></li>
+                  <li>Renewals are only allowed within <strong>{{ renewal_window_days }} days</strong> before the due date</li>
+                  <li>Books with pending reservations cannot be renewed</li>
+                  <li>Overdue books cannot be renewed (must return and pay fines first)</li>
+                </ul>
+                <h6 class="fw-bold mt-3">How to Renew</h6>
+                <ol>
+                  <li>Go to "My MSICT Borrowings" in your dashboard</li>
+                  <li>Find the book you want to renew</li>
+                  <li>Click the "Renew" button (if eligible)</li>
+                  <li>For softcopies, complete the renewal payment</li>
+                </ol>
+                <div class="alert alert-warning mt-3">
+                  <i class="bi bi-exclamation-triangle"></i> Note: Renewal status will show as "Renewed 1" or "Renewed 2" to track your renewal count.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Reservations -->
+          <section id="reservations" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-bookmark-star"></i> Reservations</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">How to Reserve</h6>
+                <ol>
+                  <li>Search for the book you want in the catalog</li>
+                  <li>If the book is currently borrowed, click "Reserve" on the book detail page</li>
+                  <li>You will be added to the reservation queue</li>
+                  <li>When the book becomes available, you'll receive a notification</li>
+                  <li>You have 24 hours to collect the book after notification</li>
+                </ol>
+                <h6 class="fw-bold mt-3">Reservation Rules</h6>
+                <ul>
+                  <li>Reservations expire after <strong>{{ reservation_expiry_days }} days</strong> if unclaimed</li>
+                  <li>You can only reserve books that are currently borrowed by others</li>
+                  <li>If you miss the 24-hour collection window, the reservation passes to the next person</li>
+                  <li>Books with pending reservations cannot be renewed by current borrowers</li>
+                  <li>You can cancel your reservation from your dashboard</li>
+                </ul>
+                <div class="alert alert-info mt-3">
+                  <i class="bi bi-info-circle"></i> Tip: Check your notifications regularly to avoid missing reserved books.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Fines and Payments -->
+          <section id="fines" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-cash-coin"></i> Fines & Payments</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Fine Calculation</h6>
+                <ul>
+                  <li>Fines are charged at <strong>TZS {{ fine_per_day|intcomma }} per day</strong> for overdue items</li>
+                  <li>Fines start accruing from the day after the due date</li>
+                  <li>Renewed books do not incur fines (renewal is before due date)</li>
+                  <li>Lost books have additional replacement costs</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Payment Methods</h6>
+                <ul>
+                  <li>Pay fines through the "My Fines" section in your dashboard</li>
+                  <li>Digital receipts are provided for all payments</li>
+                  <li>Unpaid fines may block borrowing privileges</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Lost Books -->
+          <section id="loss" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-exclamation-diamond"></i> Lost Books</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Reporting Lost Books</h6>
+                <ul>
+                  <li>Report lost books immediately through your dashboard</li>
+                  <li>Go to "My MSICT Borrowings" and click "Report Loss"</li>
+                  <li>The librarian will review and confirm the loss report</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Loss Fines</h6>
+                <ul>
+                  <li>Lost books incur a replacement fine based on book value</li>
+                  <li>Pay the loss fine to clear your record</li>
+                  <li>Receipts are provided for loss fine payments</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Digital Resources -->
+          <section id="softcopy" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-file-earmark-pdf"></i> Digital Resources (Softcopies)</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Accessing Softcopies</h6>
+                <ul>
+                  <li>Request softcopy borrowing through the catalog</li>
+                  <li>Complete payment to receive access link</li>
+                  <li>You must be logged in to access softcopy links</li>
+                  <li>Links are personal and cannot be shared with others</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Softcopy Rules</h6>
+                <ul>
+                  <li>Access link expires after the loan period</li>
+                  <li>You can renew access before expiry (up to {{ max_renewals }} times)</li>
+                  <li>Softcopies are for personal use only</li>
+                  <li>Copyright laws apply to all digital materials</li>
+                </ul>
+                <div class="alert alert-danger mt-3">
+                  <i class="bi bi-shield-lock"></i> Security: Softcopy links require login. Sharing links with others is prohibited and may result in account suspension.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Notifications -->
+          <section id="notifications" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-bell"></i> Notifications</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Types of Notifications</h6>
+                <ul>
+                  <li><strong>Due Date Reminders:</strong> Sent 2 days before due date</li>
+                  <li><strong>Overdue Alerts:</strong> Sent when books become overdue</li>
+                  <li><strong>Approval Notifications:</strong> When borrow requests are approved</li>
+                  <li><strong>Reservation Alerts:</strong> When reserved books become available</li>
+                  <li><strong>Fine Notifications:</strong> When fines are issued or updated</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Notification Channels</h6>
+                <ul>
+                  <li>SMS to your registered phone number</li>
+                  <li>Email to your registered email address</li>
+                  <li>In-app notifications in your dashboard</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Chat and Support -->
+          <section id="chat" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-chat-dots"></i> Chat & Support</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">In-System Chat</h6>
+                <ul>
+                  <li>Use the chat feature to communicate with librarians</li>
+                  <li>Members can only chat with librarians/admins (not other members)</li>
+                  <li>Chat is for library-related assistance only</li>
+                  <li>Unread messages show a badge on the chat icon</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Getting Help</h6>
+                <ul>
+                  <li>For quick questions, use the in-system chat</li>
+                  <li>For complex issues, visit the library desk</li>
+                  <li>Contact library administration for account issues</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Password Security -->
+          <section id="passwords" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-shield-lock"></i> Password Security</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Password Requirements</h6>
+                <ul>
+                  <li>Passwords must be at least 8 characters long</li>
+                  <li>Must include uppercase, lowercase, numbers, and special characters</li>
+                  <li>Cannot reuse your last 5 passwords</li>
+                  <li>Passwords expire every {{ password_expiry_days }} days</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Password Reset</h6>
+                <ul>
+                  <li>Use "Forgot Password" for self-reset via OTP</li>
+                  <li>Librarians can initiate password resets for your account</li>
+                  <li>Always keep your password confidential</li>
+                  <li>Never share your login credentials</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Session Management</h6>
+                <ul>
+                  <li>Sessions automatically timeout after {{ session_timeout_minutes }} minutes of inactivity</li>
+                  <li>You will be logged out automatically for security</li>
+                  <li>Use "Remember Me" to extend session (if enabled)</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- Login Attempts -->
+          <section id="login-attempts" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-shield-exclamation"></i> Login Attempts & Security</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Failed Login Attempts</h6>
+                <ul>
+                  <li>After <strong>{{ max_login_attempts }} failed attempts</strong>, your account will be temporarily locked</li>
+                  <li>After <strong>{{ suspend_attempts }} failed attempts</strong>, your account will be suspended</li>
+                  <li>Suspension lasts for <strong>{{ suspend_duration_minutes }} minutes</strong></li>
+                  <li>Failed attempts are logged for security monitoring</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Account Lockout</h6>
+                <ul>
+                  <li>Locked accounts require password reset via OTP</li>
+                  <li>Suspended accounts require librarian intervention</li>
+                  <li>Contact library administration if locked out</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Security Best Practices</h6>
+                <ul>
+                  <li>Use strong, unique passwords</li>
+                  <li>Don't share your credentials with anyone</li>
+                  <li>Report suspicious activity immediately</li>
+                  <li>Log out when using shared computers</li>
+                </ul>
+                <div class="alert alert-warning mt-3">
+                  <i class="bi bi-exclamation-triangle"></i> Multiple failed login attempts may indicate unauthorized access attempts. Protect your account by using strong passwords.
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- Guest Access -->
+          <section id="guest" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-person-badge"></i> Guest Access</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Guest Sessions</h6>
+                <ul>
+                  <li>Guests can access the library for limited time sessions</li>
+                  <li>Session duration is purchased in hours (max {{ guest_max_hours }} hours per session)</li>
+                  <li>Hourly rate is <strong>TZS {{ guest_hourly_rate|intcomma }}/hour</strong></li>
+                  <li>Guests can browse the catalog but cannot borrow</li>
+                  <li>Guest sessions expire after the purchased time</li>
+                  <li>Daily limit: Maximum {{ guest_max_hours }} hours total per day</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Session Renewal</h6>
+                <ul>
+                  <li>Guests can renew their session before expiry</li>
+                  <li>Renewal payment is based on remaining available hours</li>
+                  <li>Session expiry countdown is displayed in real-time</li>
+                  <li>5-minute warning popup before session expires</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Guest to Member Upgrade</h6>
+                <ul>
+                  <li>Guests can upgrade to full member status</li>
+                  <li>Complete registration form with your details</li>
+                  <li>Requires librarian approval</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <!-- AI Assistant -->
+          <section id="ai" class="mb-5">
+            <h4 class="fw-bold text-primary"><i class="bi bi-robot"></i> AI Library Assistant</h4>
+            <div class="card mt-2">
+              <div class="card-body">
+                <h6 class="fw-bold">Using the AI Assistant</h6>
+                <ul>
+                  <li>The AI assistant helps with library-related queries</li>
+                  <li>Ask about book availability, borrowing rules, and general information</li>
+                  <li>AI can search the catalog and provide recommendations</li>
+                  <li>Use responsibly for library-related questions only</li>
+                </ul>
+                <h6 class="fw-bold mt-3">Limitations</h6>
+                <ul>
+                  <li>AI cannot perform account-specific actions</li>
+                  <li>For account issues, contact librarians directly</li>
+                  <li>AI responses are based on available library data</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <div class="text-center mt-4">
+            <a href="{% url 'home' %}" class="btn btn-primary"><i class="bi bi-arrow-left"></i> Back to Home</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

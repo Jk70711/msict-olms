@@ -55,6 +55,57 @@ def send_account_status_update(user, action):
 
 
 # ----------------------------------------------------------------------
+# View ya Terms and Conditions — Ukurasa wa Masharti na Mataruzisho
+# ----------------------------------------------------------------------
+def terms_and_conditions_view(request):
+    """Terms and Conditions page for MSICT OLMS"""
+    return render(request, 'pages/terms_and_conditions.html')
+
+
+# ----------------------------------------------------------------------
+# View ya User Manual — Mwongozo wa Matumizi kwa Watumiaji
+# ----------------------------------------------------------------------
+def user_manual_view(request):
+    """User Manual page with dynamic system preferences"""
+    from accounts.models import SystemPreference
+    from django.contrib.humanize.templatetags.humanize import intcomma
+    
+    # Fetch current system preferences
+    loan_period_days = int(SystemPreference.get('LOAN_PERIOD_DAYS', 7))
+    fine_per_day = int(SystemPreference.get('FINE_PER_DAY', 500))
+    max_renewals = int(SystemPreference.get('MAX_RENEWALS', 2))
+    otp_validity_minutes = int(SystemPreference.get('OTP_VALIDITY_MINUTES', 10))
+    password_expiry_days = int(SystemPreference.get('PASSWORD_EXPIRY_DAYS', 90))
+    max_borrow_limit = int(SystemPreference.get('MAX_COPIES_PER_BORROW', 3))
+    renewal_window_days = int(SystemPreference.get('RENEWAL_WINDOW_DAYS', 2))
+    reservation_expiry_days = int(SystemPreference.get('RESERVATION_EXPIRY_DAYS', 7))
+    max_login_attempts = int(SystemPreference.get('MAX_LOGIN_ATTEMPTS', 6))
+    suspend_attempts = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3))
+    suspend_duration_minutes = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10))
+    session_timeout_minutes = int(SystemPreference.get('SESSION_TIMEOUT_MINUTES', 30))
+    guest_max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12))
+    guest_hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500))
+    
+    return render(request, 'pages/user_manual.html', {
+        'loan_period_days': loan_period_days,
+        'fine_per_day': fine_per_day,
+        'max_renewals': max_renewals,
+        'otp_validity_minutes': otp_validity_minutes,
+        'password_expiry_days': password_expiry_days,
+        'max_borrow_limit': max_borrow_limit,
+        'renewal_window_days': renewal_window_days,
+        'reservation_expiry_days': reservation_expiry_days,
+        'max_login_attempts': max_login_attempts,
+        'suspend_attempts': suspend_attempts,
+        'suspend_duration_minutes': suspend_duration_minutes,
+        'session_timeout_minutes': session_timeout_minutes,
+        'guest_max_hours': guest_max_hours,
+        'guest_hourly_rate': guest_hourly_rate,
+        'intcomma': intcomma,
+    })
+
+
+# ----------------------------------------------------------------------
 # View ya Usajili wa Umma — Self-registration kwa wanachama
 # ----------------------------------------------------------------------
 def public_register_view(request):

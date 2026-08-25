@@ -16,6 +16,10 @@ urlpatterns = [
     path('verify-otp/', views.verify_otp_view, name='verify_otp'),                           # Thibitisha OTP uliopokea
     path('reset-password/', views.reset_password_view, name='reset_password'),               # Weka nywila mpya
 
+    # ── Pages ───────────────────────────────────────────────
+    path('terms-and-conditions/', views.terms_and_conditions_view, name='terms_and_conditions'), # Terms and Conditions page
+    path('user-manual/', views.user_manual_view, name='user_manual'), # User Manual page
+
     # ── Wasifu na Kadi ────────────────────────────────────
     path('dashboard/', views.dashboard_redirect, name='dashboard'),                          # Elekeza kwa dashboard sahihi
     path('guest/dashboard/', views.guest_dashboard_view, name='guest_dashboard'),            # Dashboard ya guest

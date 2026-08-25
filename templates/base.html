@@ -1189,8 +1189,14 @@
     <a href="{% url 'catalog_search' %}" class="catbar-link">
       <i class="bi bi-book-half"></i> Browse All
     </a>
+   
+  <span class="catbar-sep">|</span>
     <a href="{% url 'catalog_search' %}?sort=new" class="catbar-link d-none d-md-inline-flex">
       <i class="bi bi-stars"></i> New Arrivals
+    </a>
+  {# user manual page link #}
+    <a href="{% url 'user_manual' %}" class="catbar-link d-none d-md-inline-flex">
+      <i class="bi bi-question-circle"></i> User Manual
     </a>
     <span class="catbar-count d-none d-sm-block">{{ cat_menu|length }} categor{{ cat_menu|pluralize:"y,ies" }}</span>
   </nav>
@@ -1300,6 +1306,7 @@
   <footer>
     <span>&copy; {% now "Y" %} MSICT Library Management System</span>
     <span class="d-none d-md-inline">Military School of Information and Technology</span>
+    <span class="ms-3"><a href="{% url 'terms_and_conditions' %}" class="text-decoration-none text-muted">Terms and Conditions</a></span>
   </footer>
 </div>
 
