@@ -128,7 +128,24 @@
           </div>
           <div class="col-md-4 text-center mt-3 mt-md-0">
 
-            {# ── Normal Return Button ── #}
+            {% if lookup_tx_has_unpaid_fine %}
+            {# ── Unpaid fine — block return ── #}
+            <div class="alert alert-danger p-2 mb-2 text-start">
+              <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Fine</div>
+              <div>Total: <strong>TZS {{ lookup_tx_fine.amount|floatformat:0|intcomma }}</strong></div>
+              <div class="text-danger fw-semibold">Remaining: TZS {{ lookup_tx_fine.remaining_balance|floatformat:0|intcomma }}</div>
+            </div>
+            <button class="btn btn-danger btn-lg fw-semibold w-100 mb-2" disabled>
+              <i class="bi bi-lock-fill"></i><br>Return Blocked
+            </button>
+            <div class="text-muted small">
+              <i class="bi bi-info-circle"></i>
+              Fine must be paid before this book can be returned.<br>
+              Direct the member to the <a href="{% url 'fine_list' %}" class="fw-semibold">payment desk</a>.
+            </div>
+
+            {% else %}
+            {# ── No fine — allow normal and damage return ── #}
             <form method="post" class="mb-2"
                   onsubmit="return confirm('Confirm NORMAL return of this book?');">
               {% csrf_token %}
@@ -190,6 +207,8 @@
               No fine. Book returned on time.
               {% endif %}
             </div>
+            {% endif %}
+
           </div>
         </div>
       </div>
@@ -278,109 +297,83 @@
                     <span class="text-muted fs-6">—</span>
                   {% endfor %}
                 </td>
-                <td class="text-center">
-                  {% if tx.status == 'overdue' %}
-                    {% for tid, fine_info in tx_fines.items %}
-                      {% if tid == tx.id and fine_info.remaining > 0 %}
-                      <button class="btn btn-sm btn-danger fw-semibold" disabled title="Pay fine first: TZS {{ fine_info.remaining|floatformat:0|intcomma }}">
-                        <i class="bi bi-exclamation-triangle"></i> Blocked
-                      </button>
-                      {% elif tid == tx.id and fine_info.remaining == 0 %}
-                      <div class="d-flex flex-column align-items-center gap-1">
-                        <label class="form-check-label small text-danger">
-                          <input class="form-check-input" type="checkbox" name="mark_damaged" value="1"
-                                 onchange="toggleDamageForm('damageFields-{{ tx.pk }}', this.checked)">
-                          Damaged?
-                        </label>
-                        <div id="damageFields-{{ tx.pk }}" style="display:none;" class="text-start">
-                          <select name="damage_type" class="form-select form-select-sm mb-1" style="width:140px;">
-                            <option value="">-- Type --</option>
-                            <option value="pages_torn">Pages Torn</option>
-                            <option value="cover_damaged">Cover Damaged</option>
-                            <option value="water_damage">Water Damage</option>
-                            <option value="spine_broken">Spine Broken</option>
-                            <option value="writing_marking">Writing / Marking</option>
-                            <option value="missing_pages">Missing Pages</option>
-                            <option value="other">Other</option>
-                          </select>
-                          <input type="text" name="damage_description" class="form-control form-control-sm"
-                                 placeholder="Describe..." style="width:140px;">
-                        </div>
-                        <form method="post" class="d-inline"
-                              onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
-                          {% csrf_token %}
-                          <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
-                          <input type="hidden" name="return_card_no" value="{{ card_input }}">
-                          <button type="submit" class="btn btn-sm btn-success fw-semibold">
-                            <i class="bi bi-check-circle"></i> Return
-                          </button>
-                        </form>
-                      </div>
-                      {% endif %}
-                    {% empty %}
-                    <div class="d-flex flex-column align-items-center gap-1">
-                      <label class="form-check-label small text-danger">
-                        <input class="form-check-input" type="checkbox" name="mark_damaged" value="1"
-                               onchange="toggleDamageForm('damageFields-{{ tx.pk }}', this.checked)">
-                        Damaged?
-                      </label>
-                      <div id="damageFields-{{ tx.pk }}" style="display:none;" class="text-start">
-                        <select name="damage_type" class="form-select form-select-sm mb-1" style="width:140px;">
-                          <option value="">-- Type --</option>
-                          <option value="pages_torn">Pages Torn</option>
-                          <option value="cover_damaged">Cover Damaged</option>
-                          <option value="water_damage">Water Damage</option>
-                          <option value="spine_broken">Spine Broken</option>
-                          <option value="writing_marking">Writing / Marking</option>
-                          <option value="missing_pages">Missing Pages</option>
-                          <option value="other">Other</option>
-                        </select>
-                        <input type="text" name="damage_description" class="form-control form-control-sm"
-                               placeholder="Describe..." style="width:140px;">
-                      </div>
-                      <form method="post" class="d-inline"
-                            onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
-                        {% csrf_token %}
-                        <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
-                        <input type="hidden" name="return_card_no" value="{{ card_input }}">
-                        <button type="submit" class="btn btn-sm btn-success fw-semibold">
-                          <i class="bi bi-check-circle"></i> Return
-                        </button>
-                      </form>
-                    </div>
-                    {% endfor %}
+                <td class="text-center" style="min-width:160px;">
+                  {% for tid, fine_info in tx_fines.items %}
+                  {% if tid == tx.id %}
+
+                  {% if fine_info.remaining > 0 %}
+                  {# ── Unpaid fine: block return ── #}
+                  <div class="text-danger small fw-bold mb-1">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Fine<br>
+                    TZS {{ fine_info.remaining|floatformat:0|intcomma }}
+                  </div>
+                  <button class="btn btn-sm btn-danger" disabled
+                          title="Pay TZS {{ fine_info.remaining|floatformat:0|intcomma }} first">
+                    <i class="bi bi-lock-fill"></i> Blocked
+                  </button>
+
                   {% else %}
-                    <div class="d-flex flex-column align-items-center gap-1">
-                      <label class="form-check-label small text-danger">
-                        <input class="form-check-input" type="checkbox" name="mark_damaged" value="1"
-                               onchange="toggleDamageForm('damageFields-{{ tx.pk }}', this.checked)">
-                        Damaged?
-                      </label>
-                      <div id="damageFields-{{ tx.pk }}" style="display:none;" class="text-start">
-                        <select name="damage_type" class="form-select form-select-sm mb-1" style="width:140px;">
-                          <option value="">-- Type --</option>
-                          <option value="pages_torn">Pages Torn</option>
-                          <option value="cover_damaged">Cover Damaged</option>
-                          <option value="water_damage">Water Damage</option>
-                          <option value="spine_broken">Spine Broken</option>
-                          <option value="writing_marking">Writing / Marking</option>
-                          <option value="missing_pages">Missing Pages</option>
-                          <option value="other">Other</option>
-                        </select>
-                        <input type="text" name="damage_description" class="form-control form-control-sm"
-                               placeholder="Describe..." style="width:140px;">
-                      </div>
-                      <form method="post" class="d-inline"
-                            onsubmit="return confirm('Return \'{{ tx.copy.book.title|truncatechars:30 }}\' for {{ member.get_full_name }}?');">
-                        {% csrf_token %}
-                        <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
-                        <input type="hidden" name="return_card_no" value="{{ card_input }}">
-                        <button type="submit" class="btn btn-sm btn-success fw-semibold">
-                          <i class="bi bi-check-circle"></i> Return
-                        </button>
-                      </form>
+                  {# ── No unpaid fine: allow return + damage option ── #}
+                  <form method="post" id="retForm-{{ tx.pk }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                    <input type="hidden" name="return_card_no" value="{{ card_input }}">
+                    {# Hidden damage fields — populated by JS when "Return as Damaged" is clicked #}
+                    <input type="hidden" name="mark_damaged"          id="hDmg-{{ tx.pk }}"     value="">
+                    <input type="hidden" name="damage_type"           id="hDmgType-{{ tx.pk }}" value="">
+                    <input type="hidden" name="damage_description"    id="hDmgDesc-{{ tx.pk }}" value="">
+
+                    {# Normal return button #}
+                    <button type="button" class="btn btn-sm btn-success fw-semibold mb-1 w-100"
+                            onclick="confirmNormalReturnCard({{ tx.pk }}, '{{ tx.copy.book.title|truncatechars:40|escapejs }}', '{{ member.get_full_name|escapejs }}')">
+                      <i class="bi bi-check-circle"></i> Return
+                    </button>
+                  </form>
+
+                  {# Damage toggle button #}
+                  <button type="button" class="btn btn-sm btn-outline-danger w-100"
+                          onclick="toggleCardDmgPanel({{ tx.pk }})">
+                    <i class="bi bi-exclamation-triangle"></i> Damaged?
+                  </button>
+
+                  {# Damage panel — hidden by default #}
+                  <div id="dmgPanel-{{ tx.pk }}" style="display:none;" class="mt-1 border rounded p-1 text-start bg-light">
+                    <div class="small text-danger fw-semibold mb-1"><i class="bi bi-exclamation-triangle-fill"></i> Report Damage</div>
+                    <select class="form-select form-select-sm mb-1" id="dmgType-{{ tx.pk }}">
+                      <option value="">-- Damage Type --</option>
+                      <option value="pages_torn">Pages Torn</option>
+                      <option value="cover_damaged">Cover Damaged</option>
+                      <option value="water_damage">Water Damage</option>
+                      <option value="spine_broken">Spine Broken</option>
+                      <option value="writing_marking">Writing / Marking</option>
+                      <option value="missing_pages">Missing Pages</option>
+                      <option value="other">Other</option>
+                    </select>
+                    <input type="text" class="form-control form-control-sm mb-1"
+                           id="dmgDesc-{{ tx.pk }}" placeholder="Describe damage...">
+                    <div class="text-muted" style="font-size:.7rem;">
+                      Fine: TZS {{ tx.copy.book.lost_fine|floatformat:0|default:"0" }}
                     </div>
+                    <button type="button" class="btn btn-danger btn-sm w-100 fw-semibold mt-1"
+                            onclick="submitDamagedCard({{ tx.pk }}, '{{ tx.copy.book.title|truncatechars:40|escapejs }}', '{{ member.get_full_name|escapejs }}')">
+                      <i class="bi bi-exclamation-triangle-fill"></i> Return as Damaged
+                    </button>
+                  </div>
                   {% endif %}
+
+                  {% endif %}
+                  {% empty %}
+                  {# tx not in tx_fines (fallback) — allow return, no fine info #}
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                    <input type="hidden" name="return_card_no" value="{{ card_input }}">
+                    <button type="submit" class="btn btn-sm btn-success fw-semibold"
+                            onclick="return confirm('Return this book?');">
+                      <i class="bi bi-check-circle"></i> Return
+                    </button>
+                  </form>
+                  {% endfor %}
                 </td>
               </tr>
               {% endfor %}
@@ -546,12 +539,29 @@ function toggleDamageSection() {
   const el = document.getElementById('damageSection-single');
   if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
 }
-function confirmReturnSingle() {
-  const chk = document.getElementById('chkDamaged-single');
-  if (chk && chk.checked) {
-    return confirm('Confirm return AND mark this book as DAMAGED? A damage fine will be raised.');
+
+/* ── Card-lookup damage functions ────────────────────────────────── */
+function toggleCardDmgPanel(pk) {
+  const panel = document.getElementById('dmgPanel-' + pk);
+  if (panel) panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+}
+
+function confirmNormalReturnCard(pk, title, member) {
+  if (!confirm('Return "' + title + '" for ' + member + '?')) return;
+  document.getElementById('retForm-' + pk).submit();
+}
+
+function submitDamagedCard(pk, title, member) {
+  const dtype = document.getElementById('dmgType-' + pk).value;
+  if (!dtype) {
+    alert('Please select a damage type before submitting.');
+    return;
   }
-  return confirm('Confirm return of this book?');
+  if (!confirm('Return "' + title + '" for ' + member + ' as DAMAGED?\nA damage fine will be raised. Payment is required after return.')) return;
+  document.getElementById('hDmg-'     + pk).value = '1';
+  document.getElementById('hDmgType-' + pk).value = dtype;
+  document.getElementById('hDmgDesc-' + pk).value = document.getElementById('dmgDesc-' + pk).value;
+  document.getElementById('retForm-'  + pk).submit();
 }
 </script>
 {% endblock %}

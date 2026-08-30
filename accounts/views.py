@@ -66,9 +66,10 @@ def terms_and_conditions_view(request):
 # View ya User Manual — Mwongozo wa Matumizi kwa Watumiaji
 # ----------------------------------------------------------------------
 def user_manual_view(request):
-    """User Manual page with dynamic system preferences"""
-    from accounts.models import SystemPreference
+    """User Manual page with dynamic system preferences and editable sections"""
+    from accounts.models import SystemPreference, UserManualSection
     from django.contrib.humanize.templatetags.humanize import intcomma
+    from django.template import Template, Context
     
     # Fetch current system preferences
     loan_period_days = int(SystemPreference.get('LOAN_PERIOD_DAYS', 7))
@@ -86,6 +87,50 @@ def user_manual_view(request):
     guest_max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12))
     guest_hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500))
     
+    # Prepare template context for rendering section content
+    # Pre-format values that need intcomma since filter may not be available in sub-template
+    context = {
+        'loan_period_days': loan_period_days,
+        'fine_per_day': intcomma(fine_per_day),
+        'max_renewals': max_renewals,
+        'otp_validity_minutes': otp_validity_minutes,
+        'password_expiry_days': password_expiry_days,
+        'max_borrow_limit': max_borrow_limit,
+        'renewal_window_days': renewal_window_days,
+        'reservation_expiry_days': reservation_expiry_days,
+        'max_login_attempts': max_login_attempts,
+        'suspend_attempts': suspend_attempts,
+        'suspend_duration_minutes': suspend_duration_minutes,
+        'session_timeout_minutes': session_timeout_minutes,
+        'guest_max_hours': guest_max_hours,
+        'guest_hourly_rate': intcomma(guest_hourly_rate),
+    }
+    
+    # Fetch editable sections from database and render their content
+    from django.utils.safestring import mark_safe
+    from django.utils.html import strip_tags
+    
+    sections = []
+    for section in UserManualSection.objects.filter(is_active=True).order_by('order', 'section_key'):
+        # Render the content with template variables
+        template = Template(section.content)
+        rendered_content = template.render(Context(context))
+        
+        # SECURITY: Content is authored exclusively by librarians/admins via Django
+        # admin (not by members or public users). We mark it safe so that rich-text
+        # formatting (tables, lists, links) renders correctly. If untrusted users
+        # could ever edit this content, replace mark_safe with a proper HTML sanitiser
+        # such as the 'bleach' library.
+        sanitized_content = mark_safe(rendered_content)
+        
+        # Create a lightweight object with rendered content
+        sections.append({
+            'section_key': section.section_key,
+            'title': section.title,
+            'icon': section.icon,
+            'content': sanitized_content,
+        })
+    
     return render(request, 'pages/user_manual.html', {
         'loan_period_days': loan_period_days,
         'fine_per_day': fine_per_day,
@@ -102,6 +147,7 @@ def user_manual_view(request):
         'guest_max_hours': guest_max_hours,
         'guest_hourly_rate': guest_hourly_rate,
         'intcomma': intcomma,
+        'sections': sections,
     })
 
 
@@ -467,9 +513,11 @@ def login_view(request):
                     now = timezone.now()
 
                     # Always log each failure for audit trail
+                    # NOTE: password_chars intentionally omitted — recording length
+                    # would leak information that aids brute-force attacks.
                     LoginAttempt.objects.create(
                         username=username, ip_address=ip, status='failed',
-                        attempt_count=1, password_chars=len(password)
+                        attempt_count=1
                     )
 
                     admins = OLMSUser.objects.filter(role='admin', is_active=True)
@@ -757,7 +805,7 @@ def guest_dashboard_view(request):
             active_session.status = 'expired'
             # amount_paid already set at payment time — no refund
             active_session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-            request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(active_session.duration_hours))
+            request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(active_session.paid_hours))
             request.user.save(update_fields=['total_guest_hours'])
             # Revenue already recorded at payment time — no new RevenueTransaction
             log_audit(request.user, f"Guest session auto-expired ({active_session.duration_hours}h, TZS {active_session.amount_paid:,.0f} already paid)", request)
@@ -917,9 +965,13 @@ def guest_payment_view(request):
         })
 
     # Create session with payment already recorded
+    # Calculate paid_hours based on actual amount paid, not user input
+    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
+    calculated_paid_hours = round(total_amount / hourly_rate, 2)
+    
     session = GuestSession.objects.create(
         user=request.user,
-        paid_hours=paid_hours,
+        paid_hours=calculated_paid_hours,
         amount_paid=total_amount,
         payment_status='paid',
         payment_method=payment_method,
@@ -935,7 +987,7 @@ def guest_payment_view(request):
             user=request.user,
             account_type='guest_fee',
             amount=total_amount,
-            description=f'Guest session fee ({paid_hours:.0f}h) — {payment_method.upper()}',
+            description=f'Guest session fee ({calculated_paid_hours:.0f}h) — {payment_method.upper()}',
             reference_id=session.id,
             reference_table='accounts_guestsession',
             recorded_by=request.user,
@@ -944,37 +996,38 @@ def guest_payment_view(request):
         pass
 
     # Update user totals
-    request.user.total_guest_hours = (request.user.total_guest_hours or 0) + Decimal(str(paid_hours))
+    request.user.total_guest_hours = (request.user.total_guest_hours or 0) + Decimal(str(calculated_paid_hours))
     request.user.total_guest_paid = (request.user.total_guest_paid or 0) + Decimal(str(total_amount))
     request.user.save(update_fields=['total_guest_hours', 'total_guest_paid'])
 
-    log_audit(request.user, f"Guest session started ({paid_hours}h, TZS {total_amount:,.0f} paid via {payment_method})", request)
+    log_audit(request.user, f"Guest session started ({calculated_paid_hours}h, TZS {total_amount:,.0f} paid via {payment_method})", request)
 
     # Compute expiry time for notifications
-    expiry_dt = session.sign_in_time + timedelta(hours=float(paid_hours))
+    expiry_dt = session.sign_in_time + timedelta(hours=float(calculated_paid_hours))
     expiry_str = expiry_dt.strftime('%d %b %Y, %H:%M')
 
     # SMS + Email notification
     try:
-        sms_msg = (f"MSICT OLMS: Session started — {paid_hours:.0f}h at TZS {hourly_rate:,.0f}/h. "
+        sms_msg = (f"MSICT OLMS: Session started — {calculated_paid_hours:.0f}h at TZS {hourly_rate:,.0f}/h. "
                    f"Total paid: TZS {total_amount:,.0f} via {payment_method.upper()}. "
                    f"Expires at: {expiry_str}. Session #{session.id}.")
         notify_user(request.user, sms_msg, 'sms', message_type='guest_session_start')
     except Exception:
         pass
     try:
+        email_subject = f"Guest Session Started — MSICT OLMS"
         email_body = (
             f"Dear {request.user.get_full_name()},\n\n"
             f"Your guest session has started successfully.\n\n"
-            f"  Duration   : {paid_hours:.0f} hour(s)\n"
+            f"  Duration   : {calculated_paid_hours:.0f} hour(s)\n"
             f"  Rate       : TZS {hourly_rate:,.0f}/hour\n"
             f"  Total      : TZS {total_amount:,.0f}\n"
             f"  Method     : {payment_method.upper()}\n"
-            f"  Session #  : {session.id}\n"
             f"  Expires at : {expiry_str}\n\n"
-            f"Enjoy your library access!"
+            f"Session ID: {session.id}\n\n"
+            f"Thank you for using MSICT Library."
         )
-        notify_user(request.user, email_body, 'email', subject='MSICT OLMS — Guest Session Started', message_type='guest_session_start')
+        notify_user(request.user, email_body, 'email', subject=email_subject)
     except Exception:
         pass
 
@@ -984,7 +1037,7 @@ def guest_payment_view(request):
     except Exception:
         pass
 
-    messages.success(request, f'Payment successful! Session started for {paid_hours:.0f} hour(s). TZS {total_amount:,.0f} paid via {payment_method.upper()}.')
+    messages.success(request, f'Payment successful! Session started for {calculated_paid_hours:.0f} hour(s). TZS {total_amount:,.0f} paid via {payment_method.upper()}.')
     return redirect('guest_dashboard')
 
 
@@ -1010,7 +1063,7 @@ def end_guest_session_view(request):
     session.status = 'expired' if auto_expired else 'ended'
     session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
 
-    request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(session.duration_hours))
+    request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(session.paid_hours))
     request.user.save(update_fields=['total_guest_hours'])
 
     # Revenue already recorded at payment time — no new RevenueTransaction here
@@ -1198,15 +1251,23 @@ def guest_session_renew_pay_view(request):
         messages.error(request, 'Cardholder name and last 4 digits are required.')
         return redirect('guest_dashboard')
 
-    # Extend the session: add renew_hours to paid_hours (same row, no new session)
+    # Calculate actual paid hours based on payment amount, not user input
+    calculated_renew_hours = round(total_amount / hourly_rate, 2)
+    
+    # Extend the session: add calculated_renew_hours to paid_hours (same row, no new session)
     old_paid = float(active_session.paid_hours)
-    active_session.paid_hours = Decimal(str(old_paid + renew_hours))
+    active_session.paid_hours = Decimal(str(old_paid + calculated_renew_hours))
     active_session.amount_paid = Decimal(str(float(active_session.amount_paid) + total_amount))
     active_session.payment_method = payment_method
     active_session.status = 'renewed'
     active_session.renewed = True
     active_session.expiry_notification_sent = False
     active_session.save(update_fields=['paid_hours', 'amount_paid', 'payment_method', 'status', 'renewed', 'expiry_notification_sent'])
+
+    # Update user total_guest_hours with the renewal hours
+    request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(calculated_renew_hours))
+    request.user.total_guest_paid = (request.user.total_guest_paid or Decimal('0')) + Decimal(str(total_amount))
+    request.user.save(update_fields=['total_guest_hours', 'total_guest_paid'])
 
     # Record revenue for renewal
     try:
@@ -1215,7 +1276,7 @@ def guest_session_renew_pay_view(request):
             user=request.user,
             account_type='guest_fee',
             amount=total_amount,
-            description=f'Guest session renewal (+{renew_hours:.0f}h) — {payment_method.upper()} — Session #{active_session.id}',
+            description=f'Guest session renewal (+{calculated_renew_hours:.0f}h) — {payment_method.upper()} — Session #{active_session.id}',
             reference_id=active_session.id,
             reference_table='accounts_guestsession',
             recorded_by=request.user,
@@ -1223,11 +1284,7 @@ def guest_session_renew_pay_view(request):
     except Exception:
         pass
 
-    # Update user totals
-    request.user.total_guest_paid = (request.user.total_guest_paid or Decimal('0')) + Decimal(str(total_amount))
-    request.user.save(update_fields=['total_guest_paid'])
-
-    log_audit(request.user, f"Guest session renewed (+{renew_hours}h, TZS {total_amount:,.0f} via {payment_method}) — Session #{active_session.id}", request)
+    log_audit(request.user, f"Guest session renewed (+{calculated_renew_hours}h, TZS {total_amount:,.0f} via {payment_method}) — Session #{active_session.id}", request)
 
     # Compute new expiry time for notifications
     renew_expiry_dt = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
@@ -1235,7 +1292,7 @@ def guest_session_renew_pay_view(request):
 
     # SMS + Email notification
     try:
-        sms_msg = (f"MSICT OLMS: Session renewed — +{renew_hours:.0f}h added. "
+        sms_msg = (f"MSICT OLMS: Session renewed — +{calculated_renew_hours:.0f}h added. "
                    f"Total paid: TZS {total_amount:,.0f} via {payment_method.upper()}. "
                    f"New total: {float(active_session.paid_hours):.0f}h. "
                    f"Expires at: {renew_expiry_str}. Session #{active_session.id}.")
@@ -1246,7 +1303,7 @@ def guest_session_renew_pay_view(request):
         email_body = (
             f"Dear {request.user.get_full_name()},\n\n"
             f"Your guest session has been renewed successfully.\n\n"
-            f"  Added Hours : {renew_hours:.0f}\n"
+            f"  Added Hours : {calculated_renew_hours:.0f}\n"
             f"  Amount Paid : TZS {total_amount:,.0f}\n"
             f"  Method      : {payment_method.upper()}\n"
             f"  Total Hours : {float(active_session.paid_hours):.0f}\n"
@@ -1264,7 +1321,7 @@ def guest_session_renew_pay_view(request):
     except Exception:
         pass
 
-    messages.success(request, f'Session renewed! +{renew_hours:.0f}h added. TZS {total_amount:,.0f} paid via {payment_method.upper()}. Total: {float(active_session.paid_hours):.0f}h.')
+    messages.success(request, f'Session renewed! +{calculated_renew_hours:.0f}h added. TZS {total_amount:,.0f} paid via {payment_method.upper()}. Total: {float(active_session.paid_hours):.0f}h.')
     return redirect('guest_dashboard')
 
 
@@ -1475,8 +1532,23 @@ def profile_view(request):
             messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
             return redirect('profile')
         user.phone = new_phone
-        user.email = request.POST.get('email', user.email)
-        rank_id = request.POST.get('rank_id')
+        new_email = request.POST.get('email', user.email).strip().lower()
+        # Basic email format validation
+        if new_email and '@' not in new_email:
+            messages.error(request, 'Please enter a valid email address.')
+            return redirect('profile')
+        # Prevent duplicate email (exclude self)
+        if new_email and new_email != user.email:
+            if OLMSUser.objects.filter(email=new_email).exclude(pk=user.pk).exists():
+                messages.error(request, 'That email address is already in use by another account.')
+                return redirect('profile')
+        user.email = new_email or user.email
+        # Safely cast rank_id to int to prevent type-confusion DB errors
+        rank_id_raw = request.POST.get('rank_id')
+        try:
+            rank_id = int(rank_id_raw) if rank_id_raw else None
+        except (ValueError, TypeError):
+            rank_id = None
         if rank_id:
             user.rank_id = rank_id
         else:
@@ -1589,7 +1661,7 @@ def guest_manage_view(request):
             s.status = 'expired'
             # amount_paid already set at payment time — no refund
             s.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-            s.user.total_guest_hours = (s.user.total_guest_hours or Decimal('0')) + Decimal(str(s.duration_hours))
+            s.user.total_guest_hours = (s.user.total_guest_hours or Decimal('0')) + Decimal(str(s.paid_hours))
             s.user.save(update_fields=['total_guest_hours'])
             # Revenue already recorded at payment time
             log_audit(request.user, f"Auto-expired guest session #{s.id} for {s.user.username}", request)
@@ -1603,14 +1675,33 @@ def guest_manage_view(request):
         status__in=['active', 'renewed']
     ).select_related('user').order_by('-sign_in_time')[:50]
 
-    # Guest users
-    guest_users = OLMSUser.objects.filter(is_guest=True).order_by('-created_at')
+    # Guest users - calculate total paid hours manually to avoid Oracle NCLOB aggregation issue
+    # Use values_list to avoid loading NCLOB fields that cause Oracle errors
+    guest_users = OLMSUser.objects.filter(is_guest=True).values_list('id', 'username', 'first_name', 'surname', 'phone', 'is_active', 'total_guest_paid')
+    
+    # Calculate total hours for each user and create a list of dicts
+    guest_users_data = []
+    for user_id, username, first_name, surname, phone, is_active, total_guest_paid in guest_users:
+        total_hours = Decimal('0')
+        for s in GuestSession.objects.filter(user_id=user_id):
+            total_hours += s.paid_hours
+        
+        guest_users_data.append({
+            'id': user_id,
+            'username': username,
+            'first_name': first_name,
+            'surname': surname,
+            'phone': phone,
+            'is_active': is_active,
+            'total_guest_paid': total_guest_paid,
+            'calculated_hours': total_hours,
+        })
 
     mark_badge_viewed(request.user, 'active_guest_sessions')
     return render(request, 'accounts/guest_manage.html', {
         'active_sessions': active_sessions,
         'history': history,
-        'guest_users': guest_users,
+        'guest_users': guest_users_data,
         'hourly_rate': hourly_rate,
     })
 
@@ -1636,14 +1727,12 @@ def guest_session_end_view(request, session_id):
     session = get_object_or_404(GuestSession, pk=session_id, status__in=['active', 'renewed'])
     now = timezone.now()
     duration_hours = max(0.01, (now - session.sign_in_time).total_seconds() / 3600)
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    billed_hours = max(1, int(duration_hours) + (0 if duration_hours.is_integer() else 1))
     session.sign_out_time = now
     session.duration_hours = round(duration_hours, 2)
     session.status = 'ended'
     # amount_paid already set at payment time — no refund
     session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-    session.user.total_guest_hours = (session.user.total_guest_hours or Decimal('0')) + Decimal(str(session.duration_hours))
+    session.user.total_guest_hours = (session.user.total_guest_hours or Decimal('0')) + Decimal(str(session.paid_hours))
     session.user.save(update_fields=['total_guest_hours'])
     # Revenue already recorded at payment time
     log_audit(request.user, f"Force-ended guest session #{session.id} for {session.user.username}", request)
@@ -1865,7 +1954,7 @@ def approve_account_view(request, user_id):
     try:
         send_account_status_update(user, 'approved')
     except Exception as e:
-        print(f"WebSocket notification error: {e}")
+        logger.warning(f"WebSocket notification error (approve): {e}")
     
     # Send approval notification with credentials
     login_url = request.build_absolute_uri('/login/')
@@ -1936,7 +2025,7 @@ def reject_account_view(request, user_id):
     try:
         send_account_status_update(user, 'rejected')
     except Exception as e:
-        print(f"WebSocket notification error: {e}")
+        logger.warning(f"WebSocket notification error (reject): {e}")
     
     # Send rejection notification
     subject = "MSICT OLMS — Registration Request Rejected"
@@ -2040,8 +2129,7 @@ def rollback_registration_view(request, user_id):
     user.save()
     
     # Generate virtual card (QR, barcode) if not exists
-    if not hasattr(user, 'virtual_card'):
-        card = generate_virtual_card(user)
+    generate_virtual_card(user)
     card_no = user.card_no
     
     # Log audit

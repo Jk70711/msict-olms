@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.urls import path
 from django.shortcuts import redirect
-from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, GuestSession, BulkMessage, BulkMessageRecipient
+from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, GuestSession, BulkMessage, BulkMessageRecipient, UserManualSection
 
 
 # ── Customise Django admin site ────────────────────────────────────────────
@@ -187,3 +187,34 @@ class BulkMessageRecipientAdmin(admin.ModelAdmin):
     list_filter = ('status', 'delivered_via')
     search_fields = ('user__username', 'user__email', 'message__subject')
     ordering = ('-message',)
+
+
+@admin.register(UserManualSection)
+class UserManualSectionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'section_key', 'icon', 'order', 'is_active', 'updated_at', 'updated_by')
+    list_filter = ('is_active', 'section_key')
+    search_fields = ('title', 'section_key', 'content')
+    list_editable = ('order', 'is_active')
+    readonly_fields = ('updated_at', 'updated_by')
+    ordering = ('order', 'section_key')
+    
+    fieldsets = (
+        ('Section Info', {
+            'fields': ('section_key', 'title', 'icon', 'order', 'is_active')
+        }),
+        ('Content', {
+            'fields': ('content',)
+        }),
+        ('Metadata', {
+            'fields': ('updated_at', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def save_model(self, request, obj, form, change):
+        if not change:  # If creating a new object
+            obj.updated_by = request.user
+        else:
+            obj.updated_by = request.user
+        super().save_model(request, obj, form, change)
+

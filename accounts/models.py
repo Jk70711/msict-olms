@@ -508,6 +508,53 @@ class BlockedIP(models.Model):
         return self.ip_address
 
 
+# User Manual Sections — Editable content for the User Manual page
+# Librarians can CRUD these sections via admin under Member & Media
+class UserManualSection(models.Model):
+    SECTION_CHOICES = [
+        ('getting_started', 'Getting Started'),
+        ('borrowing', 'Borrowing Books'),
+        ('returning', 'Returning Books'),
+        ('renewals', 'Renewals'),
+        ('reservations', 'Reservations'),
+        ('fines', 'Fines & Payments'),
+        ('loss', 'Lost Books'),
+        ('softcopy', 'Digital Resources (Softcopies)'),
+        ('notifications', 'Notifications'),
+        ('chat', 'Chat & Support'),
+        ('passwords', 'Password Security'),
+        ('login_attempts', 'Login Attempts & Security'),
+        ('guest', 'Guest Access'),
+        ('ai', 'AI Assistant'),
+    ]
+
+    section_key = models.CharField(
+        max_length=50,
+        choices=SECTION_CHOICES,
+        unique=True,
+        help_text="Unique identifier for this section"
+    )
+    title = models.CharField(max_length=200, help_text="Section title displayed to users")
+    icon = models.CharField(max_length=50, default='bi-info-circle', help_text="Bootstrap icon class")
+    content = models.TextField(help_text="HTML content for this section")
+    order = models.PositiveIntegerField(default=0, help_text="Display order (lower numbers first)")
+    is_active = models.BooleanField(default=True, help_text="Whether this section is visible")
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='updated_manual_sections'
+    )
+
+    class Meta:
+        db_table = 'user_manual_sections'
+        ordering = ['order', 'section_key']
+        verbose_name = 'User Manual Section'
+        verbose_name_plural = 'User Manual Sections'
+
+    def __str__(self):
+        return self.title
+
+
 # ----------------------------------------------------------------------
 # Bulk Messaging — Admin/Librarian sends notifications to groups
 # ----------------------------------------------------------------------

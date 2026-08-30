@@ -116,8 +116,8 @@
               <label class="form-label fw-bold">Fine to Pay <span class="text-danger">*</span></label>
               <select name="fine_type" id="detailFineType" class="form-select" required
                 onchange="detailSetAmount(
-                  '{{ fine.remaining_balance|floatformat:2|intcomma }}',
-                  '{{ overdue_fine.remaining_balance|floatformat:2|default:0 }}')">
+                  {{ fine.remaining_balance|floatformat:2 }},
+                  {{ overdue_fine.remaining_balance|floatformat:2|default:0 }})">
                 <option value="">— Select —</option>
                 {% if not fine.paid %}
                 <option value="damage">Damage Fine only — TZS {{ fine.remaining_balance|floatformat:0|intcomma }} remaining</option>
@@ -259,8 +259,8 @@
               <hr class="my-1">
               <label class="form-label fw-bold">Amount to Pay (TZS) <span class="text-danger">*</span></label>
               <input type="number" name="payment_amount" id="paymentAmount" class="form-control form-control-lg"
-                     min="1" step="1" required placeholder="Select fine type above to auto-fill">
-              <div class="form-text">Select fine type above to auto-fill. Adjust for partial payments.</div>
+                     min="1" step="1" required readonly placeholder="Select fine type above to auto-fill">
+              <div class="form-text">Amount auto-filled based on fine type selection. Cannot be manually edited.</div>
             </div>
 
           </div>

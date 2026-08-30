@@ -149,6 +149,7 @@
           <th>Days Info</th>
           <th>Approved By</th>
           <th>Return Date</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -233,9 +234,25 @@
               <span class="text-muted small">—</span>
             {% endif %}
           </td>
+          <td>
+            {% if tx.status == 'borrowed' or tx.status == 'overdue' %}
+              <button class="btn btn-sm btn-outline-secondary border-0 p-1"
+                      disabled title="Cannot delete — book is still active. Return it first.">
+                <i class="bi bi-trash text-muted"></i>
+              </button>
+            {% else %}
+              <form method="POST" action="{% url 'delete_borrowing' tx.id %}" class="d-inline"
+                    onsubmit="return confirm('Delete this record?\n\nBook: {{ tx.copy.book.title|escapejs }}\nMember: {{ tx.user.get_full_name|escapejs }}\n\nThis action is permanent and cannot be undone.');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Delete Record">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
+            {% endif %}
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="12" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
+        <tr><td colspan="13" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
         {% endfor %}
       </tbody>
     </table>

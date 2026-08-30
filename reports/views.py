@@ -800,18 +800,47 @@ def _validate_select_sql(sql):
     sql_lower = sql.lower().strip()
     if not sql_lower.startswith('select'):
         return False, 'Only SELECT queries are allowed.'
-    # Block dangerous keywords that could modify data
-    dangerous = ['insert', 'update', 'delete', 'drop', 'alter', 'truncate',
-                 'create', 'grant', 'revoke', 'exec', 'execute', 'merge',
-                 'into', 'call']
+
+    # Block comment tokens first (raw string check — word-boundary regex
+    # does not work for punctuation-only tokens like -- and /* ... */).
+    comment_tokens = ['--', '/*', '*/']
+    for token in comment_tokens:
+        if token in sql_lower:
+            return False, f'Comment syntax "{token}" is not allowed in queries.'
+
+    # Block non-word prefix tokens (no word boundary needed)
+    prefix_tokens = ['xp_', 'sp_', 'sys.', 'dbms_', 'utl_']
+    for token in prefix_tokens:
+        if token in sql_lower:
+            return False, f'Prefix "{token}" is not allowed in queries.'
+
+    # Block dangerous DML/DDL keywords as whole words
+    dangerous_words = [
+        'insert', 'update', 'delete', 'drop', 'alter', 'truncate',
+        'create', 'grant', 'revoke', 'exec', 'execute', 'merge',
+        'into', 'call', 'declare', 'begin', 'commit', 'rollback',
+        'savepoint', 'lock', 'unlock', 'comment',
+    ]
+
     # Check for semicolons (statement injection)
     if ';' in sql.rstrip(';').strip():
         return False, 'Multiple statements are not allowed.'
+    
     # Check for dangerous keywords as whole words
     import re as _re
-    for kw in dangerous:
-        if _re.search(r'\b' + kw + r'\b', sql_lower):
+    for kw in dangerous_words:
+        if _re.search(r'\b' + _re.escape(kw) + r'\b', sql_lower, _re.IGNORECASE):
             return False, f'Keyword "{kw.upper()}" is not allowed in SELECT queries.'
+    # Block UNION-based injection attempts
+    if 'union' in sql_lower and 'select' in sql_lower:
+        # Allow UNION only if it's part of a legitimate query (basic check)
+        # For safety, we block UNION entirely in custom SQL
+        return False, 'UNION queries are not allowed for security reasons.'
+    # Block subqueries that could be used for injection
+    if '(' in sql_lower and ')' in sql_lower:
+        # Basic check for nested SELECTs
+        if sql_lower.count('select') > 1:
+            return False, 'Nested SELECT queries are not allowed.'
     return True, None
 
 

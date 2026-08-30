@@ -355,7 +355,7 @@ class GuestSessionMiddleware:
                     ])
                     user.total_guest_hours = (
                         user.total_guest_hours or Decimal('0')
-                    ) + Decimal(str(active.duration_hours))
+                    ) + Decimal(str(active.paid_hours))
                     user.save(update_fields=['total_guest_hours'])
 
                     # Avoid redirect loop on exempt paths

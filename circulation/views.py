@@ -1018,6 +1018,18 @@ def _process_desk_return(request, copy_pk_str):
         messages.error(request, f'No active borrowing found for "{copy.accession_no}".')
         return None
 
+    # ── Block return if there is an unpaid fine on this transaction ──────────
+    unpaid_fine = Fine.objects.filter(transaction=tx, paid=False).first()
+    if unpaid_fine:
+        remaining = unpaid_fine.remaining_balance
+        messages.error(
+            request,
+            f'⚠️ Cannot return "{copy.book.title}" — unpaid fine of '
+            f'TZS {remaining:,.0f} must be settled first. '
+            f'Direct the member to the payment desk.'
+        )
+        return None
+
     # Check if librarian marked this book as damaged
     mark_damaged = request.POST.get('mark_damaged', '') == '1'
     damage_type = request.POST.get('damage_type', '').strip()
@@ -1367,10 +1379,18 @@ def return_hardcopy_view(request):
                         f'The copy may already be returned or available.'
                     )
                 else:
+                    # Fetch unpaid fine for this transaction (same logic as card lookup)
+                    lookup_tx_fine = Fine.objects.filter(
+                        transaction=lookup_tx, paid=False
+                    ).first()
+                    lookup_tx_has_unpaid_fine = lookup_tx_fine is not None and lookup_tx_fine.remaining_balance > 0
+
                     return render(request, 'circulation/return_desk.html', {
-                        'lookup_tx':     lookup_tx,
-                        'barcode_input': search_input,
-                        'recent_returns': _get_recent_returns(),
+                        'lookup_tx':                  lookup_tx,
+                        'barcode_input':              search_input,
+                        'recent_returns':             _get_recent_returns(),
+                        'lookup_tx_fine':             lookup_tx_fine,
+                        'lookup_tx_has_unpaid_fine':  lookup_tx_has_unpaid_fine,
                     })
             except BookCopy.DoesNotExist:
                 messages.error(request, f'Hardcopy not found: "{search_input}". Check barcode or accession number.')
@@ -1941,10 +1961,10 @@ def _extract_total_paid_from_log(receipt_no):
     Returns Decimal total if parseable, else None."""
     if not receipt_no:
         return None
-    amounts = re.findall(r'TZS\s*([\d]+(?:\.\d+)?)', receipt_no)
+    amounts = re.findall(r'TZS\s*([\d,]+(?:\.\d+)?)', receipt_no)
     if amounts:
         try:
-            return sum(Decimal(a) for a in amounts)
+            return sum(Decimal(a.replace(',', '')) for a in amounts)
         except Exception:
             return None
     return None
@@ -2003,11 +2023,11 @@ def _sync_overdue_fines(fine_per_day):
             if fine.paid != correct_paid:
                 fine.paid = correct_paid
                 updates.append('paid')
-            # Fix inflated amount_paid: if receipt log shows a LOWER total than DB,
-            # the DB value was incorrectly set (e.g. by old capping bug). Correct it.
+            # Fix incorrectly recorded amount_paid: if receipt log total differs from DB
+            # (e.g. due to previous regex truncation bug or capping), correct it.
             if fine.receipt_no and fine.amount_paid > 0:
                 actual_paid = _extract_total_paid_from_log(fine.receipt_no)
-                if actual_paid is not None and actual_paid < fine.amount_paid:
+                if actual_paid is not None and actual_paid != fine.amount_paid:
                     fine.amount_paid = actual_paid
                     fine.paid = fine.amount_paid >= fine.amount
                     if 'paid' not in updates:
@@ -3860,6 +3880,89 @@ def all_borrowings_view(request):
         'tx_fines':          tx_fines,
         'now':               tz.now(),
     })
+
+
+@login_required
+@librarian_required
+@require_POST
+def delete_borrowing_view(request, tx_id):
+    """
+    Librarian-only: permanently delete a borrowing transaction record.
+    Safety guards:
+      - Cannot delete ACTIVE (borrowed/overdue) transactions — must be returned first.
+      - Cannot delete if there are unpaid fines — financial integrity.
+      - Cannot delete if a loss report or damage report is attached — audit trail.
+    """
+    tx = get_object_or_404(
+        BorrowingTransaction.objects.select_related('copy__book', 'user'),
+        pk=tx_id
+    )
+    book_title = tx.copy.book.title
+    member_name = tx.user.get_full_name() or tx.user.username
+
+    # ── Guard 1: Cannot delete active borrows ───────────────────────────────
+    if tx.status in ('borrowed', 'overdue'):
+        messages.error(
+            request,
+            f'⚠️ Cannot delete an active borrowing for "{book_title}" — '
+            f'the book is still checked out by {member_name}. '
+            f'Process a return first.'
+        )
+        return _safe_redirect(request, 'all_borrowings')
+
+    # ── Guard 2: Cannot delete if unpaid fines exist ─────────────────────────
+    unpaid_fines = Fine.objects.filter(transaction=tx, paid=False)
+    if unpaid_fines.exists():
+        total_remaining = sum(f.remaining_balance for f in unpaid_fines)
+        messages.error(
+            request,
+            f'⚠️ Cannot delete — this transaction has unpaid fines totalling '
+            f'TZS {total_remaining:,.0f}. Settle all fines before deleting.'
+        )
+        return _safe_redirect(request, 'all_borrowings')
+
+    # ── Guard 3: Cannot delete if active loss/damage report is attached ────────
+    if LossReport.objects.filter(transaction=tx, status__in=['pending', 'confirmed']).exists():
+        messages.error(
+            request,
+            f'⚠️ Cannot delete — there is an active Loss Report for "{book_title}". '
+            f'Resolve or dismiss the loss report first.'
+        )
+        return _safe_redirect(request, 'all_borrowings')
+
+    if DamageReport.objects.filter(transaction=tx, status__in=['pending', 'confirmed']).exists():
+        messages.error(
+            request,
+            f'⚠️ Cannot delete — there is an active Damage Report for "{book_title}". '
+            f'Resolve or dismiss the damage report first.'
+        )
+        return _safe_redirect(request, 'all_borrowings')
+
+    # All guards passed — safe to delete
+    log_audit(
+        request.user,
+        f'Deleted borrowing record #{tx_id} — "{book_title}" borrowed by {member_name} '
+        f'(returned: {tx.return_date.strftime("%d %b %Y") if tx.return_date else "N/A"})',
+        request
+    )
+    tx.delete()
+    messages.success(request, f'Borrowing record for "{book_title}" has been deleted.')
+    return _safe_redirect(request, 'all_borrowings')
+
+
+def _safe_redirect(request, fallback_url_name):
+    """Redirect back to the referring page if it is a local URL, otherwise use fallback."""
+    from urllib.parse import urlparse
+    referer = request.META.get('HTTP_REFERER', '')
+    if referer:
+        parsed = urlparse(referer)
+        # Only follow the referer if it points to the same host (open-redirect guard)
+        if not parsed.netloc or parsed.netloc == request.get_host():
+            local_path = parsed.path
+            if parsed.query:
+                local_path += '?' + parsed.query
+            return redirect(local_path or '/')
+    return redirect(fallback_url_name)
 
 
 # ── Loss Report Views ─────────────────────────────────────────────────────────

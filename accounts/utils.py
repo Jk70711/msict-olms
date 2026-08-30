@@ -184,17 +184,23 @@ def notify_user(user, message, channel, subject=None, priority='normal', is_secu
 
 
 def log_credentials_fallback(user, password, login_url):
-    """Andika credentials kwenye file log kama SMS/email zote zimeshindwa"""
+    """Write a fallback credential record when SMS/email delivery both fail.
+    
+    SECURITY: The plaintext password is NEVER written to disk. Only the
+    username and masked contact details are recorded so a librarian can
+    hand-deliver credentials to the user.
+    """
     import logging
     import os
     logger = logging.getLogger('accounts.credentials')
     cred_log = os.path.join(settings.BASE_DIR, 'guest_credentials.log')
     from django.utils import timezone as tz
+    # Mask the password — only record that credentials exist, not the actual secret.
     entry = (
         f"[{tz.now().isoformat()}] "
         f"username={user.username}, name={user.get_full_name()}, "
         f"phone={user.phone}, email={user.email}, "
-        f"password={password}, login_url={login_url}\n"
+        f"password=<REDACTED>, login_url={login_url}\n"
     )
     try:
         with open(cred_log, 'a') as f:

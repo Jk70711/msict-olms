@@ -67,8 +67,9 @@ urlpatterns = [
     # ── Historia ya Kurudisha na Mikopo Yote ───────────────
     path('return-history/', views.return_history_view, name='return_history'),   # Historia ya vitabu vilivyorudishwa
     path('borrowings/', views.all_borrowings_view, name='all_borrowings'),       # Orodha yote ya mikopo
-
-    # ── Loss Reports ────────────────────────────────────
+    path('borrowings/<int:tx_id>/delete/', views.delete_borrowing_view, name='delete_borrowing'),
+    
+    # ── MIKONONI MWA WANACHAMA ────────────────────────────────────
     path('loss/report/<int:transaction_id>/', views.report_loss_view, name='report_loss'),        # Member: submit loss report
     path('loss/reports/', views.loss_report_list_view, name='loss_report_list'),                  # Librarian: view all loss reports
     path('loss/confirm/<int:report_id>/', views.confirm_loss_view, name='confirm_loss'),          # Librarian: confirm or dismiss

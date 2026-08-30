@@ -7,6 +7,7 @@
 from django.db import models
 from django.db.models.signals import post_delete
 from django.dispatch import receiver
+from django.core.validators import FileExtensionValidator, validate_image_file_extension
 from accounts.models import OLMSUser
 
 
@@ -172,7 +173,13 @@ class BookCopy(models.Model):
     copy_type = models.CharField(max_length=10, choices=COPY_TYPE_CHOICES)
     access_type = models.CharField(max_length=10, choices=ACCESS_TYPE_CHOICES, null=True, blank=True)
     accession_no = models.CharField(max_length=50, unique=True)
-    file_path = models.FileField(upload_to='ebooks/', null=True, blank=True)
+    file_path = models.FileField(
+        upload_to='ebooks/',
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(['pdf'])],
+        help_text='Softcopy file (PDF only, max 50MB)'
+    )
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='available')
     shelf_location = models.CharField(max_length=50, blank=True)
     barcode = models.CharField(max_length=50, unique=True, blank=True)
@@ -395,10 +402,22 @@ class News(models.Model):
     title       = models.CharField(max_length=255)
     content     = models.TextField()
     news_type   = models.CharField(max_length=20, choices=TYPE_CHOICES, default='news')
-    image       = models.ImageField(upload_to='news/', null=True, blank=True, help_text='Cover image (JPG/PNG)')
+    image       = models.ImageField(
+        upload_to='news/',
+        null=True,
+        blank=True,
+        validators=[validate_image_file_extension],
+        help_text='Cover image (JPG/PNG, max 5MB)'
+    )
     video_url   = models.URLField(max_length=500, blank=True, help_text='YouTube/Vimeo embed URL (e.g. https://www.youtube.com/embed/xxx)')
     link_url    = models.URLField(max_length=500, blank=True, help_text='Optional external link (opens in new tab)')
-    attachment  = models.FileField(upload_to='news/attachments/', null=True, blank=True, help_text='PDF or document attachment')
+    attachment  = models.FileField(
+        upload_to='news/attachments/',
+        null=True,
+        blank=True,
+        validators=[FileExtensionValidator(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'])],
+        help_text='PDF or document attachment (max 10MB)'
+    )
     posted_by   = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='news_posts')
     is_active   = models.BooleanField(default=True)
     is_featured = models.BooleanField(default=False, help_text='Pin to top of news feed')

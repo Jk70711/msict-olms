@@ -108,7 +108,7 @@
               <td>{{ g.first_name }} {{ g.surname }}</td>
               <td>{{ g.username }}</td>
               <td>{{ g.phone|default:'—' }}</td>
-              <td>{{ g.total_guest_hours|floatformat:1|intcomma }}</td>
+              <td>{{ g.calculated_hours|floatformat:1|intcomma }}</td>
               <td>TZS {{ g.total_guest_paid|floatformat:0|intcomma }}</td>
               <td>
                 {% if g.is_active %}<span class="badge bg-success">Active</span>

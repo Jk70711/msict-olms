@@ -166,6 +166,7 @@
       <a href="{% url 'media_slide_list' %}" class="nav-link"><i class="bi bi-images"></i> Media &amp; Carousel</a>
       <a href="{% url 'login_content_list' %}" class="nav-link{% if cur == 'login_content_list' or cur == 'login_content_edit' %} active{% endif %}"><i class="bi bi-window-sidebar"></i> Login Page Content</a>
       <a href="{% url 'footer_edit' %}" class="nav-link"><i class="bi bi-layout-text-sidebar-reverse"></i> Footer Settings</a>
+      <a href="{% url 'user_manual' %}" class="nav-link{% if cur == 'user_manual' %} active{% endif %}"><i class="bi bi-book"></i> User Manual</a>
       <a href="{% url 'external_library_list' %}" class="nav-link"><i class="bi bi-globe2"></i> Ext. Libraries</a>
     </div>
   </div>
