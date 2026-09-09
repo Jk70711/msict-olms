@@ -45,21 +45,11 @@
             <button class="btn btn-outline-warning" disabled>
               <i class="bi bi-hourglass-split"></i> Soft Copy Request Pending…
             </button>
-          {% elif not user_can_borrow %}
+          {% elif not user_can_borrow_softcopy %}
             {# Blocked – show reason #}
-            {% if borrow_block_reason == 'overdue' %}
-            <button class="btn btn-outline-danger" disabled title="Return overdue items first">
-              <i class="bi bi-exclamation-triangle"></i> Clear Overdue to Borrow
-            </button>
-            {% elif borrow_block_reason == 'fines' %}
-            <button class="btn btn-outline-danger" disabled title="Pay fines at circulation desk">
-              <i class="bi bi-cash-coin"></i> Pay Fines to Borrow
-            </button>
-            {% else %}
             <button class="btn btn-outline-danger" disabled title="Borrow limit reached">
               <i class="bi bi-slash-circle"></i> Borrow Limit Reached (3)
             </button>
-            {% endif %}
           {% else %}
             {# Eligible – request the first available special softcopy #}
             {% with copy=special_copies.first %}
@@ -77,10 +67,24 @@
 
         {# ── Hardcopy borrow / reserve ──────────────── #}
         {% if book.available_hardcopy_count > 0 %}
-          {% if user_can_borrow %}
+          {% if user_can_borrow_hardcopy %}
             <a href="{% url 'request_borrow_book' book.pk %}" class="btn btn-msict">
               <i class="bi bi-plus-circle"></i> Request Hardcopy
             </a>
+          {% else %}
+            {% if hardcopy_block_reason == 'overdue' %}
+            <button class="btn btn-outline-danger mt-2" disabled title="Return overdue items first">
+              <i class="bi bi-exclamation-triangle"></i> Clear Overdue to Borrow Hardcopy
+            </button>
+            {% elif hardcopy_block_reason == 'fines' %}
+            <button class="btn btn-outline-danger mt-2" disabled title="Pay fines at circulation desk">
+              <i class="bi bi-cash-coin"></i> Pay Fines to Borrow Hardcopy
+            </button>
+            {% else %}
+            <button class="btn btn-outline-danger mt-2" disabled title="Borrow limit reached">
+              <i class="bi bi-slash-circle"></i> Borrow Limit Reached (3)
+            </button>
+            {% endif %}
           {% endif %}
         {% elif book.total_hardcopies > 0 %}
           <a href="{% url 'reserve_book' book.pk %}" class="btn btn-outline-warning">

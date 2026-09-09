@@ -48,8 +48,8 @@
               {% csrf_token %}
               <div class="mb-4">
                 <label for="amount" class="form-label fw-semibold">Amount to Pay (TZS)</label>
-                <input type="number" step="1" min="0" name="amount" id="amount" class="form-control" required value="{{ amount|floatformat:0 }}">
-                <div class="form-text">Enter amount (must be at least the renewal fee TZS {{ amount|floatformat:0|intcomma }})</div>
+                <input type="number" step="1" min="0" name="amount" id="amount" class="form-control" required value="{{ amount|floatformat:0 }}" readonly>
+                <div class="form-text">Amount is fixed and cannot be manually edited.</div>
               </div>
 
               <div class="mb-4">

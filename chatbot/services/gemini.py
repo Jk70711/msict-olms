@@ -53,20 +53,12 @@ get_book_detail_fn = types.FunctionDeclaration(
 list_categories_fn = types.FunctionDeclaration(
     name="list_categories",
     description="List all top-level subject categories available in the MSICT library.",
-    parameters=types.Schema(type="object", properties={}),
-)
-
-get_library_info_fn = types.FunctionDeclaration(
-    name="get_library_info",
-    description=(
-        "Return ALL current MSICT library policies from the live database: "
-        "loan period, max borrows, renewals, overdue fines, softcopy/link fee, "
-        "guest session rates & hours, damage/loss report rules, security settings. "
-        "Call this whenever a user asks about: fees, fines, guest sessions, "
-        "softcopy access, link fee, damage, loss, renewals, session time, password, "
-        "OTP, lockout, or any library rule/policy."
+    parameters=types.Schema(
+        type="object", 
+        properties={
+            "dummy": types.Schema(type="string", description="Optional dummy parameter (not used).")
+        }
     ),
-    parameters=types.Schema(type="object", properties={}),
 )
 
 suggest_similar_books_fn = types.FunctionDeclaration(
@@ -141,7 +133,6 @@ TOOLS = types.Tool(
         search_library_books_fn,
         get_book_detail_fn,
         list_categories_fn,
-        get_library_info_fn,
         suggest_similar_books_fn,
         search_external_books_fn,
         get_online_libraries_fn,
@@ -156,7 +147,6 @@ callable_tools = {
     "search_library_books":  library.search_library_books,
     "get_book_detail":        library.get_book_detail,
     "list_categories":        library.list_categories,
-    "get_library_info":       library.get_library_info,
     "search_external_books":  google_books.search_external_books,
     "suggest_similar_books":  library.suggest_similar_books,
     "get_online_libraries":   library.get_online_libraries,
@@ -182,74 +172,23 @@ SHERIA ZA MSINGI / CORE RULES
    - Kichwa, mwandishi, mwaka, kategoria; upatikanaji (hardcopy/softcopy);
    - **DAIMA jumuisha detail_url: `[Jina la Kitabu](detail_url)`**.
 4. Kitabu KISIPOKUWA MSICT: sema wazi, tumia `suggest_similar_books` + `get_online_libraries`.
-5. Maswali yoyote ya SERA, ADA, FAINI, WAGENI, SOFTCOPY, UHARIBIFU, KUPOTEZA, OTP, USALAMA → LAZIMA piga simu `get_library_info` kwanza ili upate thamani za sasa kutoka database.
+5. Maswali yoyote ya SERA, ADA, FAINI, WAGENI, SOFTCOPY, UHARIBIFU, KUPOTEZA, OTP, USALAMA → REJEA "LIVE SYSTEM POLICIES" iliyoambatanishwa hapa chini.
 6. Jibu liwe fupi na wazi (aya 2–5 au orodha). Tumia markdown.
-7. USIVUMBIE namba — tumia tu kinachorejesha zana.
+7. USIVUMBIE namba — tumia tu kinachorejesha zana au LIVE POLICIES.
 
 ═══════════════════════════════════════════
 MFUMO WA MAKTABA / HOW THE SYSTEM WORKS
-(Tumia get_library_info kupata thamani za sasa)
 ═══════════════════════════════════════════
+SHERIA ZOTE zinabadilishwa mara kwa mara na msimamizi (Admin) kupitia System Preferences. 
+Tumeambatanisha "LIVE SYSTEM POLICIES" (Tazama chini). TUMIA DATA HIZO DAIMA kujibu maswali kuhusu:
+- **Kukopa (Borrowing)**: Muda wa mkopo, idadi ya vitabu vinavyoruhusiwa, sheria za kurudisha vitabu (ikiwemo athari za faini).
+- **Softcopy / Link Fee**: Sheria za vitabu vya kidijitali, ada, na muda wake.
+- **Wageni (Guest Sessions)**: Bei kwa saa, muda wa juu, na sheria za wageni.
+- **Faini (Fines)**: Faini za kuchelewa (overdue), uharibifu (damage), kupoteza (loss), na jinsi zinavyozuia kurudisha/kukopa vitabu.
+- **Upyaji (Renewals) & Uhifadhi (Reservations)**: Sheria za kuongeza muda au kuhifadhi kitabu.
+- **Usalama (Security)**: Sheria za OTP, nenosiri, session timeout, na kufungiwa akaunti.
 
-── AINA ZA WATUMIAJI / USER TYPES ─────────────────
-• **Member (Mwanachama)**: mwanajeshi au mfanyakazi wa MSICT aliye na akaunti kamili. Anaweza kukopa vitabu (hardcopy na softcopy), kuweka uhifadhi, na kuomba upya mkopo.
-• **Guest (Mgeni)**: mtu yeyote anayetaka kutumia maktaba bila uanachama kamili. Analipa kwa saa. Hana haki ya kukopa vitabu — anaweza kusoma tu ndani ya maktaba.
-• **Librarian (Mtunzaji)**: msimamizi wa maktaba. Anaidhinisha maombi ya kukopa, kusimamia vitabu, faini, na ripoti.
-• **Admin (Msimamizi Mkuu)**: anabadilisha mipangilio ya mfumo.
-
-── KUKOPA VITABU / BORROWING ───────────────────────
-• Ingia (login) → bonyeza kichwa cha kitabu → Borrow.
-• Ombi linakwenda kwa mtunzaji → anaidhinisha → mkopo unaanza.
-• Mwanachama anaweza kukopa nakala ngumu (hardcopy) NA nakala ya kidijitali (softcopy) — kwa sheria tofauti.
-• Mwanachama hawezi kukopa zaidi ya idadi iliyopangwa (angalia get_library_info → max_copies_per_borrow).
-• Mkopo wa kawaida hudumu siku kadhaa (angalia loan_period_days).
-
-── SOFTCOPY / VITABU VYA KIDIJITALI / LINK FEE ────
-• Softcopy ni kitabu cha kidijitali (ebook/PDF) kinachofikiwa kupitia kiungo cha usalama (secure link).
-• Aina mbili: **Free softcopy** (bila ada — kiungo kinapatikana bure) na **Special softcopy** (inahitaji ada ya kukopa — "link fee" au "prepaid fee").
-• Link/kiungo hufanya kazi kwa muda wa mkopo tu (loan_period_days). Baada ya muda huo, kiungo KINAISHA (expires) — hakuna faini.
-• Softcopy HAIPEWI faini ya kuchelewa — kiungo kinaishia tu na mtumiaji anahitaji kuomba upya (renewal).
-• Renewal ya softcopy: ikiwa ada > 0, mtumiaji analipa tena; ikiwa 0, ni bure. Upya unaweza kufanywa mara (max_renewals) tu.
-• Angalia thamani za sasa kutoka get_library_info → softcopy.
-
-── VIKAO VYA WAGENI / GUEST SESSIONS ──────────────
-• Mgeni analipa kwa saa ili kutumia maktaba (kusoma, internet, n.k.).
-• Kiwango cha saa (hourly_rate_tzs) na muda wa juu kwa siku (max_hours_per_day) vinapatikana kupitia get_library_info → guest_sessions.
-• Jinsi ya kuanza: ingia kama mgeni → Guest Dashboard → "Pay & Start Session" → chagua masaa → lipa.
-• Vikao vinaweza kuongezwa (renewed) kabla ya kuisha.
-• Jumla ya matumizi kwa siku haiwezi kuzidi muda wa juu wa siku.
-• Wageni HAWAWEZI kukopa vitabu — wanaweza kusoma tu ndani ya maktaba.
-
-── FAINI / FINES ────────────────────────────────────
-• **Faini ya kuchelewa (overdue fine)**: inatozwa kwa kila siku ya kuchelewa kwa hardcopy tu. Softcopy HAINA faini — kiungo kinaishia tu.
-• **Faini ya uharibifu (damage fine)**: mtunzaji anakadiria kiwango cha uharibifu na kuweka faini. Mwanachama lazima alipe kabla ya kukopa tena.
-• **Faini ya kupoteza (loss fine)**: inategemea gharama ya kununua kitabu upya. Mwanachama analipa, kisha akaunti inasafishwa.
-• Faini zote zinaonekana kwenye dashibodi ya mwanachama. Zinalipwa kwenye dawati la mzunguko (circulation desk).
-• Faini zilizolipwa hazizuii kukopa tena.
-
-── UHARIBIFU NA KUPOTEZA / DAMAGE & LOSS ───────────
-• **Ripoti ya Uharibifu (Damage Report)**: mwanachama au mtunzaji anawasilisha ripoti. Mtunzaji hukadiria na kuweka faini. Inaonekana kwenye "My Reports" kwenye dashibodi.
-• **Ripoti ya Kupoteza (Loss Report)**: mwanachama au mtunzaji anawasilisha. Faini ya thamani ya kitabu inaweza kutolewa. Baada ya kulipa, akaunti inasafishwa.
-• Ripoti zote mbili zinazuia kukopa vitabu vipya hadi faini zilipwe.
-
-── UPYAJI WA MKOPO / RENEWALS ──────────────────────
-• Mkopo unaweza kufanywa upya mara (max_renewals) tu.
-• Kwa hardcopy: upyaji unawezekana tu ndani ya "window" ya siku (renewal_window_days) kabla ya tarehe ya mwisho. Vitabu vilivyo na uhifadhi wa wengine haviwezi kufanywa upya.
-• Kwa softcopy: upyaji unawezekana kiungo kikiisha au ndani ya window. Ikiwa ada > 0, mtumiaji analipa.
-• Faini zilizolipwa zinazuia upyaji wa hardcopy.
-
-── UHIFADHI / RESERVATIONS ─────────────────────────
-• Mwanachama anaweza kuweka uhifadhi wa kitabu kinachokopwa na mtu mwingine.
-• Uhifadhi unaisha baada ya (reservation_expiry_days) ikiwa mwanachama hajachukua kitabu baada ya kuarifiwa.
-• Iwapo mwanachama anakosa dirisha la saa 24 baada ya arifa, uhifadhi unasogea kwa mwingine kwenye foleni.
-
-── USALAMA / SECURITY ───────────────────────────────
-• OTP (nambari ya mara moja): inatumiwa kuthibitisha kuingia. Inaisha baada ya dakika (otp_validity_minutes).
-• Jaribu kadhaa za kuingia zilizofeli → akaunti inasimamishwa kwa dakika 10.
-• Jaribu zaidi → akaunti inafungwa kabisa. Msimamizi mkuu peke yake anaweza kufungua.
-• Vikao vinaisha baada ya kukaa kimya kwa dakika (session_timeout_minutes).
-• Nenosiri linaombwa kubadilishwa kila baada ya siku (password_expiry_days).
-• Angalia thamani za sasa: get_library_info → security.
+ONYO KUBWA: USIBUNI (do not hallucinate) sheria zozote! Usitegemee uelewa wako wa awali. Tumia ONLY the live values injected at the bottom of this prompt.
 
 ═══════════════════════════════════════════
 MAPENDEKEZO YA KIBINAFSI / PERSONALISED RECOMMENDATIONS
@@ -273,7 +212,7 @@ UWEZO WAKO / YOUR CAPABILITIES
 - Pendekeza vitabu → `suggest_similar_books`
 - Mapendekezo ya kibinafsi → `get_user_recommendations`
 - Maktaba za nje → `get_online_libraries`
-- Sera ZOTE za maktaba (faini, ada, vikao vya wageni, softcopy, usalama, n.k.) → `get_library_info`
+- Sera ZOTE za maktaba (faini, ada, vikao vya wageni, softcopy, usalama, n.k.) → REJEA 'LIVE SYSTEM POLICIES' chini ya prompt hii.
 - Kategoria za vitabu → `list_categories`
 
 Kuwa na joto, msaada, na ufupi. Tumia zana daima. Be warm, helpful, and concise. Always use tools for live data.
@@ -310,8 +249,6 @@ def _summarise_result(name, result):
         return result.get("title", "?")
     if name == "list_categories":
         return f"{len(result.get('categories', []))} categories"
-    if name == "get_library_info":
-        return "library policies"
     return "ok"
 
 
@@ -334,7 +271,8 @@ def _is_quota_or_404_error(exc):
     """Return True if the exception is worth retrying on a different model."""
     msg = str(exc).lower()
     return ("429" in msg or "quota" in msg or "resource_exhausted" in msg
-            or "404" in msg or "not found" in msg)
+            or "404" in msg or "not found" in msg
+            or "503" in msg or "unavailable" in msg or "high demand" in msg)
 
 
 def _build_contents(history, user_message):
@@ -375,6 +313,18 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
 
     # Build context-aware system instruction and per-request tool set
     system_instruction = SYSTEM_INSTRUCTION
+    
+    # Inject live library policies directly into the system prompt to prevent hallucination
+    live_policies = library.get_library_info()
+    system_instruction += (
+        "\n\n═══════════════════════════════════════════\n"
+        "LIVE SYSTEM POLICIES / SHERIA ZA MFUMO ZA SASA\n"
+        "═══════════════════════════════════════════\n"
+        "Msimamizi amebadilisha mipangilio ya mfumo. TUMIA DATA HIZI KWA MAJIBU YAKO:\n"
+        f"{json.dumps(live_policies, indent=2)}\n"
+        "ONYO: ALWAYS use the exact numbers/fees from this JSON block above when answering policy questions."
+    )
+    
     local_callable = dict(callable_tools)
     active_tool_fns = list(TOOLS.function_declarations)
 
@@ -387,9 +337,12 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
             system_instruction += (
                 "\n\n[MUKTADHA WA MTUMIAJI / USER CONTEXT]: "
                 "Mtumiaji HAJAINGIYA (not logged in). "
-                "Onyesha taarifa za vitabu tu bila kukopa. "
-                "Mapendekezo ya kibinafsi HAYAPATIKANI — waeleze kuingia kwanza. "
-                "Show books in VIEW-ONLY mode; borrowing and personal recommendations require login."
+                "Onyesha taarifa za vitabu, mada, na sheria za maktaba kwa uhuru. "
+                "Mapendekezo ya kibinafsi (kulingana na historia) hayapatikani, "
+                "lakini UNAWEZA kutoa mapendekezo ya jumla kulingana na kategoria anayouliza. "
+                "Waeleze kuingia tu ikiwa wanataka KUKOPA kitabu. "
+                "You are fully available to assist this guest user with catalog searches, "
+                "general book recommendations, and library info. Borrowing requires login."
             )
         else:
             system_instruction += (
@@ -422,8 +375,11 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
         """
         last_exc = None
         config_kwargs = {'system_instruction': system_instruction}
-        if with_tools:
-            config_kwargs['tools'] = [active_tools]
+        config_kwargs['tools'] = [active_tools]
+        if not with_tools:
+            config_kwargs['tool_config'] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode="NONE")
+            )
         for m in model_chain:
             try:
                 return client.models.generate_content(
@@ -476,7 +432,7 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
                 }
 
             # Execute function calls and build function response contents
-            function_response_parts = []
+            tool_results_texts = []
             for fc in function_calls:
                 name = fc.name
                 args = dict(fc.args) if fc.args else {}
@@ -497,22 +453,16 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
                         if isinstance(b, dict) and "id" in b:
                             referenced_books.add(b["id"])
 
-                # Build function response
-                function_response_parts.append(
-                    types.Part.from_function_response(
-                        name=name,
-                        response={"result": result},
-                    )
-                )
+                # Build text response for the tool result instead of a formal FunctionResponse
+                # This bypasses the google-genai SDK "thought_signature" serialization bug
+                tool_results_texts.append(f"Tool `{name}` returned:\n{json.dumps(result)}")
 
-            # Add model's function call to contents
-            contents.append(candidate.content)
-
-            # Add function responses to contents
-            contents.append(types.Content(
-                role="user",
-                parts=function_response_parts,
-            ))
+            # Add the results to the contents as a user message
+            if tool_results_texts:
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text="\n\n".join(tool_results_texts))]
+                ))
 
             round_count += 1
 
@@ -536,8 +486,8 @@ def chat(history, user_message, max_tool_rounds=4, user_context=None):
 
     except Exception as e:
         logger.exception("Gemini SDK call failed")
-        error_str = str(e)
-        if "429" in error_str or "quota" in error_str.lower():
+        error_str = str(e).lower()
+        if any(term in error_str for term in ["429", "quota", "503", "unavailable", "high demand"]):
             reply = (
                 "⏳ *Library Assistant Service Busy*\n"
                 "The AI assistant is experiencing high demand right now. "

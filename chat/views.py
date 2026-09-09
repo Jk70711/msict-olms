@@ -20,20 +20,44 @@ User = get_user_model()
 # --- helpers ---------------------------------------------------------------
 
 def _can_chat(u1, u2):
-    """Spec: members can only chat with staff (librarian/admin), not other members."""
+    """
+    Chat permission rules:
+    - member, librarian, admin: can communicate with each other
+    - guest: can only communicate with admin and librarian (and vice versa)
+    """
     if u1.id == u2.id:
         return False
-    roles = {u1.role, u2.role}
-    if roles == {'member'}:
-        return False
+    
+    # If either user is a guest, the other must be staff (admin/librarian)
+    u1_is_guest = u1.role == 'guest'
+    u2_is_guest = u2.role == 'guest'
+    
+    if u1_is_guest or u2_is_guest:
+        # One is guest, so the other must be staff
+        other_is_staff = (u2.role in ('librarian', 'admin')) if u1_is_guest else (u1.role in ('librarian', 'admin'))
+        return other_is_staff
+    
+    # Neither is guest - allow all member/librarian/admin communication
     return True
 
 
 def _allowed_partners_qs(user):
-    """Return a queryset of users this user is allowed to start a chat with."""
+    """
+    Return a queryset of users this user is allowed to start a chat with.
+    - member: can chat with other members, librarians, admins
+    - guest: can only chat with librarians and admins
+    - librarian/admin: can chat with everyone (members, other librarians, admins, guests)
+    """
     qs = User.objects.exclude(id=user.id).filter(is_active=True)
-    if user.role == 'member':
+    
+    if user.role == 'guest':
+        # Guest can only chat with staff
         qs = qs.filter(role__in=('librarian', 'admin'))
+    elif user.role == 'member':
+        # Member can chat with everyone except guests
+        qs = qs.exclude(role='guest')
+    # For librarian/admin: no filtering needed (can chat with everyone)
+    
     return qs.order_by('first_name', 'surname')
 
 

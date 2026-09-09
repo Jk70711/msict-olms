@@ -60,6 +60,8 @@ urlpatterns = [
     # ── Maktaba za Nje, Carousel, na Picha ──────────────────
     path('external-libraries/', views.external_library_list_view, name='external_library_list'),          # Maktaba za nje
     path('external-libraries/create/', views.external_library_create_view, name='external_library_create'), # Ongeza maktaba ya nje
+    path('external-libraries/<int:lib_id>/edit/', views.external_library_edit_view, name='external_library_edit'),
+    path('external-libraries/<int:lib_id>/delete/', views.external_library_delete_view, name='external_library_delete'),
     path('carousel/', views.carousel_manage_view, name='carousel_manage'),                     # Simamia carousel
     path('media-slides/', views.media_slide_list_view, name='media_slide_list'),               # Orodha ya picha/slides
     path('media-slides/create/', views.media_slide_create_view, name='media_slide_create'),    # Ongeza slide mpya

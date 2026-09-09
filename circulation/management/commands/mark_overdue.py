@@ -45,6 +45,34 @@ class Command(BaseCommand):
                 )
             )
 
+        # ── Cleanup 2: Fix orphaned borrowed copies (Data Consistency) ──────
+        from circulation.models import BookCopy
+        from django.db.models import Exists, OuterRef
+        
+        # Find copies marked borrowed but with NO active transaction
+        active_tx_exists = Exists(
+            BorrowingTransaction.objects.filter(
+                copy=OuterRef('pk'),
+                status__in=['borrowed', 'overdue']
+            )
+        )
+        orphaned_copies = BookCopy.objects.filter(
+            status='borrowed'
+        ).annotate(
+            has_active_tx=active_tx_exists
+        ).filter(has_active_tx=False)
+        
+        orphaned_count = orphaned_copies.count()
+        if orphaned_count > 0:
+            # We must use update() to quickly reset them to 'lost'
+            # (If the transaction was deleted abruptly without return, the physical book is missing)
+            orphaned_copies.update(status='lost')
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f'Self-Healed: Marked {orphaned_count} orphaned "borrowed" copies as "lost"'
+                )
+            )
+
 
         # ── Step 1: Mark borrowed→overdue and send first alert ─────────────
         # EXCLUDE ALL softcopies — they just expire without penalty
@@ -91,45 +119,50 @@ class Command(BaseCommand):
 
         # ── Step 2: Daily consecutive alert — EXCLUDE transactions just marked ─
         # EXCLUDE ALL softcopies — they just expire without penalty
-        # "until paid": skip if fine is fully paid (amount_paid >= amount).
-        # We use Exists() to avoid duplicate rows from the join.
-        from django.db.models import Exists, OuterRef, Q
-        unpaid_fine_exists = Exists(
-            Fine.objects.filter(transaction=OuterRef('pk'), paid=False)
-        )
-        no_fine_yet = ~Exists(Fine.objects.filter(transaction=OuterRef('pk')))
-
         already_overdue_qs = BorrowingTransaction.objects.filter(
             status='overdue',
         ).exclude(
             pk__in=newly_marked_ids,  # Don't double-notify on day 1
         ).exclude(
             copy__copy_type='softcopy'
-        ).filter(
-            unpaid_fine_exists | no_fine_yet  # Stop reminders once fine is fully paid
         ).select_related('user', 'copy__book')
 
         for tx in already_overdue_qs:
             days = max(1, (now - tx.due_date).days)
             total_fine = days * fine_per_day
 
-            # Update fine amount (accumulated daily)
-            existing_fine = Fine.objects.filter(transaction=tx).first()
-            if existing_fine:
-                if not existing_fine.paid:
-                    existing_fine.amount = total_fine
-                    existing_fine.reason = f"Overdue fine for '{tx.copy.book.title}' ({days} days)"
-                    existing_fine.save(update_fields=['amount', 'reason'])
-                remaining = float(existing_fine.remaining_balance)
+            # Find all overdue fines for this transaction
+            all_overdue_fines = Fine.objects.filter(transaction=tx, reason__icontains='Overdue fine')
+            
+            # Sum up the amount of ALL overdue fines for this transaction
+            from decimal import Decimal
+            total_billed_so_far = sum(fine.amount for fine in all_overdue_fines)
+            
+            remaining_to_bill = Decimal(str(total_fine)) - total_billed_so_far
+            
+            if remaining_to_bill > 0:
+                # Find an unpaid overdue fine for this transaction
+                unpaid_fine = all_overdue_fines.filter(paid=False).first()
+                if unpaid_fine:
+                    unpaid_fine.amount += remaining_to_bill
+                    unpaid_fine.reason = f"Overdue fine for '{tx.copy.book.title}' (Unpaid portion up to {days} days)"
+                    unpaid_fine.save(update_fields=['amount', 'reason'])
+                    remaining = float(unpaid_fine.remaining_balance)
+                else:
+                    # They paid the previous fine completely, but kept the book!
+                    # Create a new fine for the NEW remaining amount
+                    new_fine = Fine.objects.create(
+                        user=tx.user,
+                        transaction=tx,
+                        amount=remaining_to_bill,
+                        reason=f"Overdue fine for '{tx.copy.book.title}' (Additional overdue days)",
+                        paid=False,
+                    )
+                    remaining = float(new_fine.remaining_balance)
             else:
-                Fine.objects.create(
-                    user=tx.user,
-                    transaction=tx,
-                    amount=total_fine,
-                    reason=f"Overdue fine for '{tx.copy.book.title}' ({days} days)",
-                    paid=False,
-                )
-                remaining = total_fine
+                # If they don't owe anything new today, get the remaining balance from the most recent fine
+                last_fine = all_overdue_fines.order_by('-created_at').first()
+                remaining = float(last_fine.remaining_balance) if last_fine else 0
 
             msg = (
                 f"MSICT OLMS: DAILY REMINDER - '{tx.copy.book.title}' is {days} day(s) overdue. "
@@ -187,25 +220,32 @@ class Command(BaseCommand):
             )
             if loss_fine_id:
                 overdue_fine_qs = overdue_fine_qs.exclude(id=loss_fine_id)
-            overdue_fine = overdue_fine_qs.first()
+            total_billed_so_far = sum(fine.amount for fine in overdue_fine_qs)
+            remaining_to_bill = Decimal(str(total_overdue)) - total_billed_so_far
 
-            if overdue_fine:
-                if not overdue_fine.paid:
-                    overdue_fine.amount = total_overdue
-                    overdue_fine.reason = f"Overdue fine for '{book_title}' ({days} days)"
-                    overdue_fine.save(update_fields=['amount', 'reason'])
+            overdue_remaining = Decimal('0')
+            if remaining_to_bill > 0:
+                unpaid_fine = overdue_fine_qs.filter(paid=False).first()
+                if unpaid_fine:
+                    unpaid_fine.amount += remaining_to_bill
+                    unpaid_fine.reason = f"Overdue fine for '{book_title}' (Unpaid portion up to {days} days)"
+                    unpaid_fine.save(update_fields=['amount', 'reason'])
+                    overdue_remaining = unpaid_fine.remaining_balance
+                else:
+                    new_fine = Fine.objects.create(
+                        user=tx.user,
+                        transaction=tx,
+                        amount=remaining_to_bill,
+                        reason=f"Overdue fine for '{book_title}' (Additional overdue days)",
+                        paid=False,
+                    )
+                    overdue_remaining = new_fine.remaining_balance
             else:
-                overdue_fine = Fine.objects.create(
-                    user=tx.user,
-                    transaction=tx,
-                    amount=total_overdue,
-                    reason=f"Overdue fine for '{book_title}' ({days} days)",
-                    paid=False,
-                )
+                last_fine = overdue_fine_qs.order_by('-created_at').first()
+                overdue_remaining = last_fine.remaining_balance if last_fine else Decimal('0')
 
             # Compute remaining balances for both fines.
             loss_remaining = loss_fine.remaining_balance if loss_fine else Decimal('0')
-            overdue_remaining = overdue_fine.remaining_balance
 
             # Nothing to remind if both fully paid.
             if loss_remaining <= 0 and overdue_remaining <= 0:
@@ -307,11 +347,31 @@ class Command(BaseCommand):
             )
             expiry_warned += 1
 
+        # ── Step 6: Auto-expire reservations and process 24h timeouts ───────
+        from circulation.models import Book, Reservation
+        from circulation.views import _process_reservation_expiry
+        
+        # Get distinct book IDs from Reservation to avoid ORA-22848 on Book's LOB fields
+        active_book_ids = Reservation.objects.filter(
+            status__in=['pending', 'notified']
+        ).values_list('book_id', flat=True).distinct()
+        
+        books_with_active_res = Book.objects.filter(id__in=list(active_book_ids))
+        
+        books_processed = 0
+        for book in books_with_active_res:
+            try:
+                _process_reservation_expiry(book)
+                books_processed += 1
+            except Exception as e:
+                self.stdout.write(self.style.ERROR(f"Failed to process reservations for '{book.title}': {e}"))
+
         self.stdout.write(self.style.SUCCESS(
             f'[mark_overdue] Newly marked: {newly_marked} | '
             f'Overdue reminders: {daily_reminded} | '
             f'Lost+overdue reminders: {lost_reminded} | '
             f'Loss-only reminders: {loss_only_reminded} | '
             f'Softcopy logs expired: {expired_count} | '
-            f'Softcopy expiry warnings: {expiry_warned}'
+            f'Softcopy expiry warnings: {expiry_warned} | '
+            f'Reservation books processed: {books_processed}'
         ))

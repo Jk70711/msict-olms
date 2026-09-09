@@ -129,23 +129,19 @@
           <div class="col-md-4 text-center mt-3 mt-md-0">
 
             {% if lookup_tx_has_unpaid_fine %}
-            {# ── Unpaid fine — block return ── #}
+            {# ── Unpaid fine — warn but allow return ── #}
             <div class="alert alert-danger p-2 mb-2 text-start">
               <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill"></i> Unpaid Fine</div>
               <div>Total: <strong>TZS {{ lookup_tx_fine.amount|floatformat:0|intcomma }}</strong></div>
               <div class="text-danger fw-semibold">Remaining: TZS {{ lookup_tx_fine.remaining_balance|floatformat:0|intcomma }}</div>
             </div>
-            <button class="btn btn-danger btn-lg fw-semibold w-100 mb-2" disabled>
-              <i class="bi bi-lock-fill"></i><br>Return Blocked
-            </button>
-            <div class="text-muted small">
+            <div class="text-muted small mb-2">
               <i class="bi bi-info-circle"></i>
-              Fine must be paid before this book can be returned.<br>
-              Direct the member to the <a href="{% url 'fine_list' %}" class="fw-semibold">payment desk</a>.
+              Member has an unpaid fine. You may proceed with the return, but direct them to the <a href="{% url 'fine_list' %}" class="fw-semibold">payment desk</a>.
             </div>
+            {% endif %}
 
-            {% else %}
-            {# ── No fine — allow normal and damage return ── #}
+            {# ── Allow normal and damage return ── #}
             <form method="post" class="mb-2"
                   onsubmit="return confirm('Confirm NORMAL return of this book?');">
               {% csrf_token %}
@@ -207,7 +203,6 @@
               No fine. Book returned on time.
               {% endif %}
             </div>
-            {% endif %}
 
           </div>
         </div>
@@ -298,6 +293,17 @@
                   {% endfor %}
                 </td>
                 <td class="text-center" style="min-width:160px;">
+                  {% if tx.copy.copy_type == 'softcopy' %}
+                  <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="copy_pk" value="{{ tx.copy.pk }}">
+                    <input type="hidden" name="return_card_no" value="{{ card_input }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger fw-semibold w-100"
+                            onclick="return confirm('Cancel softcopy access for this user?');">
+                      <i class="bi bi-x-circle"></i> Cancel Access
+                    </button>
+                  </form>
+                  {% else %}
                   {% for tid, fine_info in tx_fines.items %}
                   {% if tid == tx.id %}
 
@@ -374,6 +380,7 @@
                     </button>
                   </form>
                   {% endfor %}
+                  {% endif %}
                 </td>
               </tr>
               {% endfor %}

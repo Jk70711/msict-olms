@@ -31,7 +31,7 @@ def _book_to_dict(book, include_copies=False):
         'category':   book.category.name if book.category_id else '',
         'summary':    (book.summary or '')[:400],
         'cover_url':  book.cover_image.url if book.cover_image else '',
-        'detail_url': reverse('book_detail', args=[book.id]),
+        'detail_url': reverse('book_detail_public', args=[book.id]),
         'availability': {
             'available':         available,
             'hardcopy_available': avail_hard,
@@ -155,7 +155,7 @@ def suggest_similar_books(query='', author='', category='', exclude_id=None, lim
 # ----------------------------------------------------------------------
 # TOOL: list_categories
 # ----------------------------------------------------------------------
-def list_categories():
+def list_categories(**kwargs):
     """Return top-level categories with their book counts."""
     cats = (Category.objects
             .filter(parent__isnull=True)
@@ -184,22 +184,25 @@ def get_library_info():
             pass
         return getattr(settings, key, default)
 
-    loan_days      = int(_p('LOAN_PERIOD_DAYS',        7))
-    max_renewals   = int(_p('MAX_RENEWALS',             2))
-    renew_window   = int(_p('RENEWAL_WINDOW_DAYS',      2))
-    max_copies     = int(_p('MAX_COPIES_PER_BORROW',    3))
-    fine_per_day   = float(_p('FINE_PER_DAY',           1000))
-    resv_expiry    = int(_p('RESERVATION_EXPIRY_DAYS',  7))
-    guest_max_hrs  = int(_p('GUEST_MAX_HOURS',          12))
-    guest_rate     = float(_p('GUEST_HOURLY_RATE',      500))
-    soft_fee       = float(_p('SOFTCOPY_PREPAID_FEE',   0))
-    otp_validity   = int(_p('OTP_VALIDITY_MINUTES',     10))
-    max_attempts   = int(_p('MAX_LOGIN_ATTEMPTS',       6))
-    suspend_at     = int(_p('SUSPEND_ATTEMPTS',         3))
-    suspend_dur    = int(_p('SUSPEND_DURATION_MINUTES', 10))
-    session_tmout  = int(_p('SESSION_TIMEOUT_MINUTES',  30))
-    pwd_expiry     = int(_p('PASSWORD_EXPIRY_DAYS',     90))
-    auto_lockout   = _p('ENABLE_AUTO_LOCKOUT',          '1') == '1'
+    loan_days      = int(_p('LOAN_PERIOD_DAYS',           7))
+    max_renewals   = int(_p('MAX_RENEWALS',                2))
+    renew_window   = int(_p('RENEWAL_WINDOW_DAYS',         2))
+    max_copies     = int(_p('MAX_COPIES_PER_BORROW',       3))
+    fine_per_day   = float(_p('FINE_PER_DAY',              1000))
+    resv_expiry    = int(_p('RESERVATION_EXPIRY_DAYS',     7))
+    guest_max_hrs  = int(_p('GUEST_MAX_HOURS',             12))
+    guest_rate     = float(_p('GUEST_HOURLY_RATE',         500))
+    soft_fee       = float(_p('SOFTCOPY_PREPAID_FEE',      0))
+    otp_validity   = int(_p('OTP_VALIDITY_MINUTES',        10))
+    max_attempts   = int(_p('MAX_LOGIN_ATTEMPTS',          6))
+    suspend_at     = int(_p('SUSPEND_ATTEMPTS',            3))
+    suspend_dur    = int(_p('SUSPEND_DURATION_MINUTES',    10))
+    session_tmout  = int(_p('SESSION_TIMEOUT_MINUTES',     30))
+    pwd_expiry     = int(_p('PASSWORD_EXPIRY_DAYS',        90))
+    pwd_history    = int(_p('PASSWORD_HISTORY_DEPTH',      5))
+    auto_lockout   = _p('ENABLE_AUTO_LOCKOUT',             '1') == '1'
+    notify_enabled = _p('NEW_ARRIVAL_NOTIFY_ENABLED',      '1') == '1'
+    notify_channel = str(_p('NEW_ARRIVAL_NOTIFY_CHANNEL',  'sms'))
 
     return {
         'name':        'MSICT Library',
@@ -207,14 +210,16 @@ def get_library_info():
 
         # ── Borrowing ──────────────────────────────────────────────────────
         'borrowing': {
-            'loan_period_days':      loan_days,
-            'max_copies_per_borrow': max_copies,
+            'loan_period_days':        loan_days,
+            'max_copies_per_borrow':   max_copies,
             'reservation_expiry_days': resv_expiry,
             'note': (
                 f"Members may borrow up to {max_copies} book(s) at a time. "
                 f"Each loan lasts {loan_days} day(s). "
                 f"To borrow, log in → open book detail page → click Borrow. "
-                f"Reservations expire after {resv_expiry} day(s) if unclaimed."
+                f"Reservations use a smart queue expiry formula: queue position 1 waits "
+                f"until the current borrower returns (approx. {loan_days} days), then each "
+                f"subsequent queue member adds {loan_days} days + 1 day (24-hr claim window)."
             ),
         },
 
@@ -285,13 +290,14 @@ def get_library_info():
 
         # ── Security & Accounts ─────────────────────────────────────────────
         'security': {
-            'otp_validity_minutes':   otp_validity,
-            'max_login_attempts':     max_attempts,
-            'suspend_attempts':       suspend_at,
+            'otp_validity_minutes':     otp_validity,
+            'max_login_attempts':       max_attempts,
+            'suspend_attempts':         suspend_at,
             'suspend_duration_minutes': suspend_dur,
-            'session_timeout_minutes': session_tmout,
-            'password_expiry_days':   pwd_expiry,
-            'auto_lockout_enabled':   auto_lockout,
+            'session_timeout_minutes':  session_tmout,
+            'password_expiry_days':     pwd_expiry,
+            'password_history_depth':   pwd_history,
+            'auto_lockout_enabled':     auto_lockout,
             'note': (
                 f"OTP codes expire after {otp_validity} minute(s). "
                 f"{'Accounts are locked after ' + str(max_attempts) + ' failed login attempts. ' if auto_lockout else 'Auto-lockout is currently disabled. '}"
@@ -299,14 +305,28 @@ def get_library_info():
                 f"After suspension expires, {max_attempts - suspend_at} more attempts remain before permanent lock. "
                 f"Sessions expire after {session_tmout} minute(s) of inactivity. "
                 f"Password change is prompted every {pwd_expiry} day(s). "
+                f"The system remembers the last {pwd_history} password(s) to prevent reuse. "
                 f"Locked accounts can only be unlocked by an administrator."
             ),
         },
 
+        # ── Notifications ───────────────────────────────────────────────────
+        'notifications': {
+            'new_arrival_notify_enabled': notify_enabled,
+            'new_arrival_notify_channel': notify_channel,
+            'note': (
+                f"New book arrival notifications are {'ENABLED' if notify_enabled else 'DISABLED'}. "
+                f"When enabled, members are notified via {notify_channel.upper()} when new books are added to the catalog. "
+                f"Members can also set up personal alerts from their dashboard."
+            ),
+        },
+
         'general_note': (
-            'All policies above are live values from the system and may be updated by the administrator at any time.'
+            'All policies above are live values from the system and may be updated by the administrator at any time. '
+            'Always use these exact numbers when answering questions about fines, fees, limits, or security rules.'
         ),
     }
+
 
 
 # ----------------------------------------------------------------------

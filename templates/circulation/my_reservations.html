@@ -60,7 +60,11 @@
           {% if item.nearest_return %}
             {% if item.ahead > 0 and item.est_your_turn %}
               <div class="fw-bold text-primary" style="font-size:.92rem;">
-                {{ item.nearest_return.due_date|date:"d M Y" }}
+                {% if item.nearest_return.status == 'overdue' %}
+                  <span class="text-danger">Overdue</span>
+                {% else %}
+                  {{ item.nearest_return.due_date|date:"d M Y" }}
+                {% endif %}
                 <i class="bi bi-arrow-right mx-1 text-muted"></i>
                 ~{{ item.est_your_turn|date:"d M Y" }}
               </div>
@@ -73,7 +77,13 @@
                 {% endif %}
               </div>
             {% else %}
-              <div class="fw-bold">{{ item.nearest_return.due_date|date:"d M Y" }}</div>
+              <div class="fw-bold">
+                {% if item.nearest_return.status == 'overdue' %}
+                  <span class="text-danger">ASAP (Overdue)</span>
+                {% else %}
+                  {{ item.est_your_turn|date:"d M Y" }}
+                {% endif %}
+              </div>
               <div class="small text-muted">
                 {% if item.nearest_return.status == 'overdue' %}
                   <span class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Overdue borrower</span>
@@ -166,6 +176,7 @@
             <th>Reserved On</th>
             <th>Expires</th>
             <th>Status</th>
+            <th>Action</th>
           </tr>
         </thead>
         <tbody>
@@ -185,6 +196,14 @@
               {% elif r.status == 'expired' %}
                 <span class="badge bg-danger">Expired</span>
               {% endif %}
+            </td>
+            <td>
+              <form method="post" action="{% url 'delete_reservation_history' r.pk %}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this reservation from history? This cannot be undone.')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete from history">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </form>
             </td>
           </tr>
           {% endfor %}

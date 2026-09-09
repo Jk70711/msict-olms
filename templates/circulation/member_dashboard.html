@@ -50,7 +50,11 @@
       </div>
       <div class="flex-grow-1">
         <h4 class="fw-bold mb-1">Welcome back, {{ user.get_full_name }}</h4>
-        <p class="text-muted small mb-2">{{ user.email }}</p>
+        <p class="text-muted small mb-1">{{ user.email }}</p>
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <i class="bi bi-clock text-muted" style="font-size:.8rem;"></i>
+          <span id="dashLiveClock" class="text-muted" style="font-size:.82rem;font-variant-numeric:tabular-nums;">Loading…</span>
+        </div>
         <div class="d-flex gap-2">
           {% if user.member_type == 'student' %}<span class="badge bg-primary"><i class="bi bi-mortarboard me-1"></i>Student</span>
           {% elif user.member_type == 'lecturer' %}<span class="badge bg-info text-dark"><i class="bi bi-person-workspace me-1"></i>Instructor</span>
@@ -82,7 +86,7 @@
       </div>
       <div class="flex-grow-1">
         <strong class="text-danger">You have overdue items!</strong>
-        <p class="small text-danger mb-0">Return overdue books before borrowing new ones. Fines are accumulating daily.</p>
+        <p class="small text-danger mb-0">Return overdue books before borrowing new hardcopies. Fines are accumulating daily.</p>
       </div>
       <a href="{% url 'member_msict_borrowings' %}" class="btn btn-sm btn-danger">View Details</a>
     </div>
@@ -116,7 +120,7 @@
       </div>
       <div class="flex-grow-1">
         <strong style="color: #9a3412;">Damaged Book Fine</strong>
-        <p class="small mb-0" style="color: #9a3412;">You have an unpaid damage fine. Pay now to continue borrowing books.</p>
+        <p class="small mb-0" style="color: #9a3412;">You have an unpaid damage fine. Pay now to continue borrowing hardcopies.</p>
       </div>
       <a href="{% url 'my_damage_reports' %}" class="btn btn-sm" style="background-color: #ea580c; color: white;">View &amp; Pay</a>
     </div>
@@ -132,7 +136,7 @@
         <i class="bi bi-cash-coin fs-4"></i>
       </div>
       <div class="flex-grow-1">
-        <strong class="text-dark">Borrowing Blocked - Unpaid Fines</strong>
+        <strong class="text-dark">Hardcopy Borrowing Blocked - Unpaid Fines</strong>
         <p class="small text-dark mb-0">
           {% if total_unpaid > 0 %}Overdue fines: <strong>TZS {{ total_unpaid|floatformat:0|intcomma }}</strong>{% endif %}
           {% if total_unpaid > 0 and total_loss_unpaid > 0 %} + {% endif %}
@@ -340,17 +344,17 @@
     <h6 class="fw-bold mb-3"><i class="bi bi-globe me-2 text-primary"></i>Tanzanian University Libraries</h6>
     <div class="row g-2">
       <div class="col-6 col-md-3">
-        <a href="https://www.udsm.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+        <a href="https://www.udsm.ac.tz/udsm-library" target="_blank" class="btn btn-outline-info w-100 text-start">
           <i class="bi bi-building me-2"></i> UDSM Library
         </a>
       </div>
-      <div class="col-6 col-md-3">
+     <!--<div class="col-6 col-md-3">
         <a href="https://www.udom.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
           <i class="bi bi-building me-2"></i> UDOM Library
         </a>
-      </div>
+      </div>-->
       <div class="col-6 col-md-3">
-        <a href="https://www.must.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+        <a href="https://must.ac.tz/library/overview" target="_blank" class="btn btn-outline-info w-100 text-start">
           <i class="bi bi-building me-2"></i> MUST Library
         </a>
       </div>
@@ -360,11 +364,11 @@
         </a>
       </div>
       <div class="col-6 col-md-3">
-        <a href="https://www.nm-aist.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
+        <a href="https://libraryservices.nm-aist.ac.tz/" target="_blank" class="btn btn-outline-info w-100 text-start">
           <i class="bi bi-building me-2"></i> NM-AIST Library
         </a>
       </div>
-      <div class="col-6 col-md-3">
+      <!--<div class="col-6 col-md-3">
         <a href="https://www.ardhi.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
           <i class="bi bi-building me-2"></i> ARU Library
         </a>
@@ -378,7 +382,7 @@
         <a href="https://www.coast.ac.tz/library" target="_blank" class="btn btn-outline-info w-100 text-start">
           <i class="bi bi-building me-2"></i> COAST University Library
         </a>
-      </div>
+      </div>-->
     </div>
   </div>
 </div>
@@ -655,7 +659,11 @@
           <div class="d-flex justify-content-between align-items-center mt-1">
             <div class="small">
               {% if fine.paid %}
-                <span class="badge bg-success">Paid</span>
+                {% if fine.transaction and fine.transaction.status == 'overdue' %}
+                  <span class="badge bg-warning text-dark border border-warning" title="Paid up to today, but book is still not returned">Paid (Unreturned)</span>
+                {% else %}
+                  <span class="badge bg-success">Paid</span>
+                {% endif %}
               {% else %}
                 <span class="badge bg-danger">Unpaid</span>
               {% endif %}
@@ -944,6 +952,28 @@ function copyToClipboard(relativeUrl) {
       },
     },
   });
+})();
+</script>
+<script>
+/* Live clock for dashboard greeting */
+(function() {
+  var el = document.getElementById('dashLiveClock');
+  if (!el) return;
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function tick() {
+    var now = new Date();
+    var d = days[now.getDay()];
+    var date = String(now.getDate()).padStart(2,'0');
+    var mon = months[now.getMonth()];
+    var yr = now.getFullYear();
+    var h = String(now.getHours()).padStart(2,'0');
+    var m = String(now.getMinutes()).padStart(2,'0');
+    var s = String(now.getSeconds()).padStart(2,'0');
+    el.textContent = d + ', ' + date + ' ' + mon + ' ' + yr + '  •  ' + h + ':' + m + ':' + s;
+  }
+  tick();
+  setInterval(tick, 1000);
 })();
 </script>
 {% endblock %}

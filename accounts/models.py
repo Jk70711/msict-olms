@@ -556,6 +556,51 @@ class UserManualSection(models.Model):
 
 
 # ----------------------------------------------------------------------
+# Terms and Conditions Sections — Editable via Django admin
+# Admin can CRUD these sections via /admin/
+# ----------------------------------------------------------------------
+class TermsSection(models.Model):
+    SECTION_CHOICES = [
+        ('acceptance',    'Acceptance of Terms'),
+        ('user_resp',     'User Responsibilities'),
+        ('borrowing',     'Borrowing Rules'),
+        ('fines',         'Fines and Payments'),
+        ('digital',       'Digital Resources'),
+        ('privacy',       'Privacy and Data'),
+        ('conduct',       'Conduct and Discipline'),
+        ('system_usage',  'System Usage'),
+        ('changes',       'Changes to Terms'),
+        ('contact',       'Contact Information'),
+        ('custom',        'Custom Section'),
+    ]
+
+    section_key = models.CharField(
+        max_length=50,
+        choices=SECTION_CHOICES,
+        help_text='Section identifier (multiple custom sections allowed)'
+    )
+    title = models.CharField(max_length=200, help_text='Section heading displayed to users')
+    icon = models.CharField(max_length=50, default='bi-file-text', help_text='Bootstrap icon class e.g. bi-shield-check')
+    content = models.TextField(help_text='HTML content for this section (tags like <ul>, <p>, <strong> allowed)')
+    order = models.PositiveIntegerField(default=0, help_text='Display order (lower numbers first)')
+    is_active = models.BooleanField(default=True, help_text='Uncheck to hide this section')
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        OLMSUser, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='updated_terms_sections'
+    )
+
+    class Meta:
+        db_table = 'terms_sections'
+        ordering = ['order', 'section_key']
+        verbose_name = 'Terms & Conditions Section'
+        verbose_name_plural = 'Terms & Conditions Sections'
+
+    def __str__(self):
+        return f"{self.order}. {self.title}"
+
+
+# ----------------------------------------------------------------------
 # Bulk Messaging — Admin/Librarian sends notifications to groups
 # ----------------------------------------------------------------------
 class BulkMessage(models.Model):

@@ -102,8 +102,9 @@
               <div class="mb-3">
                 <label class="form-label fw-semibold">Amount to Pay (TZS)</label>
                 <input type="number" name="payment_amount" class="form-control" id="payment-amount"
-                       value="{{ fine.remaining_balance|floatformat:0|intcomma }}" min="1"
-                       max="{{ fine.remaining_balance|floatformat:0|intcomma }}" required>
+                       value="{{ fine.remaining_balance|floatformat:'0u' }}" min="1"
+                       max="{{ fine.remaining_balance|floatformat:'0u' }}" required readonly>
+                <div class="form-text">Amount is fixed and cannot be manually edited.</div>
                 <small class="text-muted">Remaining balance: TZS {{ fine.remaining_balance|floatformat:0|intcomma }}</small>
               </div>
 

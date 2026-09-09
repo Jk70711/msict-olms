@@ -12,6 +12,11 @@ from django.contrib.auth.decorators import login_required
 
 from catalog.models import Book, BookCopy, ExternalLibrary, News, Category, Course, MediaSlide, Footer
 from circulation.models import BorrowingTransaction
+from accounts.models import SystemPreference
+from accounts.views import librarian_required
+from django.contrib import messages
+from .forms import FAQForm
+
 
 
 # API ya utambuzi wa haraka wa vitabu (inaitwa kwa AJAX wakati unaandika kwenye kisanduku cha tafuta)
@@ -168,7 +173,36 @@ def home_view(request):
     softcopy_count = BookCopy.objects.filter(copy_type='softcopy').count()
     hardcopy_count = BookCopy.objects.filter(copy_type='hardcopy').count()
 
+    # Fetch opening hours
+    hours_pref = SystemPreference.get('LIBRARY_OPENING_HOURS')
+    opening_hours = None
+    if hours_pref:
+        import json
+        try:
+            opening_hours = json.loads(hours_pref)
+        except:
+            pass
+            
+    if not opening_hours:
+        opening_hours = {
+            "semester": {
+                "mon_fri": "08:00 am - 06:30 pm · 07:30 pm - 10:30 pm",
+                "sat": "08:00 am - 06:30 pm · 07:30 pm - 10:30 pm",
+                "sun": "02:00 pm - 06:30 pm · 07:30 pm - 10:30 pm",
+                "holidays": "08:00 am - 06:30 pm · 07:30 pm - 10:30 pm",
+                "note": "Extended night hours during the semester for your convenience. One hour break between the day and night sessions."
+            },
+            "vacation": {
+                "mon_fri": "08:00 am - 05:00 pm",
+                "sat": "08:00 am - 03:30 pm",
+                "sun": "Closed",
+                "holidays": "Closed",
+                "note": "Vacation schedule — reduced hours on Saturday; closed on Sundays and public holidays."
+            }
+        }
+
     return render(request, 'public/home.html', {
+        'opening_hours': opening_hours,
         'carousel_slides': carousel_slides,
         'carousel_books': carousel_books,
         'latest_books': latest_books,
@@ -189,7 +223,6 @@ def home_view(request):
 # Ukurasa wa kutafuta vitabu (catalog ya umma)
 # Inachuja vitabu kulingana na: maneno ya tafuta, kozi, kategoria
 # Matokeo yanagawanywa kurasa 12 kwa kurasa moja
-@login_required
 def catalog_search_view(request):
     from django.core.paginator import Paginator
     query = request.GET.get('q', '')  # Maneno ya tafuta
@@ -257,7 +290,6 @@ def catalog_search_view(request):
 # Ukurasa wa maelezo ya kitabu mmoja (kwa umma)
 # Inaonyesha: taarifa za kitabu, nakala zilizopo, viungo vya kukopa au kupakua
 # Kwa mwanachama aliyeingia: inaonyesha hali ya mkopo wake wa kitabu hiki
-@login_required
 def book_detail_public_view(request, book_id):
     from circulation.models import BorrowRequest
     from django.conf import settings as _settings
@@ -268,10 +300,10 @@ def book_detail_public_view(request, book_id):
     available_special = special_copies.filter(status='available')
     hardcopies = copies.filter(copy_type='hardcopy')
 
-    user_active_softcopy_tx = None
-    user_pending_softcopy_req = False
-    user_can_borrow = True
-    borrow_block_reason = ''
+    user_can_borrow_hardcopy = True
+    hardcopy_block_reason = ''
+    user_can_borrow_softcopy = True
+    softcopy_block_reason = ''
     if request.user.is_authenticated:
         user_active_softcopy_tx = BorrowingTransaction.objects.filter(
             user=request.user,
@@ -283,15 +315,19 @@ def book_detail_public_view(request, book_id):
         user_pending_softcopy_req = BorrowRequest.objects.filter(
             user=request.user, copy__in=special_copies, status='pending'
         ).exists()
-        if request.user.has_overdue():
-            user_can_borrow = False
-            borrow_block_reason = 'overdue'
+        
+        limit = int(SystemPreference.get('MAX_COPIES_PER_BORROW', 3))
+        if request.user.active_borrows_count() >= limit:
+            user_can_borrow_hardcopy = False
+            hardcopy_block_reason = 'limit'
+            user_can_borrow_softcopy = False
+            softcopy_block_reason = 'limit'
+        elif request.user.has_overdue():
+            user_can_borrow_hardcopy = False
+            hardcopy_block_reason = 'overdue'
         elif request.user.has_unpaid_fines():
-            user_can_borrow = False
-            borrow_block_reason = 'fines'
-        elif request.user.active_borrows_count() >= getattr(_settings, 'MAX_COPIES_PER_BORROW', 3):
-            user_can_borrow = False
-            borrow_block_reason = 'limit'
+            user_can_borrow_hardcopy = False
+            hardcopy_block_reason = 'fines'
 
     return render(request, 'public/book_detail.html', {
         'book': book,
@@ -302,14 +338,15 @@ def book_detail_public_view(request, book_id):
         'hardcopies': hardcopies,
         'user_active_softcopy_tx': user_active_softcopy_tx,
         'user_pending_softcopy_req': user_pending_softcopy_req,
-        'user_can_borrow': user_can_borrow,
-        'borrow_block_reason': borrow_block_reason,
+        'user_can_borrow_hardcopy': user_can_borrow_hardcopy,
+        'hardcopy_block_reason': hardcopy_block_reason,
+        'user_can_borrow_softcopy': user_can_borrow_softcopy,
+        'softcopy_block_reason': softcopy_block_reason,
     })
 
 
 # API ya kupata data ya kitabu kwa modal popup (inaitwa kwa AJAX)
 # Inarudisha JSON na taarifa muhimu za kitabu
-@login_required
 def book_modal_data_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
     data = {
@@ -325,3 +362,55 @@ def book_modal_data_view(request, book_id):
         'detail_url': f'/books/{book.pk}/',
     }
     return JsonResponse(data)
+
+
+# Ukurasa wa Maswali Yanayoulizwa Mara kwa Mara (FAQ)
+def faq_view(request):
+    from .models import FAQ
+    faqs = FAQ.objects.filter(is_active=True).order_by('order', 'id')
+    return render(request, 'public/faq.html', {
+        'faqs': faqs,
+    })
+
+
+@librarian_required
+def manage_faqs_view(request):
+    from .models import FAQ
+    faqs = FAQ.objects.all().order_by('order', 'id')
+    return render(request, 'public/manage_faqs.html', {'faqs': faqs})
+
+@librarian_required
+def faq_create_view(request):
+    if request.method == 'POST':
+        form = FAQForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'FAQ created successfully.')
+            return redirect('manage_faqs')
+    else:
+        form = FAQForm()
+    return render(request, 'public/faq_form.html', {'form': form, 'title': 'Create FAQ'})
+
+@librarian_required
+def faq_edit_view(request, faq_id):
+    from .models import FAQ
+    faq = get_object_or_404(FAQ, pk=faq_id)
+    if request.method == 'POST':
+        form = FAQForm(request.POST, instance=faq)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'FAQ updated successfully.')
+            return redirect('manage_faqs')
+    else:
+        form = FAQForm(instance=faq)
+    return render(request, 'public/faq_form.html', {'form': form, 'title': 'Edit FAQ'})
+
+@librarian_required
+def faq_delete_view(request, faq_id):
+    from .models import FAQ
+    faq = get_object_or_404(FAQ, pk=faq_id)
+    if request.method == 'POST':
+        faq.delete()
+        messages.success(request, 'FAQ deleted successfully.')
+        return redirect('manage_faqs')
+    return render(request, 'public/faq_confirm_delete.html', {'faq': faq})

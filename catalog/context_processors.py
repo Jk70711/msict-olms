@@ -295,6 +295,15 @@ def active_logo(request):
     return {'active_logo': logo}
 
 
+def active_footer_cp(request):
+    try:
+        from .models import Footer
+        footer = Footer.get_active_footer()
+    except Exception:
+        footer = None
+    return {'active_footer': footer}
+
+
 def system_appearance(request):
     try:
         from accounts.models import SystemPreference
@@ -390,3 +399,59 @@ def category_menu(request):
         cats = []
 
     return {'cat_menu': cats}
+
+
+def guest_expiry_alerts(request):
+    """Inject expiring-soon guest sessions for the librarian in-app popup.
+
+    For librarians and admins only: returns a list of active sessions that
+    will expire within the next 5 minutes (300 seconds), with full detail
+    per session so the librarian popup can show a per-guest countdown table.
+
+    Returned context key: ``librarian_expiring_sessions``  — a list of dicts:
+        id, name, username, phone, session_id, paid_hours, amount_paid,
+        expiry_iso (ISO-8601), minutes_left, seconds_left
+    """
+    empty = {'librarian_expiring_sessions': []}
+    try:
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated and getattr(user, 'role', '') in ('admin', 'librarian')):
+            return empty
+
+        from accounts.models import GuestSession
+        from django.utils import timezone
+        from datetime import timedelta
+
+        now = timezone.now()
+        window_end = now + timedelta(minutes=5)
+
+        active = GuestSession.objects.filter(
+            status__in=['active', 'renewed']
+        ).select_related('user').order_by('sign_in_time')
+
+        expiring = []
+        for s in active:
+            expiry = s.sign_in_time + timedelta(hours=float(s.paid_hours))
+            delta = expiry - now
+            total_secs = delta.total_seconds()
+            # Include sessions expiring between now and 5 min from now
+            if 0 < total_secs <= 300:
+                mins_left = int(total_secs // 60)
+                secs_left = int(total_secs % 60)
+                expiring.append({
+                    'id': s.id,
+                    'name': s.user.get_full_name() or s.user.username,
+                    'username': s.user.username,
+                    'phone': getattr(s.user, 'phone', '') or '',
+                    'paid_hours': float(s.paid_hours),
+                    'amount_paid': float(s.amount_paid),
+                    'payment_status': s.get_payment_status_display(),
+                    'expiry_iso': expiry.isoformat(),
+                    'expiry_display': expiry.strftime('%H:%M'),
+                    'mins_left': mins_left,
+                    'secs_left': secs_left,
+                })
+
+        return {'librarian_expiring_sessions': expiring}
+    except Exception:
+        return empty

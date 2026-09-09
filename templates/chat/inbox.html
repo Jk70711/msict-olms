@@ -129,6 +129,18 @@
     font-size: .72rem; color: #4a5568;
   }
   .chat-pane-header .status.online { color: #16a34a; font-weight: 500; }
+  .role-pill {
+    font-size: .68rem;
+    font-weight: 600;
+    padding: .15rem .55rem;
+    border-radius: 12px;
+    text-transform: capitalize;
+    display: inline-block;
+  }
+  .role-pill.role-librarian { background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; }
+  .role-pill.role-admin     { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+  .role-pill.role-member    { background:#f0fdf4; color:#059669; border:1px solid #bbf7d0; }
+  .role-pill.role-guest     { background:#fef3c7; color:#d97706; border:1px solid #fde68a; }
 
   .chat-messages {
     flex: 1;
@@ -287,6 +299,7 @@
           <div class="chat-conv-info">
             <div class="chat-conv-name">
               <span class="text-truncate">{{ it.other.get_full_name|default:it.other.username }}</span>
+              <span class="role-pill role-{{ it.other.role }}">{{ it.other.role }}</span>
               {% if it.last_msg %}
                 <span class="chat-conv-time">{{ it.last_msg.created_at|timesince|truncatewords:1|cut:"," }}</span>
               {% endif %}
@@ -325,7 +338,7 @@
         <div class="info">
           <div class="name">{{ active_other.get_full_name|default:active_other.username }}</div>
           <div class="status" id="otherStatus">
-            <span class="text-capitalize">{{ active_other.role }}</span>
+            <span class="role-pill role-{{ active_other.role }}">{{ active_other.role }}</span>
             <span id="onlineDot" class="d-none">· <span class="online">online</span></span>
           </div>
         </div>

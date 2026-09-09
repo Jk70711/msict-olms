@@ -37,11 +37,14 @@ class Command(BaseCommand):
                 now + timedelta(hours=47),
                 now + timedelta(hours=49),
                 lambda book, copy_type, due, fpd=fine_per_day: (
+                    f"MSICT OLMS: EXPIRY NOTICE - '{book}' access expires in 2 days "
+                    f"({due.strftime('%d %b %Y %H:%M')}). "
+                    f"Renew from your dashboard to keep reading. "
+                    f"No fine applies — the link simply becomes inactive."
+                ) if copy_type == 'softcopy' else (
                     f"MSICT OLMS: REMINDER - '{book}' is due in 2 days "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
-                    + (f"Your softcopy access link expires in 2 days. Renew from your dashboard to keep access."
-                       if copy_type == 'softcopy'
-                       else f"Please return the book to the library on time to avoid fines (TZS {fpd:,.0f}/day).")
+                    f"Please return the book to the library on time to avoid fines (TZS {fpd:,.0f}/day)."
                 ),
             ),
             (
@@ -49,11 +52,13 @@ class Command(BaseCommand):
                 now + timedelta(hours=23),
                 now + timedelta(hours=25),
                 lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: URGENT - '{book}' softcopy access expires TOMORROW "
+                    f"MSICT OLMS: '{book}' access expires TOMORROW "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
-                    + (f"Renew your access link from your dashboard before it expires — no overdue fine, but access will stop."
-                       if copy_type == 'softcopy'
-                       else f"Bring the book to the library tomorrow to avoid a TZS {fpd:,.0f}/day overdue fine.")
+                    f"Renew from your dashboard before it expires to keep reading."
+                ) if copy_type == 'softcopy' else (
+                    f"MSICT OLMS: URGENT - '{book}' is due TOMORROW "
+                    f"({due.strftime('%d %b %Y %H:%M')}). "
+                    f"Bring the book to the library tomorrow to avoid a TZS {fpd:,.0f}/day overdue fine."
                 ),
             ),
             (
@@ -61,11 +66,13 @@ class Command(BaseCommand):
                 now - timedelta(hours=1),
                 now + timedelta(hours=1),
                 lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: ACCESS EXPIRING TODAY - '{book}' softcopy link expires at "
+                    f"MSICT OLMS: '{book}' access expires TODAY at "
                     f"{due.strftime('%H:%M')}. "
-                    + (f"Renew now from your dashboard to keep access. No fine — link simply expires."
-                       if copy_type == 'softcopy'
-                       else f"Return the book to the library immediately. A TZS {fpd:,.0f}/day fine starts after the deadline.")
+                    f"Renew now from your dashboard to keep reading."
+                ) if copy_type == 'softcopy' else (
+                    f"MSICT OLMS: DUE TODAY - '{book}' must be returned by "
+                    f"{due.strftime('%H:%M')}. "
+                    f"Return the book to the library immediately. A TZS {fpd:,.0f}/day fine starts after the deadline."
                 ),
             ),
         ]

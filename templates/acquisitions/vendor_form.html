@@ -4,17 +4,50 @@
 <div class="row justify-content-center">
   <div class="col-md-6">
     <div class="card p-4">
-      <h5 class="fw-bold mb-3"><i class="bi bi-shop"></i> Add Vendor</h5>
+      <h5 class="fw-bold mb-3"><i class="bi bi-shop"></i> {% if vendor %}Edit{% else %}Add{% endif %} Vendor</h5>
       <form method="post">{% csrf_token %}
-        <div class="mb-3"><label class="form-label">Name <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" required></div>
-        <div class="mb-3"><label class="form-label">Contact Person</label><input type="text" name="contact_person" class="form-control"></div>
-        <div class="mb-3"><label class="form-label">Email</label><input type="email" name="email" class="form-control"></div>
-        <div class="mb-3"><label class="form-label">Phone</label><input type="tel" name="phone" class="form-control" maxlength="10" pattern="^0\d{9}$" placeholder="e.g. 0712345678"></div>
-        <div class="mb-3"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="2"></textarea></div>
+        <div class="mb-3"><label class="form-label">Name <span class="text-danger">*</span></label><input type="text" name="name" class="form-control" value="{{ vendor.name|default:'' }}" required></div>
+        <div class="mb-3"><label class="form-label">Contact Person</label><input type="text" name="contact_person" class="form-control" value="{{ vendor.contact_person|default:'' }}"></div>
+        <div class="mb-3"><label class="form-label">Email</label><input type="email" name="email" class="form-control" value="{{ vendor.email|default:'' }}"></div>
+        <div class="mb-3"><label class="form-label">Phone</label><input type="tel" name="phone" id="id_phone" class="form-control" maxlength="10" pattern="0[0-9]{9}" placeholder="e.g. 0712345678" value="{{ vendor.phone|default:'' }}" title="Phone number must be exactly 10 digits and start with 0"></div>
+        <div class="mb-3"><label class="form-label">Address</label><textarea name="address" class="form-control" rows="2">{{ vendor.address|default:'' }}</textarea></div>
         <button type="submit" class="btn btn-msict"><i class="bi bi-save"></i> Save</button>
         <a href="{% url 'vendor_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
       </form>
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const phoneInput = document.getElementById('id_phone');
+    if (phoneInput) {
+        phoneInput.addEventListener('input', function(e) {
+            let val = this.value.replace(/\D/g, '');
+            if (val.length > 0 && val[0] !== '0') {
+                val = '0' + val;
+            }
+            if (val.length > 10) {
+                val = val.substring(0, 10);
+            }
+            this.value = val;
+        });
+        
+        phoneInput.addEventListener('keypress', function(e) {
+            if (e.key < '0' || e.key > '9') {
+                e.preventDefault();
+            }
+            if (this.value.length === 0 && e.key !== '0') {
+                e.preventDefault();
+                this.value = '0';
+            }
+            if (this.value.length >= 10) {
+                e.preventDefault();
+            }
+        });
+    }
+});
+</script>
 {% endblock %}

@@ -370,18 +370,66 @@ class Reservation(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.pk:
-            if not self.expires_at:
-                reservation_days = int(_pref('RESERVATION_EXPIRY_DAYS', 14))
-                self.expires_at = timezone.now() + timedelta(days=reservation_days)
-            # Nafasi inategemea reservations zote hai (pending + notified)
+            # Assign position FIRST (needed for expires_at calculation below)
             last = Reservation.objects.filter(
                 book=self.book, status__in=['pending', 'notified']
             ).order_by('-position').first()
             self.position = (last.position + 1) if last else 1
+
+            if not self.expires_at:
+                # ── Smart chained expiry formula ─────────────────────────────────
+                # base_days = remaining days on the furthest active hardcopy borrow
+                #             (ensures User #1 doesn't expire before the copy comes back)
+                # Each position adds: loan_days + 1 (24-hr claim window)
+                #
+                # User #1: expires = now + base_days + wait_days
+                # User #2: expires = now + base_days + wait_days + (loan_days + wait_days)
+                # User #N: expires = now + base_days + wait_days + (N-1) * (loan_days + wait_days)
+                # ─────────────────────────────────────────────────────────────────
+                loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+                wait_days = 1  # 24-hour claim window per queue member
+
+                # Find the latest (furthest) active borrow due date for this book
+                latest_tx = BorrowingTransaction.objects.filter(
+                    copy__book=self.book,
+                    copy__copy_type='hardcopy',
+                    status__in=['borrowed', 'overdue'],
+                ).order_by('-due_date').first()
+
+                if latest_tx and latest_tx.due_date > timezone.now():
+                    base_days = (latest_tx.due_date - timezone.now()).days + 1
+                else:
+                    # No active borrows — copy may be available soon; use loan_days as safe default
+                    base_days = loan_days
+
+                total_days = base_days + wait_days + (self.position - 1) * (loan_days + wait_days)
+                self.expires_at = timezone.now() + timedelta(days=total_days)
+
         super().save(*args, **kwargs)
 
     @property
     def is_expired(self):
+        if self.status == 'expired':
+            return True
+        if self.status == 'notified':
+            # Notified users strictly expire if 24 hours have passed since notification
+            if self.notified_at and (timezone.now() - self.notified_at).total_seconds() > 86400:
+                return True
+            return False
+            
+        # For pending users, check if the current borrower is overdue
+        if self.status == 'pending':
+            latest_tx = BorrowingTransaction.objects.filter(
+                copy__book=self.book, 
+                copy__copy_type='hardcopy', 
+                status__in=['borrowed', 'overdue']
+            ).order_by('-due_date').first()
+            
+            # If the current borrower is overdue, DO NOT expire the pending reservation.
+            # The delay is caused by the borrower, not the reserved user.
+            if latest_tx and latest_tx.status == 'overdue':
+                return False
+                
         return timezone.now() > self.expires_at and self.status in ('pending', 'notified')
 
     @property
@@ -439,6 +487,7 @@ class LossReport(models.Model):
         ('confirmed', 'Confirmed – Awaiting Payment'),
         ('resolved', 'Resolved – Fine Paid'),
         ('dismissed', 'Dismissed'),
+        ('recovered', 'Recovered'),
     ]
 
     transaction = models.OneToOneField(
@@ -563,6 +612,7 @@ class Notification(models.Model):
         ('damage_fine', 'Damage Fine'),
         ('softcopy_link', 'Softcopy Link'),
         ('softcopy_expiry', 'Softcopy Expiry Warning'),
+        ('guest_session_expiry_warning', 'Guest Session Expiry Warning'),
         ('password_reminder', 'Password Change Reminder'),
         ('registration_approved', 'Registration Approved'),
         ('registration_rejected', 'Registration Rejected'),

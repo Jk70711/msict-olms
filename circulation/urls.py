@@ -43,14 +43,15 @@ urlpatterns = [
     path('return-desk/', views.return_hardcopy_view, name='return_desk'),                        # Desk ya kurudisha hardcopy
     path('desk/', views.circulation_desk_view, name='circulation_desk'),                         # Desk ya jumla ya circulation
 
-    # ── Uhifadhi wa Nafasi (Softcopy Queue) ───────────────────────
+    # ── Uhifadhi wa Nafasi (Reservation Queue) ───────────────────────
     path('reserve/<int:book_id>/', views.reserve_book_view, name='reserve_book'),
     path('reserve/cancel/<int:reservation_id>/', views.cancel_reservation_view, name='cancel_reservation'),
-    path('reserve/borrow/<int:reservation_id>/', views.softcopy_queue_borrow_view, name='queue_borrow'),
+    path('reserve/borrow/<int:reservation_id>/', views.reservation_queue_borrow_view, name='queue_borrow'),
     path('my-reservations/', views.my_reservations_view, name='my_reservations'),
     path('reservations/', views.reservation_list_view, name='reservation_list'),
     path('reservations/cancel/<int:reservation_id>/', views.librarian_cancel_reservation_view, name='librarian_cancel_reservation'),
     path('reservations/renew/<int:reservation_id>/', views.renew_reservation_view, name='renew_reservation'),
+    path('reservations/delete/<int:reservation_id>/', views.delete_reservation_history_view, name='delete_reservation_history'),
 
     # ── Vitabu Vilivyochelewa na Faini ─────────────────────
     path('overdue/', views.overdue_list_view, name='overdue_list'),                              # Vitabu vilivyopita tarehe
@@ -74,6 +75,7 @@ urlpatterns = [
     path('loss/reports/', views.loss_report_list_view, name='loss_report_list'),                  # Librarian: view all loss reports
     path('loss/confirm/<int:report_id>/', views.confirm_loss_view, name='confirm_loss'),          # Librarian: confirm or dismiss
     path('loss/recover/<int:report_id>/', views.recover_book_view, name='recover_book'),          # Librarian: mark book recovered
+    path('loss/delete/<int:report_id>/', views.delete_loss_report_view, name='delete_loss_report'), # Librarian: delete report
 
     # ── Damage Reports & Lost/Damaged Copies ────────────────────
     path('damage/pay/<int:report_id>/', views.pay_damage_fine_view, name='pay_damage_fine'),       # Member: pay damage fine

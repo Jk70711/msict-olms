@@ -217,7 +217,7 @@ def report_books_view(request):
     books = Book.objects.select_related('category').prefetch_related('copies')
     total_books = books.count()
     total_copies = BookCopy.objects.count()
-    available_copies = BookCopy.objects.filter(status='available').count()
+    available_copies = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     borrowed_copies = BookCopy.objects.filter(status='borrowed').count()
     lost_copies = BookCopy.objects.filter(status='lost').count()
     free_softcopies = BookCopy.objects.filter(copy_type='softcopy', access_type='free').count()
@@ -378,11 +378,18 @@ ALL_ACCOUNT_TYPES = ['overdue', 'link_fee', 'guest_fee', 'damage', 'loss']
 def _revenue_summary(since=None, account_types=None):
     """Compute revenue aggregates from RevenueTransaction. Returns a dict.
     account_types: list of account_type values to include; None = all."""
-    from circulation.models import RevenueTransaction
+    from circulation.models import RevenueTransaction, Fine
+    from django.db.models import F
     from decimal import Decimal
     qs = RevenueTransaction.objects.all()
+    
+    # Base query for unpaid fines
+    fines_qs = Fine.objects.filter(paid=False)
+    
     if since:
         qs = qs.filter(recorded_at__gte=since)
+        fines_qs = fines_qs.filter(created_at__gte=since)
+        
     if account_types:
         qs = qs.filter(account_type__in=account_types)
 
@@ -392,18 +399,24 @@ def _revenue_summary(since=None, account_types=None):
     overdue    = _sum(account_type='overdue')
     link_fee   = _sum(account_type='link_fee')
     guest_fee  = _sum(account_type='guest_fee')
-    loss       = _sum(account_type='loss')  # usually negative (loss/refund)
+    loss       = _sum(account_type='loss')  # Fine for lost books (income)
     damage     = _sum(account_type='damage')
 
-    total_revenue = overdue + link_fee + guest_fee + damage  # positive income streams
-    total_loss = loss
-    net_revenue = total_revenue + total_loss
+    # Total collected revenue
+    total_revenue = overdue + link_fee + guest_fee + damage + loss
+    
+    # Calculate unpaid fines (outstanding money)
+    unpaid = fines_qs.aggregate(t=Sum(F('amount') - F('amount_paid')))['t'] or Decimal('0')
+    
+    net_revenue = total_revenue - unpaid
+
     return {
         'overdue': overdue,
         'link_fee': link_fee,
         'guest_fee': guest_fee,
-        'loss': total_loss,
+        'loss': loss,
         'damage': damage,
+        'unpaid': unpaid,
         'total_revenue': total_revenue,
         'net_revenue': net_revenue,
         'qs': qs,
@@ -452,6 +465,7 @@ def report_revenue_view(request):
         {'label': 'Link Fees',     'amount': data['link_fee'],  'pct': _pct(data['link_fee']),  'color': '#3b82f6'},
         {'label': 'Guest Fees',    'amount': data['guest_fee'], 'pct': _pct(data['guest_fee']), 'color': '#10b981'},
         {'label': 'Damage Fines',  'amount': data['damage'],    'pct': _pct(data['damage']),    'color': '#ea580c'},
+        {'label': 'Loss Fines',    'amount': data['loss'],      'pct': _pct(data['loss']),      'color': '#dc3545'},
     ]
 
     return render(request, 'reports/report_revenue.html', {
@@ -460,6 +474,7 @@ def report_revenue_view(request):
         'guest_fee':      data['guest_fee'],
         'damage':         data['damage'],
         'loss':           data['loss'],
+        'unpaid':         data['unpaid'],
         'total_revenue':  data['total_revenue'],
         'net_revenue':    data['net_revenue'],
         'breakdown':      breakdown,
@@ -515,9 +530,10 @@ def export_revenue_pdf_view(request):
             ('Link Fees',     f'TZS {data["link_fee"]:,.2f}'),
             ('Guest Fees',    f'TZS {data["guest_fee"]:,.2f}'),
             ('Damage Fines',  f'TZS {data["damage"]:,.2f}'),
+            ('Loss Fines',    f'TZS {data["loss"]:,.2f}'),
             ('Total Revenue', f'TZS {data["total_revenue"]:,.2f}'),
-            ('Total Loss',    f'TZS {data["loss"]:,.2f}'),
-            ('Net Revenue',   f'TZS {data["net_revenue"]:,.2f}'),
+            ('Unpaid Fines',  f'TZS {data["unpaid"]:,.2f}'),
+            ('Net Revenue (After Unpaid)', f'TZS {data["net_revenue"]:,.2f}'),
         ],
         table_headers=['#', 'Date', 'User', 'Account Type', 'Amount', 'Description'],
         table_rows=rows,
@@ -627,7 +643,7 @@ def export_books_pdf_view(request):
     books          = Book.objects.select_related('category').prefetch_related('copies').order_by('title')
     total_books    = books.count()
     total_copies   = BookCopy.objects.count()
-    available      = BookCopy.objects.filter(status='available').count()
+    available      = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     borrowed       = BookCopy.objects.filter(status='borrowed').count()
     lost           = BookCopy.objects.filter(status='lost').count()
     free_sc        = BookCopy.objects.filter(copy_type='softcopy', access_type='free').count()

@@ -90,6 +90,10 @@ def member_dashboard_view(request):
             'registration_status': user.registration_status,
         })
     
+    # Sync overdue fines dynamically for this specific user
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
+    _sync_overdue_fines(fine_per_day, user=user)
+    
     active_transactions = BorrowingTransaction.objects.filter(
         user=user, status__in=['borrowed', 'overdue']
     ).exclude(
@@ -109,6 +113,17 @@ def member_dashboard_view(request):
     ).exclude(
         copy__copy_type='softcopy'
     ).select_related('copy__book', 'temp_book')
+    
+    # Process 24-h reservation skips for this user's active queue BEFORE fetching
+    active_res_book_ids = Reservation.objects.filter(
+        user=user, status__in=['pending', 'notified']
+    ).values_list('book_id', flat=True).distinct()
+    for book_id in active_res_book_ids:
+        try:
+            _process_reservation_expiry(Book.objects.get(pk=book_id))
+        except Exception:
+            pass
+
     reservations = Reservation.objects.filter(
         user=user, status__in=['pending', 'notified']
     ).select_related('book')
@@ -180,13 +195,20 @@ def member_dashboard_view(request):
     # Build fine info dictionary for each transaction (for softcopy return check)
     tx_fines = {}
     for fine in overdue_fines:
-        if fine.transaction_id not in tx_fines:
-            tx_fines[fine.transaction_id] = {
-                'amount': fine.amount,
-                'remaining': fine.remaining_balance,
-                'paid': fine.paid,
-                'amount_paid': fine.amount_paid,
+        tid = fine.transaction_id
+        if tid not in tx_fines:
+            tx_fines[tid] = {
+                'amount': 0,
+                'remaining': 0,
+                'amount_paid': 0,
+                'paid': True,
             }
+        tx_fines[tid]['amount'] += fine.amount
+        tx_fines[tid]['remaining'] += fine.remaining_balance
+        tx_fines[tid]['amount_paid'] += fine.amount_paid
+        
+        if tx_fines[tid]['remaining'] > 0:
+            tx_fines[tid]['paid'] = False
 
     my_loss_reports = LossReport.objects.filter(
         user=user, status__in=['pending', 'confirmed']
@@ -200,17 +222,23 @@ def member_dashboard_view(request):
 
     # Personal monthly borrowing activity (last 6 months)
     my_monthly_borrows = {}
-    for i in range(6):
-        month = _dt.now() - _td(days=30 * i)
-        month_key = month.strftime('%b %Y')
+    today = timezone.now().date()
+    # Calculate exactly 6 months back, oldest first
+    for i in range(5, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        
+        import datetime as dt
+        month_key = dt.date(y, m, 1).strftime('%b %Y')
         cnt = BorrowingTransaction.objects.filter(
             user=user,
-            borrow_date__month=month.month,
-            borrow_date__year=month.year
+            borrow_date__month=m,
+            borrow_date__year=y
         ).count()
         my_monthly_borrows[month_key] = cnt
-    # Reverse so oldest is first
-    my_monthly_borrows = dict(reversed(list(my_monthly_borrows.items())))
 
     my_borrow_chart_data = _json.dumps({
         'labels': list(my_monthly_borrows.keys()),
@@ -310,7 +338,7 @@ def request_borrow_book_view(request, book_id):
         messages.error(request, 'You have unpaid fines. Pay at the circulation desk before borrowing.')
         return redirect('member_dashboard')
 
-    if not book.copies.filter(copy_type='hardcopy', status='available').exists():
+    if not book.copies.filter(copy_type='hardcopy', status='available').exclude(transactions__status__in=['borrowed', 'overdue']).exists():
         messages.error(request, f'No available hardcopy for "{book.title}" right now.')
         return redirect('borrow_catalog')
 
@@ -347,7 +375,7 @@ def request_borrow_softcopy_view(request, book_id):
         return guard
 
     book = get_object_or_404(Book, pk=book_id)
-    copy = book.copies.filter(copy_type='softcopy', access_type='borrow', status='available').first()
+    copy = book.copies.filter(copy_type='softcopy', access_type='borrow', status='available').exclude(transactions__status__in=['borrowed', 'overdue']).first()
     if not copy:
         messages.error(request, f'No special soft copy is available for "{book.title}" right now.')
         return redirect('borrow_catalog')
@@ -386,12 +414,8 @@ def read_free_book_view(request, book_id):
 # View ya Katalogi ya Kukopa — Mwanachama anaona vitabu vya kukopa
 # ----------------------------------------------------------------------
 def borrow_catalog_view(request):
-    if request.user.has_overdue():
-        messages.error(request, 'You have overdue books. Return them before borrowing new ones.')
-        return redirect('member_dashboard')
-    if request.user.has_unpaid_fines():
-        messages.error(request, 'You have unpaid fines. Pay at the circulation desk before browsing new borrows.')
-        return redirect('member_dashboard')
+    # Fines and overdues no longer block browsing because members can still borrow softcopies.
+    # Individual book detail and hardcopy borrow views handle the restrictions.
 
     query = request.GET.get('q', '')
     course_id = request.GET.get('course', '')
@@ -405,13 +429,14 @@ def borrow_catalog_view(request):
     from django.db.models.functions import Coalesce
 
     _any_hard     = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy')
-    _hard_avail   = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy', status='available')
-    _soft_borrow  = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='borrow', status='available')
+    _hard_avail   = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy', status='available').exclude(transactions__status__in=['borrowed', 'overdue'])
+    _soft_borrow  = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='borrow', status='available').exclude(transactions__status__in=['borrowed', 'overdue'])
     _soft_free    = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='free')
 
     _avail_hard_count_sq = (
         BookCopy.objects
         .filter(book=OuterRef('pk'), copy_type='hardcopy', status='available')
+        .exclude(transactions__status__in=['borrowed', 'overdue'])
         .values('book')
         .annotate(_c=Count('id'))
         .values('_c')
@@ -489,13 +514,14 @@ def submit_borrow_request_view(request, copy_id):
         messages.info(request, 'Free soft copies do not need borrowing. Download directly.')
         return redirect('book_detail_public', book_id=copy.book_id)
 
-    if request.user.has_overdue():
-        messages.error(request, 'You have overdue items. Return them before borrowing new ones.')
-        return redirect('member_dashboard')
-
-    if request.user.has_unpaid_fines():
-        messages.error(request, 'You have unpaid fines. Pay at the circulation desk before borrowing.')
-        return redirect('member_dashboard')
+    if copy.copy_type == 'hardcopy':
+        if request.user.has_overdue():
+            messages.error(request, 'You have overdue items. Return them before borrowing new ones.')
+            return redirect('member_dashboard')
+    
+        if request.user.has_unpaid_fines():
+            messages.error(request, 'You have unpaid fines. Pay at the circulation desk before borrowing.')
+            return redirect('member_dashboard')
 
     active_borrows = request.user.active_borrows_count()
     pending_requests = BorrowRequest.objects.filter(user=request.user, status='pending').count()
@@ -665,11 +691,15 @@ def approve_borrow_request_view(request, request_id):
         return redirect('all_requests')
 
     # ── Hardcopy: approve-only; copy assigned at physical handover ──────────
-    if req.copy is None:
+    if req.copy is None or req.copy.copy_type == 'hardcopy':
+        if req.copy and req.copy.status != 'available':
+            messages.error(request, 'Hardcopy is no longer available.')
+            return redirect('all_requests')
+            
         req.status = 'approved'
         req.approved_by = request.user
         req.save()
-        book = req.temp_book
+        book = req.book
         msg_sms = (
             f"MSICT OLMS: Your request for \"{book.title}\" has been approved. "
             f"Please come to the library to collect your book. Bring your library card or Army No."
@@ -687,9 +717,6 @@ def approve_borrow_request_view(request, request_id):
 
     # ── Softcopy: redirect to payment if fee required, else create transaction ─────────────────────────────
     copy = req.copy
-    if copy.copy_type == 'hardcopy' and copy.status != 'available':
-        messages.error(request, 'Hardcopy is no longer available.')
-        return redirect('all_requests')
 
     # Softcopy payment check
     if copy.copy_type == 'softcopy' and copy.prepaid_fee > 0:
@@ -776,17 +803,19 @@ def issue_copy_view(request, request_id):
         BorrowRequest.objects.select_related('user', 'temp_book'),
         pk=request_id,
     )
-    if req.status != 'approved' or req.copy_id is not None:
+    if req.status != 'approved':
         messages.error(request, 'This request is not eligible for copy issuance.')
         return redirect('all_requests')
 
-    book = req.temp_book
+    book = req.book
     if not book:
         messages.error(request, 'No book associated with this request.')
         return redirect('all_requests')
 
     available_copies = BookCopy.objects.filter(
         book=book, copy_type='hardcopy', status='available'
+    ).exclude(
+        transactions__status__in=['borrowed', 'overdue']
     ).order_by('accession_no')
 
     if request.method == 'GET':
@@ -886,7 +915,9 @@ def copy_lookup_view(request):
     from django.http import JsonResponse
     book_id = request.GET.get('book_id', '')
     q = (request.GET.get('q') or '').strip()
-    qs = BookCopy.objects.filter(book_id=book_id, copy_type='hardcopy', status='available')
+    qs = BookCopy.objects.filter(
+        book_id=book_id, copy_type='hardcopy', status='available'
+    ).exclude(transactions__status__in=['borrowed', 'overdue'])
     if q:
         qs = qs.filter(accession_no__icontains=q)
     data = [{'accession_no': c.accession_no, 'shelf': c.shelf_location or '—'} for c in qs[:15]]
@@ -965,19 +996,9 @@ def return_early_view(request, transaction_id):
         messages.error(request, 'Only soft copies can be returned online. Bring hardcopies to the desk.')
         return redirect('member_dashboard')
     
-    # Special softcopy expiry logic: check if link is expired
+    # Special softcopy expiry logic: link expired — allow return (no fine for softcopy)
     if tx.copy.access_type == 'borrow' and tx.is_link_expired:
-        # Link expired - check if fine is paid
-        if tx.has_unpaid_fine:
-            # Fine not paid - block return
-            messages.error(
-                request,
-                f'Your access to "{tx.copy.book.title}" expired on {tx.due_date.strftime("%d %b %Y")}. '
-                f'Outstanding fine: TZS {tx.total_fine_remaining:,.0f}. '
-                f'Please pay the fine at the circulation desk before returning this book.'
-            )
-            return redirect('member_msict_borrowings')
-        # Fine paid - allow return to complete
+        pass  # Link expired, proceed with return — softcopy has no fine/overdue concept
     
     # Regular return process (non-expired or fine paid)
     tx.return_date = timezone.now()
@@ -1018,17 +1039,17 @@ def _process_desk_return(request, copy_pk_str):
         messages.error(request, f'No active borrowing found for "{copy.accession_no}".')
         return None
 
-    # ── Block return if there is an unpaid fine on this transaction ──────────
+    # ── ALLOW return even if there is an unpaid fine ──────────
+    # The system will record the return, notify the next person in the reservation queue,
+    # and update the unpaid fine (which will block new borrows until paid).
     unpaid_fine = Fine.objects.filter(transaction=tx, paid=False).first()
     if unpaid_fine:
         remaining = unpaid_fine.remaining_balance
-        messages.error(
+        messages.warning(
             request,
-            f'⚠️ Cannot return "{copy.book.title}" — unpaid fine of '
-            f'TZS {remaining:,.0f} must be settled first. '
-            f'Direct the member to the payment desk.'
+            f'⚠️ "{copy.book.title}" returned, BUT member has an unpaid fine of '
+            f'TZS {remaining:,.0f}. Please direct them to the payment desk.'
         )
-        return None
 
     # Check if librarian marked this book as damaged
     mark_damaged = request.POST.get('mark_damaged', '') == '1'
@@ -1041,7 +1062,8 @@ def _process_desk_return(request, copy_pk_str):
     report_time = timezone.now()
     days_late = 0
     if tx.status in ('borrowed', 'overdue') and report_time > tx.due_date:
-        days_late = max(1, (report_time - tx.due_date).days)
+        if copy.copy_type != 'softcopy':
+            days_late = max(1, (report_time - tx.due_date).days)
 
     tx.return_date = report_time
     tx.status      = 'returned'
@@ -1144,7 +1166,10 @@ def _process_desk_return(request, copy_pk_str):
     elif days_late > 0:
         messages.success(request, f'"{copy.book.title}" returned — overdue by {days_late} day(s), fine already paid.')
     else:
-        messages.success(request, f'"{copy.book.title}" returned successfully.')
+        if copy.copy_type == 'softcopy':
+            messages.success(request, f'Access to "{copy.book.title}" cancelled successfully.')
+        else:
+            messages.success(request, f'"{copy.book.title}" returned successfully.')
 
     librarian_name = request.user.get_full_name() or request.user.username
     if copy.copy_type == 'hardcopy':
@@ -1162,6 +1187,33 @@ def _process_desk_return(request, copy_pk_str):
 
     if not mark_damaged:
         _notify_next_reservation(copy.book, request)
+    else:
+        # Notify Reservations if a copy is damaged and removed from pool
+        active_reservations = Reservation.objects.filter(
+            book=copy.book, status__in=['pending', 'notified']
+        ).order_by('position')
+        
+        if active_reservations.exists():
+            usable_copies = copy.book.copies.filter(copy_type='hardcopy').exclude(status__in=['lost', 'damaged']).count()
+            
+            for res in active_reservations:
+                if usable_copies == 0:
+                    dmg_queue_msg = (
+                        f"MSICT OLMS: Important update for your reservation of '{copy.book.title}'. "
+                        f"A copy was returned DAMAGED, and there are currently NO available copies remaining. "
+                        f"Your reservation is still active in the queue, but cannot be fulfilled until a new copy is added."
+                    )
+                else:
+                    dmg_queue_msg = (
+                        f"MSICT OLMS: Queue update for '{copy.book.title}'. "
+                        f"A copy was returned DAMAGED and removed from circulation. "
+                        f"Your position is #{res.position}. The wait time may be longer because fewer copies are available."
+                    )
+                notify_user(res.user, dmg_queue_msg, 'sms')
+                notify_user(res.user, dmg_queue_msg, 'email', subject=f'Reservation Update: {copy.book.title}')
+            
+            _recalculate_reservation_expiries(copy.book)
+
     log_audit(request.user,
               f"Returned {copy.copy_type} '{copy.accession_no}' – '{copy.book.title}'",
               request)
@@ -1407,20 +1459,48 @@ def return_hardcopy_view(request):
 # Msaidizi wa Kuhesabu Uhifadhi — Anahesabu muda wa uhifadhi upya
 # ----------------------------------------------------------------------
 def _recalculate_reservation_expiries(book):
-    window = int(_pref('RESERVATION_WINDOW_DAYS', 7))
-    nearest_tx = BorrowingTransaction.objects.filter(
+    """
+    Recalculate expires_at for every pending/notified reservation using
+    the smart chained formula:
+
+        base_days = remaining days on the furthest active hardcopy borrow
+                    (fallback: loan_days if no active borrows)
+
+        User #N:  expires_at = now + base_days + (N-1) * (loan_days + wait_days)
+
+    Notified users keep their strict 24-hour deadline (not extended).
+    """
+    loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+    wait_days = 1  # 24-hour claim window
+
+    # Find the furthest active borrow due date for this book
+    latest_tx = BorrowingTransaction.objects.filter(
         copy__book=book, copy__copy_type='hardcopy',
-        status__in=['borrowed', 'overdue']
-    ).order_by('due_date').first()
-    base = nearest_tx.due_date if nearest_tx else timezone.now()
+        status__in=['borrowed', 'overdue'],
+    ).order_by('-due_date').first()
+
+    now = timezone.now()
+    if latest_tx and latest_tx.due_date > now:
+        base_days = (latest_tx.due_date - now).days + 1
+    else:
+        base_days = loan_days  # safe default when no copy is currently borrowed
+
     for res in Reservation.objects.filter(
         book=book, status__in=['pending', 'notified']
     ).order_by('position'):
-        new_exp = base + timedelta(days=res.position * window)
+
+        # Notified users: deadline is strictly 24 hrs from notification — never extend
         if res.status == 'notified' and res.notified_at:
-            new_exp = max(new_exp, res.notified_at + timedelta(hours=24))
-        res.expires_at = new_exp
-        res.save(update_fields=['expires_at'])
+            new_exp = res.notified_at + timedelta(hours=24)
+        else:
+            # pending: apply chained formula based on current queue position
+            total_days = base_days + wait_days + (res.position - 1) * (loan_days + wait_days)
+            new_exp = now + timedelta(days=total_days)
+
+        if res.expires_at != new_exp:
+            res.expires_at = new_exp
+            res.save(update_fields=['expires_at'])
+
 
 
 # ============================================================
@@ -1432,23 +1512,13 @@ def _recalculate_reservation_expiries(book):
 # Msaidizi wa Kusudia Uhifadhi — Anasudia uhifadhi uliopita muda
 # ----------------------------------------------------------------------
 def _process_reservation_expiry(book):
-    """Mark expired reservations, skip notified users who waited > 24 h, re-queue."""
+    """Skip notified users who waited > 24 h, re-queue. Pending users do not auto-expire."""
     had_notified_skip = False
     active = Reservation.objects.filter(
         book=book, status__in=['pending', 'notified']
     ).order_by('position')
+    
     for res in active:
-        # Expire if past position-based deadline
-        if timezone.now() > res.expires_at:
-            res.status = 'expired'
-            res.save(update_fields=['status'])
-            exp_msg = (
-                f"MSICT OLMS: Your reservation for '{book.title}' has expired "
-                f"(deadline {res.expires_at.strftime('%d %b %Y')} passed). Queue position released."
-            )
-            notify_user(res.user, exp_msg, 'sms')
-            notify_user(res.user, exp_msg, 'email', subject='Reservation Expired')
-            continue
         # Skip notified user who did not request borrow within 24 hours
         if res.status == 'notified' and res.notified_at:
             hours_waited = (timezone.now() - res.notified_at).total_seconds() / 3600
@@ -1491,7 +1561,7 @@ def _process_reservation_expiry(book):
 # ----------------------------------------------------------------------
 def _notify_next_in_queue(book, reason='return'):
     """Notify the next PENDING member if unmatched available copies exist."""
-    available = book.copies.filter(copy_type='hardcopy', status='available').count()
+    available = book.copies.filter(copy_type='hardcopy', status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     already_notified = Reservation.objects.filter(book=book, status='notified').count()
     if available <= already_notified:
         return  # Every available copy is already claimed by a notified user
@@ -1505,55 +1575,76 @@ def _notify_next_in_queue(book, reason='return'):
         return
 
     total_in_queue = len(queue)
-    next_res = next((r for r in queue if r.status == 'pending'), None)
-    if not next_res:
+    to_notify_count = available - already_notified
+    pending_users = [r for r in queue if r.status == 'pending']
+    
+    if not pending_users:
         return
+        
+    newly_notified = []
 
-    nearest_return = BorrowingTransaction.objects.filter(
-        copy__book=book, copy__copy_type='hardcopy',
-        status__in=['borrowed', 'overdue']
-    ).order_by('due_date').first()
-
-    # ── Notify first pending user ───────────────────────────────
-    next_res.status = 'notified'
-    next_res.notified_at = timezone.now()
-    next_res.expires_at = max(next_res.expires_at, timezone.now() + timedelta(hours=24))
-    next_res.save(update_fields=['status', 'notified_at', 'expires_at'])
-
-    if reason == 'skip':
-        first_msg = (
-            f"MSICT OLMS: It's YOUR TURN for '{book.title}'! "
-            f"The previous member was skipped (missed 24-hour window). "
-            f"You are now #1 of {total_in_queue} in queue. "
-            f"Log in and click 'Request Borrow' within 24 hours "
-            f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')})."
-        )
-        broad_event = "The previous member was skipped"
-    else:
-        first_msg = (
-            f"MSICT OLMS: It's YOUR TURN! A hardcopy of '{book.title}' is now available. "
-            f"You are #1 of {total_in_queue} in queue. "
-            f"Log in and click 'Request Borrow' within 24 hours "
-            f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')}). "
-            f"Then wait for librarian approval."
-        )
-        broad_event = "A hardcopy was returned"
-
-    notify_user(next_res.user, first_msg, 'sms')
-    notify_user(next_res.user, first_msg, 'email', subject=f'Your Turn: {book.title}')
+    for next_res in pending_users[:to_notify_count]:
+        # ── Notify first pending user ───────────────────────────────
+        next_res.status = 'notified'
+        next_res.notified_at = timezone.now()
+        next_res.expires_at = max(next_res.expires_at, timezone.now() + timedelta(hours=24))
+        next_res.save(update_fields=['status', 'notified_at', 'expires_at'])
+        
+        newly_notified.append(next_res)
+    
+        if reason == 'skip':
+            first_msg = (
+                f"MSICT OLMS: It's YOUR TURN for '{book.title}'! "
+                f"The previous member was skipped (missed 24-hour window). "
+                f"You are now #1 of {total_in_queue} in queue. "
+                f"Log in and click 'Request Borrow' within 24 hours "
+                f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')})."
+            )
+            broad_event = "A previous member was skipped"
+        else:
+            first_msg = (
+                f"MSICT OLMS: It's YOUR TURN! A hardcopy of '{book.title}' is now available. "
+                f"You are #1 of {total_in_queue} in queue. "
+                f"Log in and click 'Request Borrow' within 24 hours "
+                f"(deadline: {next_res.expires_at.strftime('%d %b %Y %H:%M')}). "
+                f"Then wait for librarian approval."
+            )
+            broad_event = "A hardcopy was returned"
+    
+        notify_user(next_res.user, first_msg, 'sms')
+        notify_user(next_res.user, first_msg, 'email', subject=f'Your Turn: {book.title}')
 
     # ── Broadcast to ALL other waiting members ──────────────────
+    borrows_list = list(BorrowingTransaction.objects.filter(
+        copy__book=book, copy__copy_type='hardcopy',
+        status__in=['borrowed', 'overdue']
+    ).order_by('due_date'))
+    borrows_count = len(borrows_list)
+    loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+    
+    notified_names = ", ".join([r.user.get_full_name() for r in newly_notified])
+
     for res in queue:
-        if res.pk == next_res.pk:
+        if res in newly_notified or res.status == 'notified':
             continue
+            
         ahead = res.position - 1
         ahead_word = 'member' if ahead == 1 else 'members'
+        
         est_info = ''
-        if nearest_return:
-            est_info = f" Nearest expected return: {nearest_return.due_date.strftime('%d %b %Y')}."
+        if borrows_count > 0:
+            now = timezone.now()
+            cycle = ahead // borrows_count
+            remainder = ahead % borrows_count
+            base_date = borrows_list[remainder].due_date
+            if base_date < now:
+                base_date = now
+            est_date = base_date + timedelta(days=cycle * (1 + loan_days))
+            est_info = f" Est. your turn: {est_date.strftime('%d %b %Y')}."
+            
         broad_msg = (
             f"MSICT OLMS: Queue update for '{book.title}'. "
-            f"{broad_event} — member #1 in queue has been notified to borrow. "
+            f"{broad_event} — the next person in line ({notified_names}) has been notified to borrow. "
             f"Your position: #{res.position} ({ahead} {ahead_word} ahead, {total_in_queue} total). "
             f"Your reservation deadline: {res.expires_at.strftime('%d %b %Y')}.{est_info}"
         )
@@ -1598,7 +1689,7 @@ def reserve_book_view(request, book_id):
         return redirect('book_detail_public', book_id=book_id)
 
     # Check if any hardcopy is still available — no reservation needed
-    available = hardcopies.filter(status='available').exists()
+    available = hardcopies.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).exists()
     if available:
         messages.info(request, 'A hardcopy is currently available. You can borrow it directly.')
         return redirect('borrow_catalog')
@@ -1694,6 +1785,28 @@ def cancel_reservation_view(request, reservation_id):
     messages.success(request, f'Reservation for "{book.title}" cancelled. Queue updated.')
     return redirect('my_reservations')
 
+@login_required
+@require_POST
+def delete_reservation_history_view(request, reservation_id):
+    """POST-only — allow member or librarian to hard delete an INACTIVE reservation from history."""
+    # Member can delete their own; Librarian can delete any
+    if request.user.role in ['admin', 'librarian']:
+        res = get_object_or_404(Reservation, pk=reservation_id, status__in=['fulfilled', 'cancelled', 'expired'])
+    else:
+        res = get_object_or_404(Reservation, pk=reservation_id, user=request.user, status__in=['fulfilled', 'cancelled', 'expired'])
+    
+    title = res.book.title
+    res.delete()
+    messages.success(request, f'History for "{title}" has been deleted.')
+    
+    # Redirect back to the page they came from
+    referer = request.META.get('HTTP_REFERER')
+    if referer:
+        return redirect(referer)
+    if request.user.role in ['admin', 'librarian']:
+        return redirect('reservation_list')
+    return redirect('my_reservations')
+
 
 # ============================================================
 # LIBRARIAN — Cancel any reservation
@@ -1728,12 +1841,26 @@ def librarian_cancel_reservation_view(request, reservation_id):
 # QUEUE BORROW — notified user clicks "Borrow Now" for a hardcopy
 # Creates a BorrowRequest for the first available hardcopy
 # Marks reservation as fulfilled
+# Flow: Reservation → BorrowRequest → Librarian Approval → Issue Copy → Transaction
 # ============================================================
 @login_required
 # ----------------------------------------------------------------------
 # View ya Kukopa kutoka Foleni — Mwanachama anatoka foleni kukopa
 # ----------------------------------------------------------------------
-def softcopy_queue_borrow_view(request, reservation_id):
+def reservation_queue_borrow_view(request, reservation_id):
+    """
+    Complete reservation-to-borrowing flow for hardcopy books:
+    1. User is notified (reservation status='notified')
+    2. User clicks "Borrow Now" (this view)
+    3. Creates BorrowRequest (status='pending')
+    4. Reservation marked as 'fulfilled'
+    5. Librarian approves BorrowRequest (status='approved')
+    6. Librarian issues specific copy (creates BorrowingTransaction)
+    7. User receives book (transaction active)
+
+    This ensures data integrity by following the standard borrowing process
+    rather than bypassing librarian approval.
+    """
     res = get_object_or_404(
         Reservation, pk=reservation_id, user=request.user, status='notified'
     )
@@ -1755,26 +1882,15 @@ def softcopy_queue_borrow_view(request, reservation_id):
         messages.error(request, 'Your 24-hour borrow window has expired. Queue updated.')
         return redirect('my_reservations')
 
-    # Find an available hardcopy to assign
-    copy = book.copies.filter(
-        copy_type='hardcopy', status='available'
-    ).first()
-
-    if not copy:
-        messages.warning(
-            request,
-            'No copy is currently available for this book. '
-            'Please wait \u2014 you will be notified again when one becomes available.'
-        )
-        return redirect('my_reservations')
-
-    # Check duplicate pending request
-    if BorrowRequest.objects.filter(user=request.user, copy=copy, status='pending').exists():
+    # Check duplicate pending request for this book (not specific copy)
+    if BorrowRequest.objects.filter(user=request.user, temp_book=book, status__in=['pending', 'approved']).exists():
         messages.info(request, 'You already have a pending borrow request for this book.')
         return redirect('my_reservations')
 
-    # Create BorrowRequest (normal approval flow)
-    BorrowRequest.objects.create(user=request.user, copy=copy)
+    # Create BorrowRequest WITHOUT assigning a specific copy
+    # Librarian will assign the specific copy when issuing the book
+    # This prevents the copy from being marked as borrowed prematurely
+    BorrowRequest.objects.create(user=request.user, temp_book=book, copy=None)
     res.status = 'fulfilled'
     res.save(update_fields=['status'])
 
@@ -1834,15 +1950,24 @@ def my_reservations_view(request):
             copy__book=res.book, copy__copy_type='hardcopy',
             status__in=['borrowed', 'overdue']
         ).order_by('due_date')
+        
         nearest = borrows.first()
+        borrows_list = list(borrows)
+        borrows_count = len(borrows_list)
+        
         # Estimate when the book will actually reach this user in queue.
-        # Each person ahead: 24h borrow window + loan_days before they return.
-        # Position #1 → base date (original borrower's return).
-        # Position #2 → base + 1×(1+7) = base + 8 days, etc.
-        if nearest and ahead > 0:
-            est_your_turn = nearest.due_date + timedelta(days=ahead * (skip_days + loan_days))
+        # Accounts for MULTIPLE borrowed copies resolving in parallel.
+        now = timezone.now()
+        if borrows_count > 0:
+            cycle = ahead // borrows_count
+            remainder = ahead % borrows_count
+            base_date = borrows_list[remainder].due_date
+            if base_date < now:
+                base_date = now
+            est_your_turn = base_date + timedelta(days=cycle * (skip_days + loan_days))
         else:
-            est_your_turn = nearest.due_date if nearest else None
+            est_your_turn = now
+            
         annotated.append({
             'res': res,
             'total_queue': total_q,
@@ -1938,7 +2063,7 @@ def overdue_list_view(request):
 # ----------------------------------------------------------------------
 # Msaidizi wa Kuonyesha Vilivyopita Tarehe — Anaonyesha mikopo iliyopita tarehe
 # ----------------------------------------------------------------------
-def _auto_mark_overdue():
+def _auto_mark_overdue(user=None):
     """Inline guard: mark any 'borrowed' transactions past their due_date as 'overdue'.
     Called at the top of every librarian page that shows overdue/fine data so the
     view is always accurate even when the nightly cron hasn't fired yet.
@@ -1948,7 +2073,11 @@ def _auto_mark_overdue():
         due_date__lt=timezone.now(),
     ).exclude(
         copy__copy_type='softcopy'
-    ).only('id', 'status')
+    )
+    if user:
+        stale = stale.filter(user=user)
+        
+    stale = stale.only('id', 'status')
     if stale.exists():
         stale.update(status='overdue')
 
@@ -1973,16 +2102,21 @@ def _extract_total_paid_from_log(receipt_no):
 # ----------------------------------------------------------------------
 # Msaidizi wa Kusawazisha Faini — Anasawazisha faini za kuchelewa
 # ----------------------------------------------------------------------
-def _sync_overdue_fines(fine_per_day):
+def _sync_overdue_fines(fine_per_day, user=None):
     """Shared helper: update existing unpaid fines and create missing ones for overdue transactions.
     Also merges any duplicates (paid + unpaid for same transaction) into a single fine record.
     """
-    _auto_mark_overdue()  # Ensure borrowed+past-due are marked overdue before syncing
+    _auto_mark_overdue(user)  # Ensure borrowed+past-due are marked overdue before syncing
     overdue_transactions = BorrowingTransaction.objects.filter(
         status='overdue'
     ).exclude(
         copy__copy_type='softcopy'
-    ).select_related('user', 'copy__book')
+    )
+    if user:
+        overdue_transactions = overdue_transactions.filter(user=user)
+        
+    overdue_transactions = overdue_transactions.select_related('user', 'copy__book')
+    
     for tx in overdue_transactions:
         days = tx.days_overdue()
         if days <= 0:
@@ -1991,71 +2125,30 @@ def _sync_overdue_fines(fine_per_day):
         title = tx.copy.book.title
         reason = f"Overdue fine for '{title}' ({days} days)"
 
-        paid_fines = Fine.objects.filter(transaction=tx, paid=True).order_by('created_at')
-        unpaid_fines = Fine.objects.filter(transaction=tx, paid=False).order_by('created_at')
-
-        if paid_fines.exists() and unpaid_fines.exists():
-            # Duplicate: paid + unpaid fine for the same transaction.
-            # Merge: delete unpaid duplicates, reactivate the paid fine with updated amount.
-            base_fine = paid_fines.last()
-            unpaid_fines.delete()
-            # Recalculate actual amount_paid from payment log entries
-            actual_paid = _extract_total_paid_from_log(base_fine.receipt_no)
-            if actual_paid is not None and actual_paid != base_fine.amount_paid:
-                base_fine.amount_paid = actual_paid
-            base_fine.paid = base_fine.amount_paid >= new_amount
-            base_fine.amount = new_amount
-            base_fine.reason = reason
-            base_fine.save(update_fields=['paid', 'amount', 'amount_paid', 'reason'])
-
-        elif unpaid_fines.exists():
-            # Normal: update accumulated amount on existing unpaid fine
-            fine = unpaid_fines.last()
-            updates = []
-            if fine.amount != new_amount:
-                fine.amount = new_amount
-                updates.append('amount')
-            if fine.reason != reason:
-                fine.reason = reason
-                updates.append('reason')
-            # Auto-correct stale paid flag in both directions
-            correct_paid = fine.amount_paid >= fine.amount
-            if fine.paid != correct_paid:
-                fine.paid = correct_paid
-                updates.append('paid')
-            # Fix incorrectly recorded amount_paid: if receipt log total differs from DB
-            # (e.g. due to previous regex truncation bug or capping), correct it.
-            if fine.receipt_no and fine.amount_paid > 0:
-                actual_paid = _extract_total_paid_from_log(fine.receipt_no)
-                if actual_paid is not None and actual_paid != fine.amount_paid:
-                    fine.amount_paid = actual_paid
-                    fine.paid = fine.amount_paid >= fine.amount
-                    if 'paid' not in updates:
-                        updates.append('paid')
-                    updates.append('amount_paid')
-            if updates:
-                fine.save(update_fields=updates)
-
-        elif paid_fines.exists():
-            # Already paid: check for inconsistency (paid=True but amount_paid < amount)
-            base_fine = paid_fines.last()
-            if base_fine.amount_paid < base_fine.amount:
-                # Inconsistent: was marked paid but amount increased after sync
-                # Correct: set paid=False so remaining balance is shown
-                base_fine.paid = False
-                base_fine.amount = new_amount
-                base_fine.reason = reason
-                base_fine.save(update_fields=['paid', 'amount', 'reason'])
-
-        else:
-            # No fine yet: create one
-            Fine.objects.create(
-                user=tx.user,
-                transaction=tx,
-                amount=new_amount,
-                reason=reason,
-                paid=False,
-            )
+        # Find all overdue fines for this transaction
+        all_overdue_fines = Fine.objects.filter(transaction=tx, reason__icontains='Overdue fine')
+        
+        # Sum up the amount of ALL overdue fines for this transaction
+        from decimal import Decimal
+        total_billed_so_far = sum(fine.amount for fine in all_overdue_fines)
+        
+        remaining_to_bill = Decimal(str(new_amount)) - total_billed_so_far
+        
+        if remaining_to_bill > 0:
+            unpaid_fine = all_overdue_fines.filter(paid=False).first()
+            if unpaid_fine:
+                unpaid_fine.amount += remaining_to_bill
+                unpaid_fine.reason = f"Overdue fine for '{title}' (Unpaid portion up to {days} days)"
+                unpaid_fine.save(update_fields=['amount', 'reason'])
+            else:
+                # They paid previous fines but kept the book, create new fine
+                Fine.objects.create(
+                    user=tx.user,
+                    transaction=tx,
+                    amount=remaining_to_bill,
+                    reason=f"Overdue fine for '{title}' (Additional overdue days)",
+                    paid=False,
+                )
 
 
 # Orodha ya faini zote — kwa mtunzaji (pamoja na faini zinazojumlisha kwa siku)
@@ -2116,7 +2209,7 @@ def user_fines_view(request, user_id):
     fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     
     # Reuse shared helper to sync this user's overdue fines
-    _sync_overdue_fines(fine_per_day)
+    _sync_overdue_fines(fine_per_day, user=user_obj)
     
     fines = Fine.objects.filter(
         user=user_obj
@@ -2143,6 +2236,10 @@ def user_fines_view(request, user_id):
 # View ya Faini Zangu — Mwanachama anaona faini zake
 # ----------------------------------------------------------------------
 def my_fines_view(request):
+    # Sync overdue fines dynamically for this specific user
+    fine_per_day = float(_pref('FINE_PER_DAY', 1000))
+    _sync_overdue_fines(fine_per_day, user=request.user)
+
     # Show only overdue fines (exclude loss fines)
     fines = Fine.objects.filter(
         user=request.user
@@ -3052,6 +3149,7 @@ def record_damage_fine_payment_view(request, report_id):
 # ----------------------------------------------------------------------
 def users_with_unpaid_fines_view(request):
     from collections import defaultdict
+    from django.db.models import Sum, Count
     fine_per_day = float(_pref('FINE_PER_DAY', 1000))
     _sync_overdue_fines(fine_per_day)  # Mark status + sync fine amounts before listing
 
@@ -3064,51 +3162,23 @@ def users_with_unpaid_fines_view(request):
         .order_by('-total_amount')
     )
     
-    # Get users with overdue books (even if no fines yet)
-    # Exclude softcopies — they never go overdue
-    overdue_users = (
-        BorrowingTransaction.objects
-        .filter(status='overdue')
-        .exclude(copy__copy_type='softcopy')
-        .values('user__pk', 'user__username', 'user__first_name', 'user__surname', 'user__army_no')
-        .annotate(overdue_count=Count('pk'))
-        .order_by('-overdue_count')
-    )
+    users_list = []
     
-    # Combine both sets
-    users_dict = {}
-    
-    # Add users with fines
     for item in users_with_fines:
         remaining = (item['total_amount'] or 0) - (item['total_paid'] or 0)
-        users_dict[item['user__pk']] = {
-            'user_id': item['user__pk'],
-            'username': item['user__username'],
-            'full_name': f"{item['user__first_name']} {item['user__surname']}".strip() or item['user__username'],
-            'army_no': item['user__army_no'],
-            'total_amount': remaining,
-            'fine_count': item['fine_count'],
-            'overdue_count': 0,
-        }
-    
-    # Add or update users with overdue books
-    for item in overdue_users:
-        if item['user__pk'] in users_dict:
-            users_dict[item['user__pk']]['overdue_count'] = item['overdue_count']
-        else:
-            users_dict[item['user__pk']] = {
+        if remaining > 0:
+            users_list.append({
                 'user_id': item['user__pk'],
                 'username': item['user__username'],
                 'full_name': f"{item['user__first_name']} {item['user__surname']}".strip() or item['user__username'],
                 'army_no': item['user__army_no'],
-                'total_amount': 0,
-                'fine_count': 0,
-                'overdue_count': item['overdue_count'],
-            }
+                'total_amount': remaining,
+                'fine_count': item['fine_count'],
+                'overdue_count': 0,
+            })
     
-    # Convert to list and sort by total amount + overdue priority
-    users_list = list(users_dict.values())
-    users_list.sort(key=lambda x: (x['total_amount'], x['overdue_count']), reverse=True)
+    # Sort by total amount
+    users_list.sort(key=lambda x: x['total_amount'], reverse=True)
     
     return render(request, 'circulation/users_with_fines.html', {
         'users_list': users_list,
@@ -3506,16 +3576,23 @@ def member_msict_borrowings_view(request):
     overdue_tx_ids = active_borrows.filter(status='overdue').values_list('id', flat=True)
     overdue_fines = Fine.objects.filter(transaction_id__in=overdue_tx_ids)
 
-    # Build fine info dictionary for each transaction (for softcopy return check)
+    # Build fine info dictionary for each transaction (aggregate multiple fines)
     tx_fines = {}
     for fine in overdue_fines:
-        if fine.transaction_id not in tx_fines:
-            tx_fines[fine.transaction_id] = {
-                'amount': fine.amount,
-                'remaining': fine.remaining_balance,
-                'paid': fine.paid,
-                'amount_paid': fine.amount_paid,
+        tid = fine.transaction_id
+        if tid not in tx_fines:
+            tx_fines[tid] = {
+                'amount': 0,
+                'remaining': 0,
+                'amount_paid': 0,
+                'paid': True,
             }
+        tx_fines[tid]['amount'] += fine.amount
+        tx_fines[tid]['remaining'] += fine.remaining_balance
+        tx_fines[tid]['amount_paid'] += fine.amount_paid
+        
+        if tx_fines[tid]['remaining'] > 0:
+            tx_fines[tid]['paid'] = False
 
     context = {
         'active_borrows': active_borrows,
@@ -3579,8 +3656,6 @@ def member_ill_borrowings_view(request):
     }
     mark_badge_viewed(request.user, 'member_ill_pending')
     return render(request, 'circulation/member_ill_borrowings.html', context)
-
-
 # Maktaba ya kidijitali — vitabu vya PDF ambavyo mwanachama amekopa au vya bure
 @login_required
 # ----------------------------------------------------------------------
@@ -3629,7 +3704,7 @@ def softcopy_library_view(request):
     elif user.has_unpaid_fines():
         user_can_borrow = False
         borrow_block_reason = 'fines'
-    elif user.active_borrows_count() >= getattr(settings, 'MAX_COPIES_PER_BORROW', 3):
+    elif user.active_borrows_count() >= int(_pref('MAX_COPIES_PER_BORROW', 3)):
         user_can_borrow = False
         borrow_block_reason = 'limit'
 
@@ -3671,25 +3746,10 @@ def softcopy_library_view(request):
 # View ya Orodha ya Uhifadhi — Mtunzaji anaona uhifadhi wote
 # ----------------------------------------------------------------------
 def reservation_list_view(request):
-    status_filter = request.GET.get('status', 'pending')
+    status_filter = request.GET.get('status', '')
     query = request.GET.get('q', '')
 
-    # Auto-expire any pending/notified reservations that have passed 14 days
-    stale = Reservation.objects.filter(
-        status__in=['pending', 'notified'],
-        expires_at__lt=timezone.now()
-    ).select_related('user', 'book')
-    for res in stale:
-        res.status = 'expired'
-        res.save(update_fields=['status'])
-        exp_msg = (
-            f"MSICT OLMS: Your reservation for '{res.book.title}' has expired "
-            f"(14 days elapsed). Please re-reserve if you still need the book."
-        )
-        notify_user(res.user, exp_msg, 'sms')
-        notify_user(res.user, exp_msg, 'email', subject='Reservation Expired')
-
-    reservations = Reservation.objects.select_related('user', 'book').order_by('book__title', 'position')
+    reservations = Reservation.objects.select_related('user', 'book').order_by('-created_at')
 
     if status_filter:
         reservations = reservations.filter(status=status_filter)
@@ -3729,11 +3789,29 @@ def reservation_list_view(request):
 def renew_reservation_view(request, reservation_id):
     """POST-only — protected by CSRF + librarian role decorator."""
     res = get_object_or_404(Reservation, pk=reservation_id)
-    reservation_days = int(_pref('RESERVATION_EXPIRY_DAYS', 14))
-    new_expires = timezone.now() + timedelta(days=reservation_days)
+
+    # Use the same smart chained formula as _recalculate_reservation_expiries
+    loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+    wait_days = 1  # 24-hour claim window per queue position
+
+    latest_tx = BorrowingTransaction.objects.filter(
+        copy__book=res.book, copy__copy_type='hardcopy',
+        status__in=['borrowed', 'overdue'],
+    ).order_by('-due_date').first()
+
+    now = timezone.now()
+    if latest_tx and latest_tx.due_date > now:
+        base_days = (latest_tx.due_date - now).days + 1
+    else:
+        base_days = loan_days
+
+    total_days = base_days + (res.position - 1) * (loan_days + wait_days)
+    new_expires = now + timedelta(days=total_days)
+
     res.expires_at = new_expires
     res.status = 'pending'
     res.save(update_fields=['expires_at', 'status'])
+
     renew_msg = (
         f"MSICT OLMS: Your reservation for '{res.book.title}' has been renewed by the librarian. "
         f"New expiry date: {new_expires.strftime('%d %b %Y')}. "
@@ -3742,8 +3820,9 @@ def renew_reservation_view(request, reservation_id):
     notify_user(res.user, renew_msg, 'sms')
     notify_user(res.user, renew_msg, 'email', subject=f'Reservation Renewed — {res.book.title}')
     log_audit(request.user, f"Renewed reservation #{res.pk} for '{res.book.title}' by {res.user.get_full_name()}", request)
-    messages.success(request, f"Reservation for '{res.book.title}' renewed for 14 more days. Member notified.")
+    messages.success(request, f"Reservation for '{res.book.title}' renewed until {new_expires.strftime('%d %b %Y')}. Member notified.")
     return redirect('reservation_list')
+
 
 
 # ── Return History ───────────────────────────────────────────────────────────
@@ -3810,9 +3889,11 @@ def all_borrowings_view(request):
     copy_type_filter = request.GET.get('copy_type', '')
     query            = request.GET.get('q', '')
 
+    # (Fine filtering logic has been completely removed to prevent hiding overdue books)
+
     if status_filter:
         if status_filter == 'overdue':
-            # Exclude softcopies from overdue filter since they never go overdue (matching count logic)
+            # Exclude softcopies from overdue filter since they never go overdue
             qs = qs.filter(status='overdue').exclude(copy__copy_type='softcopy')
         else:
             qs = qs.filter(status=status_filter)
@@ -3858,18 +3939,26 @@ def all_borrowings_view(request):
     logger.info(f"Queryset size: {qs.count()}")
     logger.info(f"Status filter: {status_filter}, Copy type filter: {copy_type_filter}, Query: {query}")
 
-    # Build fine info dictionary for each transaction
+    # Build fine info dictionary for each transaction (aggregate multiple fines)
     tx_ids = qs.values_list('id', flat=True)
     fines = Fine.objects.filter(transaction_id__in=tx_ids)
     tx_fines = {}
     for fine in fines:
-        if fine.transaction_id not in tx_fines:
-            tx_fines[fine.transaction_id] = {
-                'amount': fine.amount,
-                'remaining': fine.remaining_balance,
-                'paid': fine.paid,
-                'amount_paid': fine.amount_paid,
+        tid = fine.transaction_id
+        if tid not in tx_fines:
+            tx_fines[tid] = {
+                'amount': 0,
+                'remaining': 0,
+                'amount_paid': 0,
+                'paid': True,
             }
+        tx_fines[tid]['amount'] += fine.amount
+        tx_fines[tid]['remaining'] += fine.remaining_balance
+        tx_fines[tid]['amount_paid'] += fine.amount_paid
+        
+        # If any fine is unpaid (remaining > 0), the aggregate is unpaid
+        if tx_fines[tid]['remaining'] > 0:
+            tx_fines[tid]['paid'] = False
 
     return render(request, 'circulation/all_borrowings.html', {
         'transactions':      qs,
@@ -4142,24 +4231,60 @@ def confirm_loss_view(request, report_id):
     if action == 'dismiss':
         # Restore transaction and copy to active status
         tx = report.transaction
+        now = timezone.now()
         if tx.status == 'lost':
-            if timezone.now() > tx.due_date and tx.copy.copy_type != 'softcopy':
+            if now > tx.due_date and tx.copy.copy_type != 'softcopy':
                 tx.status = 'overdue'
+                tx.save(update_fields=['status'])
+
+                # Explicitly recalculate overdue fine right away
+                from decimal import Decimal as _Dec
+                fine_per_day = _Dec(str(_pref('FINE_PER_DAY', 1000)))
+                days_late = max(1, (now - tx.due_date).days)
+                overdue_amount = days_late * fine_per_day
+                
+                overdue_fine = Fine.objects.filter(
+                    transaction=tx,
+                    reason__icontains='Overdue',
+                ).first()
+                
+                if overdue_fine:
+                    if not overdue_fine.paid:
+                        overdue_fine.amount = overdue_amount
+                        overdue_fine.reason = f"Overdue fine for '{copy.book.title}' ({days_late} days)"
+                        overdue_fine.save(update_fields=['amount', 'reason'])
+                else:
+                    Fine.objects.create(
+                        user=report.user,
+                        transaction=tx,
+                        amount=overdue_amount,
+                        reason=f"Overdue fine for '{copy.book.title}' ({days_late} days)",
+                        paid=False,
+                    )
             else:
                 tx.status = 'borrowed'
-            tx.save(update_fields=['status'])
+                tx.save(update_fields=['status'])
         if copy.status == 'lost':
             copy.status = 'borrowed'
             copy.save(update_fields=['status'])
         report.status = 'dismissed'
         report.save()
+        
+        notify_body = f"MSICT OLMS: Your loss report (LR-{report.pk}) for '{copy.book.title}' has been dismissed. "
+        if tx.status == 'overdue':
+            notify_body += f"Your book is overdue by {days_late} day(s). Please return it immediately to avoid further fines."
+        else:
+            notify_body += "Your borrowing is now active again."
+
+        notify_user(report.user, notify_body, 'sms', message_type='loss_report')
         notify_user(
             report.user,
-            f"MSICT OLMS: Your loss report (LR-{report.pk}) for '{report.transaction.copy.book.title}' "
-            f"has been dismissed. Contact the library for more information.",
-            'sms',
+            notify_body,
+            'email',
+            subject='Loss Report Dismissed – MSICT OLMS',
             message_type='loss_report',
         )
+
         messages.info(request, f'Loss report LR-{report.pk} dismissed.')
         log_audit(request.user, f"Dismissed loss report LR-{report.pk}", request)
     else:
@@ -4274,6 +4399,32 @@ def confirm_loss_view(request, report_id):
             message_type=msg_type,
             priority='high',
         )
+
+        # ── Notify Reservations if a copy is lost ────────────────────────────
+        active_reservations = Reservation.objects.filter(
+            book=book, status__in=['pending', 'notified']
+        ).order_by('position')
+        
+        if active_reservations.exists():
+            usable_copies = book.copies.filter(copy_type='hardcopy').exclude(status__in=['lost', 'damaged']).count()
+            
+            for res in active_reservations:
+                if usable_copies == 0:
+                    lost_msg = (
+                        f"MSICT OLMS: Important update for your reservation of '{book.title}'. "
+                        f"A copy has been marked as LOST, and there are NO available copies remaining. "
+                        f"Your reservation is still active in the queue, but cannot be fulfilled until a new copy is added."
+                    )
+                else:
+                    lost_msg = (
+                        f"MSICT OLMS: Queue update for '{book.title}'. "
+                        f"A copy has been marked as LOST. "
+                        f"Your position is #{res.position}. The wait time may be longer because fewer copies are available."
+                    )
+                notify_user(res.user, lost_msg, 'sms')
+                notify_user(res.user, lost_msg, 'email', subject=f'Reservation Update: {book.title}')
+            
+            _recalculate_reservation_expiries(book)
         flash_msg = f'Loss confirmed for LR-{report.pk}. Copy marked lost.'
         if loss_fine_amount > 0:
             flash_msg += f' Loss fine TZS {loss_fine_amount:,.0f} created.'
@@ -4322,7 +4473,7 @@ def recover_book_view(request, report_id):
         # back in the catalog as a fresh available copy (new borrowing possible).
         copy.status = 'available'
         copy.save(update_fields=['status'])
-        report.status = 'resolved'
+        report.status = 'recovered'
         report.reviewed_by = request.user
         report.reviewed_at = now
         recovery_note = notes or 'Book physically recovered after fine payment — returned to catalog.'
@@ -4334,14 +4485,14 @@ def recover_book_view(request, report_id):
 
     # ── 1. Cancel the loss fine ──────────────────────────────────────────
     # Delete if fully unpaid; if partially paid, keep the record but it's
-    # no longer tracked as an active loss fine (report becomes 'resolved').
+    # no longer tracked as an active loss fine (report becomes 'recovered').
     loss_fine_pk = report.loss_fine_id
     if report.loss_fine:
         if not report.loss_fine.paid and report.loss_fine.amount_paid == 0:
             report.loss_fine.delete()
             report.loss_fine = None
         # If partially paid or fully paid, keep the fine record as-is
-        # (it won't appear in active loss reports since report → resolved)
+        # (it won't appear in active loss reports since report → recovered)
 
     # ── 2. Restore copy and transaction to active borrowing ──────────────
     copy.status = 'borrowed'
@@ -4385,8 +4536,8 @@ def recover_book_view(request, report_id):
             )
     # else: within loan period → status stays 'borrowed' (active), no fine
 
-    # ── 4. Mark the loss report as resolved ──────────────────────────────
-    report.status = 'resolved'
+    # ── 4. Mark the loss report as recovered ──────────────────────────────
+    report.status = 'recovered'
     report.reviewed_by = request.user
     report.reviewed_at = now
     if notes:
@@ -4429,6 +4580,69 @@ def recover_book_view(request, report_id):
         messages.success(request, f"Book '{copy.book.title}' recovered → now OVERDUE ({days_late} days). Loss fine cancelled. Overdue fine TZS {overdue_amount:,.0f} applies.")
     else:
         messages.success(request, f"Book '{copy.book.title}' recovered → back to ACTIVE borrowing. Loss fine cancelled. Due date: {tx.due_date.strftime('%d %b %Y')}.")
+    return redirect('loss_report_list')
+
+
+@login_required
+@librarian_required
+@require_POST
+# ----------------------------------------------------------------------
+# View ya Kufuta Ripoti ya Hasara
+# ----------------------------------------------------------------------
+def delete_loss_report_view(request, report_id):
+    """Librarian deletes a loss report entirely.
+    
+    If the report is pending or confirmed, it restores the book to active/overdue.
+    If there is an unpaid loss fine, it is deleted.
+    """
+    report = get_object_or_404(LossReport, pk=report_id)
+    copy = report.transaction.copy
+    tx = report.transaction
+    now = timezone.now()
+    
+    # 1. Clean up fines
+    if report.loss_fine and not report.loss_fine.paid and report.loss_fine.amount_paid == 0:
+        report.loss_fine.delete()
+
+    # 2. Revert statuses if report wasn't already resolved/recovered/dismissed
+    if report.status in ('pending', 'confirmed'):
+        copy.status = 'borrowed'
+        copy.save(update_fields=['status'])
+        
+        if now > tx.due_date and copy.copy_type != 'softcopy':
+            tx.status = 'overdue'
+            tx.save(update_fields=['status'])
+            
+            # Recreate overdue fine since loss is being cancelled
+            from decimal import Decimal as _Dec
+            fine_per_day = _Dec(str(_pref('FINE_PER_DAY', 1000)))
+            days_late = max(1, (now - tx.due_date).days)
+            overdue_amount = days_late * fine_per_day
+            
+            overdue_fine = Fine.objects.filter(transaction=tx, reason__icontains='Overdue').first()
+            if overdue_fine:
+                if not overdue_fine.paid:
+                    overdue_fine.amount = overdue_amount
+                    overdue_fine.reason = f"Overdue fine for '{copy.book.title}' ({days_late} days)"
+                    overdue_fine.save(update_fields=['amount', 'reason'])
+            else:
+                Fine.objects.create(
+                    user=report.user,
+                    transaction=tx,
+                    amount=overdue_amount,
+                    reason=f"Overdue fine for '{copy.book.title}' ({days_late} days)",
+                    paid=False,
+                )
+        else:
+            tx.status = 'borrowed'
+            tx.save(update_fields=['status'])
+    
+    # 3. Delete the report
+    report_pk = report.pk
+    report.delete()
+    
+    messages.success(request, f"Loss report LR-{report_pk} has been successfully deleted.")
+    log_audit(request.user, f"Deleted loss report LR-{report_pk}", request)
     return redirect('loss_report_list')
 
 
@@ -4635,7 +4849,7 @@ def softcopy_renewal_payment_view(request, transaction_id):
     tx = get_object_or_404(
         BorrowingTransaction, pk=transaction_id, user=request.user,
         copy__copy_type='softcopy', borrow_type='softcopy',
-        status__in=['borrowed', 'overdue'],
+        status='borrowed',  # Softcopy never goes 'overdue' — link simply expires
     )
     copy = tx.copy
 

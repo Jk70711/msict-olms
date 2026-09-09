@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Frequently Asked Questions - {{ footer.school_name|default:"MSICT Library" }}{% endblock %}
+
+{% block content %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="text-center mb-5">
+                <h1 class="fw-bold text-dark"><i class="bi bi-question-circle text-primary me-2"></i> Frequently Asked Questions</h1>
+                <p class="text-muted">Find answers to common questions about using the library, borrowing books, and accessing digital resources.</p>
+            </div>
+
+            {% if faqs %}
+            <div class="accordion shadow-sm" id="faqAccordion">
+                {% for faq in faqs %}
+                <div class="accordion-item border-0 {% if not forloop.last %}border-bottom{% endif %}">
+                    <h2 class="accordion-header" id="heading{{ faq.id }}">
+                        <button class="accordion-button {% if not forloop.first %}collapsed{% endif %} fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ faq.id }}" aria-expanded="{% if forloop.first %}true{% else %}false{% endif %}" aria-controls="collapse{{ faq.id }}">
+                            {{ faq.question }}
+                        </button>
+                    </h2>
+                    <div id="collapse{{ faq.id }}" class="accordion-collapse collapse {% if forloop.first %}show{% endif %}" aria-labelledby="heading{{ faq.id }}" data-bs-parent="#faqAccordion">
+                        <div class="accordion-body text-muted">
+                            {{ faq.answer|linebreaks }}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-info text-center" role="alert">
+                No frequently asked questions available at the moment. Please check back later or contact the library administration for assistance.
+            </div>
+            {% endif %}
+            
+            <div class="text-center mt-5">
+                <p class="text-muted">Still have questions?</p>
+                <a href="mailto:{{ footer.email|default:'library@msict.ac.tz' }}" class="btn btn-outline-primary"><i class="bi bi-envelope me-2"></i> Contact Us</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

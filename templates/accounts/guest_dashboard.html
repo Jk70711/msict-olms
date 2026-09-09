@@ -3,13 +3,31 @@
 {% block title %}Guest Dashboard - MSICT OLMS{% endblock %}
 {% block content %}
 <div class="container py-4">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="fw-bold mb-0"><i class="bi bi-person-badge me-2"></i>Guest Dashboard</h4>
-    <div class="d-flex gap-2">
-      <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-outline-primary">
-        <i class="bi bi-arrow-up-circle"></i> Become a Member
-      </a>
-      <a href="{% url 'logout' %}" class="btn btn-outline-secondary btn-sm">Logout</a>
+  <!-- Welcome greeting with live clock -->
+  <div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-4">
+      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <div>
+          <h4 class="fw-bold mb-1"><i class="bi bi-person-badge me-2 text-info"></i>Welcome, {{ user.get_full_name }}</h4>
+          <p class="text-muted small mb-1">{{ user.email }}</p>
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <i class="bi bi-clock text-muted" style="font-size:.8rem;"></i>
+            <span id="dashLiveClock" class="text-muted" style="font-size:.82rem;font-variant-numeric:tabular-nums;">Loading…</span>
+          </div>
+          <div class="d-flex gap-2">
+            <span class="badge bg-info text-dark"><i class="bi bi-person-badge me-1"></i>Guest</span>
+          </div>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="{% url 'chat_inbox' %}" class="btn btn-outline-primary btn-sm">
+            <i class="bi bi-chat-dots me-1"></i> Messages/Support
+          </a>
+          <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-outline-success">
+            <i class="bi bi-arrow-up-circle"></i> Become a Member
+          </a>
+          <a href="{% url 'logout' %}" class="btn btn-outline-secondary btn-sm">Logout</a>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -236,4 +254,26 @@
 })();
 </script>
 {% endif %}
+<script>
+/* Live clock for dashboard greeting */
+(function() {
+  var el = document.getElementById('dashLiveClock');
+  if (!el) return;
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function tick() {
+    var now = new Date();
+    var d = days[now.getDay()];
+    var date = String(now.getDate()).padStart(2,'0');
+    var mon = months[now.getMonth()];
+    var yr = now.getFullYear();
+    var h = String(now.getHours()).padStart(2,'0');
+    var m = String(now.getMinutes()).padStart(2,'0');
+    var s = String(now.getSeconds()).padStart(2,'0');
+    el.textContent = d + ', ' + date + ' ' + mon + ' ' + yr + '  •  ' + h + ':' + m + ':' + s;
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+</script>
 {% endblock %}

@@ -109,9 +109,21 @@
             </small></td>
             <td>
               {% if report.status == 'confirmed' %}
-                <span class="badge bg-danger">Confirmed</span>
+                {% if report.loss_fine %}
+                  {% if report.loss_fine.paid %}
+                    <span class="badge bg-success">Paid</span>
+                  {% elif report.loss_fine.amount_paid > 0 %}
+                    <span class="badge bg-info text-dark">Partial Paid</span>
+                  {% else %}
+                    <span class="badge bg-danger">Waiting Payment</span>
+                  {% endif %}
+                {% else %}
+                  <span class="badge bg-danger">Waiting Payment</span>
+                {% endif %}
               {% elif report.status == 'resolved' %}
-                <span class="badge bg-success">Resolved</span>
+                <span class="badge bg-success">Paid</span>
+              {% elif report.status == 'recovered' %}
+                <span class="badge bg-primary">Recovered</span>
               {% elif report.status == 'dismissed' %}
                 <span class="badge bg-secondary">Dismissed</span>
               {% else %}
@@ -120,12 +132,14 @@
             </td>
             <td><small class="text-muted">{{ report.reported_at|date:"d M Y" }}</small></td>
             <td>
-              {% if report.loss_fine and not report.loss_fine.paid %}
-              <a href="{% url 'pay_loss_fine' report.pk %}" class="btn btn-sm btn-success py-0">
-                <i class="bi bi-credit-card"></i> Pay
-              </a>
-              {% elif report.loss_fine and report.loss_fine.paid %}
               <div class="d-flex align-items-center gap-1">
+                {% if report.loss_fine and not report.loss_fine.paid %}
+                <a href="{% url 'pay_loss_fine' report.pk %}" class="btn btn-sm btn-success py-0">
+                  <i class="bi bi-credit-card"></i> Pay
+                </a>
+                {% endif %}
+
+                {% if report.loss_fine and report.loss_fine.amount_paid > 0 %}
                 <a href="{% url 'loss_fine_receipt_pdf' report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
                   <i class="bi bi-receipt"></i>
                 </a>
@@ -136,10 +150,12 @@
                   <span class="fw-semibold">{{ report.loss_fine.get_payment_method_display|default:report.loss_fine.payment_method }}</span>
                   {% if report.loss_fine.receipt_no %}<br><code>{{ report.loss_fine.receipt_no|truncatechars:30 }}</code>{% endif %}
                 </small>
+                {% endif %}
+
+                {% if not report.loss_fine %}
+                <small class="text-muted">No fine</small>
+                {% endif %}
               </div>
-              {% else %}
-              <small class="text-muted">No fine</small>
-              {% endif %}
             </td>
           </tr>
           {% empty %}

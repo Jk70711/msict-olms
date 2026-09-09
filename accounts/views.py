@@ -58,8 +58,16 @@ def send_account_status_update(user, action):
 # View ya Terms and Conditions — Ukurasa wa Masharti na Mataruzisho
 # ----------------------------------------------------------------------
 def terms_and_conditions_view(request):
-    """Terms and Conditions page for MSICT OLMS"""
-    return render(request, 'pages/terms_and_conditions.html')
+    """Terms and Conditions page — sections are editable via Django admin."""
+    from accounts.models import TermsSection
+    from django.utils.safestring import mark_safe
+
+    db_sections = list(TermsSection.objects.filter(is_active=True).order_by('order', 'section_key'))
+    sections = [
+        {'title': s.title, 'icon': s.icon, 'content': mark_safe(s.content)}
+        for s in db_sections
+    ]
+    return render(request, 'pages/terms_and_conditions.html', {'sections': sections})
 
 
 # ----------------------------------------------------------------------
@@ -972,6 +980,7 @@ def guest_payment_view(request):
     session = GuestSession.objects.create(
         user=request.user,
         paid_hours=calculated_paid_hours,
+        duration_hours=calculated_paid_hours,
         amount_paid=total_amount,
         payment_status='paid',
         payment_method=payment_method,
@@ -1256,13 +1265,15 @@ def guest_session_renew_pay_view(request):
     
     # Extend the session: add calculated_renew_hours to paid_hours (same row, no new session)
     old_paid = float(active_session.paid_hours)
+    old_duration = float(active_session.duration_hours)
     active_session.paid_hours = Decimal(str(old_paid + calculated_renew_hours))
+    active_session.duration_hours = Decimal(str(old_duration + calculated_renew_hours))
     active_session.amount_paid = Decimal(str(float(active_session.amount_paid) + total_amount))
     active_session.payment_method = payment_method
     active_session.status = 'renewed'
     active_session.renewed = True
     active_session.expiry_notification_sent = False
-    active_session.save(update_fields=['paid_hours', 'amount_paid', 'payment_method', 'status', 'renewed', 'expiry_notification_sent'])
+    active_session.save(update_fields=['paid_hours', 'duration_hours', 'amount_paid', 'payment_method', 'status', 'renewed', 'expiry_notification_sent'])
 
     # Update user total_guest_hours with the renewal hours
     request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(calculated_renew_hours))
@@ -1330,7 +1341,11 @@ def guest_session_receipt_pdf_view(request, session_id):
     """Generate a PDF receipt for a guest session payment (start or renewal)."""
     from circulation.receipt_utils import generate_receipt_pdf
 
-    session = get_object_or_404(GuestSession, pk=session_id, user=request.user)
+    if getattr(request.user, 'role', '') in ('admin', 'librarian') or request.user.is_superuser or request.user.is_staff:
+        session = get_object_or_404(GuestSession, pk=session_id)
+    else:
+        session = get_object_or_404(GuestSession, pk=session_id, user=request.user)
+
     if session.payment_status != 'paid':
         messages.error(request, 'No payment record found for this session.')
         return redirect('guest_dashboard')
@@ -1348,14 +1363,14 @@ def guest_session_receipt_pdf_view(request, session_id):
     ]
 
     qr_data = (
-        f"MSICT-OLMS|GUEST-RECEIPT|{receipt_id}|{request.user.username}|"
+        f"MSICT-OLMS|GUEST-RECEIPT|{receipt_id}|{session.user.username}|"
         f"TZS {session.amount_paid:,.0f}|Session #{session.pk}"
     )
 
     return generate_receipt_pdf(
         receipt_id=receipt_id,
         title=title,
-        user=request.user,
+        user=session.user,
         items=items,
         qr_data=qr_data,
         payment_method=session.payment_method,
@@ -1646,23 +1661,26 @@ def librarian_required(func):
 def guest_manage_view(request):
     """Librarian view: see all active guest sessions and recent history."""
     active_sessions = GuestSession.objects.filter(
-        status__in=['active', 'renewed']
+        status__in=['active', 'renewed', 'expired']
     ).select_related('user').order_by('-sign_in_time')
 
     # Auto-expire any sessions past their paid hours
     now = timezone.now()
     hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
     for s in active_sessions:
-        expiry = s.sign_in_time + timedelta(hours=float(s.paid_hours))
-        if now >= expiry:
-            duration_hours = max(0.01, (now - s.sign_in_time).total_seconds() / 3600)
-            s.sign_out_time = now
-            s.duration_hours = round(duration_hours, 2)
-            s.status = 'expired'
-            # amount_paid already set at payment time — no refund
-            s.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-            s.user.total_guest_hours = (s.user.total_guest_hours or Decimal('0')) + Decimal(str(s.paid_hours))
-            s.user.save(update_fields=['total_guest_hours'])
+        if s.status in ['active', 'renewed']:
+            expiry = s.sign_in_time + timedelta(hours=float(s.paid_hours))
+            if now >= expiry:
+                duration_hours = max(0.01, (now - s.sign_in_time).total_seconds() / 3600)
+                s.sign_out_time = now
+                s.duration_hours = round(duration_hours, 2)
+                s.status = 'expired'
+                # amount_paid already set at payment time — no refund
+                s.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
+                
+                # Accrue total guest hours on the user
+                s.user.total_guest_hours = (s.user.total_guest_hours or Decimal('0')) + Decimal(str(s.paid_hours))
+                s.user.save(update_fields=['total_guest_hours'])
             # Revenue already recorded at payment time
             log_audit(request.user, f"Auto-expired guest session #{s.id} for {s.user.username}", request)
 
@@ -1737,6 +1755,22 @@ def guest_session_end_view(request, session_id):
     # Revenue already recorded at payment time
     log_audit(request.user, f"Force-ended guest session #{session.id} for {session.user.username}", request)
     messages.success(request, f'Session #{session.id} ended. Amount paid: TZS {session.amount_paid:,.0f}.')
+    return redirect('guest_manage')
+
+
+@login_required
+@librarian_required
+@require_POST
+def librarian_guest_session_delete_view(request, session_id):
+    """Librarian deletes a guest session."""
+    session = get_object_or_404(GuestSession, pk=session_id)
+    session.delete()
+    log_audit(request.user, f"Librarian deleted guest session #{session_id}", request)
+    messages.success(request, f'Guest session #{session_id} deleted successfully.')
+    # Redirect back to the dashboard if it was called from there, else manage page
+    next_url = request.POST.get('next', 'guest_manage')
+    if next_url == 'librarian_dashboard':
+        return redirect('librarian_dashboard')
     return redirect('guest_manage')
 
 
@@ -2192,12 +2226,41 @@ def delete_user_view(request, user_id):
         messages.error(request, 'Librarians can only delete member or guest accounts.')
         return redirect('user_list')
 
+    # Prevent deletion if user has unpaid fines
+    from circulation.models import Fine
+    if Fine.objects.filter(user=user, paid=False).exists():
+        messages.error(request, f'Cannot delete {full_name}. The user has unpaid fines. All fines must be settled before deletion.')
+        return redirect('user_detail', user_id=user.pk)
+
     # Delete virtual card if exists
     try:
         if hasattr(user, 'virtual_card'):
             user.virtual_card.delete()
     except Exception:
         pass
+    # ── Auto-Cleanup of Circulation Data Before Deletion ──
+    from circulation.models import BorrowingTransaction, Reservation
+    
+    # 1. If they have active borrowed books, mark the physical copies as 'lost' 
+    # before the transaction is CASCADE deleted. Since the user is deleted without 
+    # returning the book, the physical book is effectively gone from the library.
+    active_borrows = BorrowingTransaction.objects.filter(
+        user=user, status__in=['borrowed', 'overdue']
+    )
+    for tx in active_borrows:
+        tx.copy.status = 'lost'
+        tx.copy.save(update_fields=['status'])
+        
+    # 2. Release their reservations so the queue can move on
+    active_reservations = Reservation.objects.filter(
+        user=user, status__in=['pending', 'notified']
+    )
+    for res in active_reservations:
+        res.status = 'cancelled'
+        res.save(update_fields=['status'])
+
+    # (Fines, Damage Reports, Loss Reports, and BorrowingTransactions themselves 
+    # are automatically wiped from the database via Django's CASCADE deletion rule).
 
     user.delete()
     log_audit(request.user, f"Deleted {reg_status} account for {full_name} (Army No: {army_no})", request)
@@ -2209,6 +2272,58 @@ def delete_user_view(request, user_id):
     if reg_status in ('pending', 'rejected'):
         return redirect('public_registrations')
     return redirect('user_list')
+
+
+@login_required
+def delete_my_account_view(request):
+    """Allow a user to delete their own account, provided they have no unpaid fines."""
+    if request.method != 'POST':
+        messages.error(request, 'Invalid request method.')
+        return redirect('profile')
+
+    user = request.user
+    
+    # 1. Check for unpaid fines
+    from circulation.models import Fine
+    if Fine.objects.filter(user=user, paid=False).exists():
+        messages.error(request, 'You cannot delete your account because you have unpaid fines. Please settle all fines first.')
+        return redirect('profile')
+
+    # Delete virtual card if exists
+    try:
+        if hasattr(user, 'virtual_card'):
+            user.virtual_card.delete()
+    except Exception:
+        pass
+
+    # ── Auto-Cleanup of Circulation Data Before Deletion ──
+    from circulation.models import BorrowingTransaction, Reservation
+    
+    # Mark active physical borrowed books as 'lost'
+    active_borrows = BorrowingTransaction.objects.filter(
+        user=user, status__in=['borrowed', 'overdue']
+    )
+    for tx in active_borrows:
+        tx.copy.status = 'lost'
+        tx.copy.save(update_fields=['status'])
+        
+    # Cancel active reservations
+    active_reservations = Reservation.objects.filter(
+        user=user, status__in=['pending', 'notified']
+    )
+    for res in active_reservations:
+        res.status = 'cancelled'
+        res.save(update_fields=['status'])
+
+    # Log them out before deletion
+    from django.contrib.auth import logout
+    logout(request)
+    
+    # Finally delete the user
+    user.delete()
+    
+    messages.success(request, 'Your account has been permanently deleted.')
+    return redirect('login')
 
 
 # Decorator: inazuia ufikiaji kwa watu ambao si admin peke yake
@@ -2557,25 +2672,40 @@ def admin_dashboard_view(request):
         messages.error(request, 'Access denied. Admin privileges required.')
         return redirect('dashboard')
 
-    # All non-admin users (includes cancelled/pending) so locked users always show
-    _all_users   = OLMSUser.objects.exclude(role='admin')
-    total_users  = _all_users.count()
+    # All users (excluding guests and pending/rejected registrations for accurate active counts)
+    _all_users   = OLMSUser.objects.exclude(
+        Q(role='guest') | Q(is_guest=True) | Q(registration_status__in=['pending', 'rejected', 'cancelled'])
+    )
+    guests_count = OLMSUser.objects.filter(Q(role='guest') | Q(is_guest=True)).count()
+    total_users  = _all_users.count() + guests_count
     active_users = _all_users.filter(is_active=True).count()
-    # Locked = inactive OR unapproved (pending registration can't login either)
-    locked_users = _all_users.filter(Q(is_active=False) | Q(registration_status='pending')).distinct().count()
+    
+    # Locked = inactive OR unapproved (pending registration can't login either), typically exclude admins from locked count
+    # We query OLMSUser directly here so we still capture 'pending' users in the locked count
+    locked_users = OLMSUser.objects.exclude(role='admin').exclude(Q(role='guest') | Q(is_guest=True)).filter(
+        Q(is_active=False) | Q(registration_status='pending')
+    ).distinct().count()
 
+    # Active Overdues: only count overdue transactions that have an unpaid fine.
     overdue_count = BorrowingTransaction.objects.filter(
-        status='overdue'
+        status='overdue',
+        fines__paid=False
     ).exclude(
         copy__copy_type='softcopy', copy__access_type='borrow'
-    ).count()
+    ).distinct().count()
     currently_borrowed = BorrowingTransaction.objects.filter(status='borrowed').count()
     # Total active loans = borrowed + overdue (denominator for overdue rate)
     total_borrows = currently_borrowed + overdue_count
     unpaid_fines = sum(fine.remaining_balance for fine in Fine.objects.filter(paid=False))
 
-    # Analytics - Users by role
-    users_by_role = list(OLMSUser.objects.values('role').annotate(count=Count('id')))
+    # Analytics - Users by role (only counts fully approved users from _all_users)
+    _raw_roles = {x['role']: x['count'] for x in _all_users.values('role').annotate(count=Count('id'))}
+    users_by_role = [
+        {'role': 'librarian', 'count': _raw_roles.get('librarian', 0)},
+        {'role': 'member', 'count': _raw_roles.get('member', 0)},
+        {'role': 'admin', 'count': _raw_roles.get('admin', 0)},
+        {'role': 'guest', 'count': guests_count},
+    ]
     
     # Analytics - Most borrowed books
     most_borrowed = BorrowingTransaction.objects.values('copy__book__title').annotate(
@@ -2628,13 +2758,22 @@ def admin_dashboard_view(request):
 
     # Security - System Alerts (exclude OTP and password reset messages)
     from circulation.models import Notification
-    security_alerts = Notification.objects.filter(
+    security_alerts_raw = Notification.objects.filter(
         is_security_alert=True
     ).exclude(
         message__icontains='OTP'
     ).exclude(
         message__icontains='password reset'
-    ).order_by('-created_at')[:5]
+    ).order_by('-created_at')[:30]
+
+    security_alerts = []
+    seen_messages = set()
+    for alert in security_alerts_raw:
+        if alert.message not in seen_messages:
+            seen_messages.add(alert.message)
+            security_alerts.append(alert)
+        if len(security_alerts) == 5:
+            break
 
     # Suspicious IPs (last 1 hour, >=5 failed attempts)
     window_1h = timezone.now() - timedelta(hours=1)
@@ -2662,13 +2801,21 @@ def admin_dashboard_view(request):
 
     # Additional Analytics
     # Monthly borrowing stats for the last 6 months
-    monthly_borrows = defaultdict(int)
-    for i in range(6):
-        month = datetime.now() - timedelta(days=30*i)
-        month_key = month.strftime('%b %Y')
+    monthly_borrows = {}
+    today = timezone.now().date()
+    # Calculate exactly 6 months back, oldest first
+    for i in range(5, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        
+        import datetime as dt
+        month_key = dt.date(y, m, 1).strftime('%b %Y')
         count = BorrowingTransaction.objects.filter(
-            borrow_date__month=month.month,
-            borrow_date__year=month.year
+            borrow_date__month=m,
+            borrow_date__year=y
         ).count()
         monthly_borrows[month_key] = count
 
@@ -2698,7 +2845,7 @@ def admin_dashboard_view(request):
     # Total books and copies
     total_books = Book.objects.count()
     total_copies = BookCopy.objects.count()
-    available_copies = BookCopy.objects.filter(status='available').count()
+    available_copies = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
 
     # Fine statistics
     total_fines_amount = sum(fine.amount for fine in Fine.objects.all())
@@ -2778,7 +2925,7 @@ def admin_dashboard_view(request):
     copy_status_data = _json.dumps({
         'labels': ['Available', 'Borrowed', 'Reserved', 'Lost', 'Damaged'],
         'values': [
-            BookCopy.objects.filter(status='available').count(),
+            BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count(),
             BookCopy.objects.filter(status='borrowed').count(),
             BookCopy.objects.filter(status='reserved').count(),
             BookCopy.objects.filter(status='lost').count(),
@@ -2822,6 +2969,7 @@ def admin_dashboard_view(request):
         'revenue_guest_fee': revenue['guest_fee'],
         'revenue_damage': revenue.get('damage', 0),
         'revenue_loss': revenue['loss'],
+        'revenue_unpaid': revenue['unpaid'],
         'revenue_total': revenue['total_revenue'],
         'revenue_net': revenue['net_revenue'],
         'security_chart_data': security_chart_data,

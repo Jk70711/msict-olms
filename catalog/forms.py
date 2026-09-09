@@ -10,12 +10,12 @@ class FooterForm(forms.ModelForm):
             'school_name', 'address', 'phone', 'email', 'location',
             'copyright_text', 'faq_link',
             'social_facebook', 'social_twitter', 'social_linkedin', 'social_instagram',
-            'additional_links', 'is_active'
+            'additional_links', 'bg_color', 'is_active'
         ]
         widgets = {
             'school_name': forms.TextInput(attrs={'class': 'form-control'}),
             'address': forms.Textarea(attrs={'class': 'form-control', 'rows': 2}),
-            'phone': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '10', 'pattern': '^0\\d{9}$', 'placeholder': 'e.g. 0712345678'}),
+            'phone': forms.TextInput(attrs={'class': 'form-control', 'maxlength': '10', 'pattern': '0[0-9]{9}', 'placeholder': 'e.g. 0712345678', 'title': 'Phone number must be exactly 10 digits and start with 0'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'location': forms.TextInput(attrs={'class': 'form-control'}),
             'copyright_text': forms.TextInput(attrs={'class': 'form-control'}),
@@ -29,6 +29,7 @@ class FooterForm(forms.ModelForm):
                 'rows': 4,
                 'placeholder': 'Example:\nAbout Us|/about\nContact|/contact\nPrivacy Policy|/privacy'
             }),
+            'bg_color': forms.TextInput(attrs={'class': 'form-control form-control-color', 'type': 'color'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 

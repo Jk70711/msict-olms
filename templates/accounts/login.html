@@ -386,7 +386,7 @@
     <div class="slideshow-container" id="slideshow">
       {% for img in slideshow_images %}
       <div class="slideshow-slide{% if forloop.first %} active{% endif %}"
-           style="background-image: url('{{ img.image.url }}'"
+           style="background-image: url('{{ img.image.url }}')"
            data-caption="{{ img.title }}">
       </div>
       {% endfor %}
@@ -476,6 +476,11 @@
       </form>
 
       <div class="login-footer">
+        <div class="mb-2">
+          <a href="{% url 'home' %}" class="forgot-link">
+            <i class="bi bi-house me-1"></i>Back to Home
+          </a>
+        </div>
         <div class="mb-2">
           <a href="{% url 'public_register' %}" class="forgot-link">
             <i class="bi bi-person-plus me-1"></i>Register for an account

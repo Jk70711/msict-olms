@@ -6,27 +6,48 @@
   /* ── Keep page background transparent to show image ──────── */
   body,
   .main-content {
-    background: rgba(255,255,255,0.85) !important;
+    background: rgba(255, 255, 255, 0.85) !important;
   }
 
   /* ── Cards have white backgrounds for content readability ──── */
   .card {
-    background: rgba(255,255,255,0.95) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
   }
+
   .card-header {
-    background: rgba(248,250,252,0.95) !important;
+    background: rgba(248, 250, 252, 0.95) !important;
   }
+
   .card-body,
   .card-footer {
     background: transparent !important;
   }
 
   /* ── Restore Bootstrap badge colors ───────────────────────── */
-  .badge.bg-info { background: #0dcaf0 !important; color: #000 !important; }
-  .badge.bg-success { background: #198754 !important; color: #fff !important; }
-  .badge.bg-warning { background: #ffc107 !important; color: #000 !important; }
-  .badge.bg-primary { background: #0d6efd !important; color: #fff !important; }
-  .badge.bg-light { background: #f8f9fa !important; color: #000 !important; }
+  .badge.bg-info {
+    background: #0dcaf0 !important;
+    color: #000 !important;
+  }
+
+  .badge.bg-success {
+    background: #198754 !important;
+    color: #fff !important;
+  }
+
+  .badge.bg-warning {
+    background: #ffc107 !important;
+    color: #000 !important;
+  }
+
+  .badge.bg-primary {
+    background: #0d6efd !important;
+    color: #fff !important;
+  }
+
+  .badge.bg-light {
+    background: #f8f9fa !important;
+    color: #000 !important;
+  }
 
   /* ── Home page background image (full visibility) ─────── */
   .home-page-bg {
@@ -36,6 +57,7 @@
     pointer-events: none;
     overflow: hidden;
   }
+
   .home-page-bg img {
     width: 100%;
     height: 100%;
@@ -44,6 +66,7 @@
     user-select: none;
     -webkit-user-drag: none;
   }
+
   /* All content sits above the background */
   .home-content-wrapper {
     position: relative;
@@ -54,6 +77,7 @@
   .hero-carousel {
     width: 100%;
     height: 400px;
+
     background: {{ carousel_bg_color }};
     position: relative;
     overflow: hidden;
@@ -77,7 +101,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
     padding: 40px 30px 30px;
     color: white;
   }
@@ -86,7 +110,7 @@
     font-size: 1.8rem;
     font-weight: 700;
     margin-bottom: 8px;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   }
 
   .hero-carousel .slide-desc {
@@ -108,7 +132,7 @@
     width: 200px;
     height: 300px;
     border-radius: 8px;
-    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
     overflow: hidden;
     cursor: pointer;
     transition: all 0.3s ease;
@@ -116,7 +140,7 @@
 
   .book-gallery .swiper-slide:hover {
     transform: translateY(-8px) scale(1.02);
-    box-shadow: 0 15px 40px rgba(0,0,0,0.4);
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
   }
 
   .book-gallery .swiper-slide img {
@@ -130,7 +154,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(transparent, rgba(0,0,0,0.9));
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
     padding: 20px 12px 12px;
     color: white;
     text-align: center;
@@ -157,14 +181,16 @@
     margin: 0 auto;
     text-align: center;
   }
+
   .welcome-banner .wb-logo {
     width: 48px;
     height: 48px;
     object-fit: contain;
     flex-shrink: 0;
-    filter: drop-shadow(0 2px 6px rgba(0,0,0,.4));
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .4));
     border-radius: 6px;
   }
+
   .welcome-banner .wb-title {
     font-size: .95rem;
     font-weight: 700;
@@ -173,6 +199,7 @@
     color: white;
     text-align: left;
   }
+
   .welcome-banner .wb-sub {
     font-size: .82rem;
     opacity: .7;
@@ -185,17 +212,30 @@
   .search-dropdown {
     position: absolute;
     top: calc(100% + 4px);
-    left: 0; right: 0;
+    left: 0;
+    right: 0;
     background: #fff;
     border: 1px solid var(--border, #e2e8f0);
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.12);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .12);
     z-index: 9999;
     overflow: hidden;
     display: none;
     animation: dropIn .15s ease;
   }
-  @keyframes dropIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+
+  @keyframes dropIn {
+    from {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   .search-dropdown .sd-item {
     display: flex;
     padding: .5rem .75rem;
@@ -207,8 +247,15 @@
     text-decoration: none;
     transition: background .12s;
   }
-  .search-dropdown .sd-item.active { background: #eff6ff; }
-  .search-dropdown .sd-item:hover { background: #eff6ff; }
+
+  .search-dropdown .sd-item.active {
+    background: #eff6ff;
+  }
+
+  .search-dropdown .sd-item:hover {
+    background: #eff6ff;
+  }
+
   .search-dropdown .sd-icon {
     width: 32px;
     height: 32px;
@@ -221,8 +268,19 @@
     font-size: .9rem;
     flex-shrink: 0;
   }
-  .search-dropdown .sd-title { font-weight: 600; font-size: .83rem; line-height: 1.2; }
-  .search-dropdown .sd-sub   { font-size: .72rem; color: #64748b; margin-top: 1px; }
+
+  .search-dropdown .sd-title {
+    font-weight: 600;
+    font-size: .83rem;
+    line-height: 1.2;
+  }
+
+  .search-dropdown .sd-sub {
+    font-size: .72rem;
+    color: #64748b;
+    margin-top: 1px;
+  }
+
   .search-dropdown .sd-empty,
   .search-dropdown .sd-loading {
     padding: .85rem 1rem;
@@ -230,8 +288,17 @@
     font-size: .82rem;
     text-align: center;
   }
-  .search-dropdown .sd-loading i { animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .search-dropdown .sd-loading i {
+    animation: spin .7s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   .search-dropdown .sd-footer {
     padding: .5rem .75rem;
     border-top: 1px solid var(--border, #e2e8f0);
@@ -290,7 +357,7 @@
     left: 50%;
     width: 300px;
     height: 300px;
-    background: radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%);
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.15) 0%, transparent 70%);
     transform: translate(-50%, -50%);
     pointer-events: none;
   }
@@ -334,9 +401,9 @@
     height: 100%;
     border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5),
-                0 0 0 1px rgba(255,255,255,0.1),
-                inset 0 0 30px rgba(255,255,255,0.1);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(255, 255, 255, 0.1),
+      inset 0 0 30px rgba(255, 255, 255, 0.1);
     background: linear-gradient(145deg, #1e293b, #0f172a);
     position: relative;
     transform-style: preserve-3d;
@@ -349,7 +416,7 @@
     left: 10%;
     right: 10%;
     height: 30px;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.3), transparent);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent);
     filter: blur(15px);
     border-radius: 50%;
     transform: rotateX(90deg);
@@ -373,7 +440,7 @@
     left: 0;
     right: 0;
     padding: 15px 10px 10px;
-    background: linear-gradient(transparent, rgba(0,0,0,0.9));
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.9));
     color: white;
     font-size: 0.75rem;
     font-weight: 600;
@@ -403,8 +470,8 @@
     width: 44px;
     height: 44px;
     border-radius: 50%;
-    border: 2px solid rgba(255,255,255,0.3);
-    background: rgba(15,23,42,0.8);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: rgba(15, 23, 42, 0.8);
     color: white;
     display: flex;
     align-items: center;
@@ -434,7 +501,7 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.3);
+    background: rgba(255, 255, 255, 0.3);
     cursor: pointer;
     transition: all 0.3s ease;
   }
@@ -459,7 +526,7 @@
     color: white;
     font-size: 1.1rem;
     font-weight: 700;
-    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -486,8 +553,8 @@
     transform: scaleY(-1);
     opacity: 0.15;
     filter: blur(2px);
-    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
-    -webkit-mask-image: linear-gradient(to bottom, rgba(0,0,0,0.5), transparent);
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
+    -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.5), transparent);
     pointer-events: none;
   }
 
@@ -496,16 +563,19 @@
     .carousel-3d-container {
       height: 350px;
     }
+
     .carousel-3d-item {
       width: 120px;
       height: 180px;
       margin-left: -60px;
       margin-top: -90px;
     }
+
     .book-title-3d {
       font-size: 0.65rem;
       padding: 10px 8px 8px;
     }
+
     .carousel-3d-btn {
       width: 38px;
       height: 38px;
@@ -519,7 +589,7 @@
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: rgba(0,0,0,0.7);
+    background: rgba(0, 0, 0, 0.7);
     color: white;
     padding: 10px 20px;
     border-radius: 30px;
@@ -542,16 +612,19 @@
     transition: all 0.2s ease;
     background: var(--card-bg, #ffffff);
   }
+
   .book-card-simple:hover {
     transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
     border-color: var(--accent, #2563eb);
   }
+
   .book-cover-simple {
     width: 100%;
     height: 180px;
     object-fit: cover;
   }
+
   .book-cover-placeholder {
     width: 100%;
     height: 180px;
@@ -562,9 +635,11 @@
     color: var(--text-muted, #64748b);
     font-size: 3rem;
   }
+
   .book-info-simple {
     padding: 0.75rem;
   }
+
   .book-title-simple {
     font-weight: 600;
     font-size: 0.85rem;
@@ -572,11 +647,13 @@
     margin-bottom: 0.25rem;
     line-height: 1.3;
   }
+
   .book-author-simple {
     font-size: 0.75rem;
     color: var(--text-muted, #64748b);
     margin-bottom: 0.5rem;
   }
+
   .book-borrow-count {
     font-size: 0.7rem;
     color: var(--accent, #2563eb);
@@ -598,302 +675,37 @@
 {% endif %}
 <div class="home-content-wrapper">
 
-<!-- Welcome Banner with Logo -->
-<div class="welcome-banner">
-  <div class="d-flex align-items-center gap-3">
-    {% if logo and logo.image %}
-   {#<img src="{{ logo.image.url }}" alt="MSICT" class="wb-logo">#}
-    {% else %}
-    <img src="{% static 'images/msict_logo.png' %}" alt="MSICT" class="wb-logo">
-    {% endif %}
-    <div>
-      <p class="wb-title">MSICT Library Management System</p>
-      <p class="wb-sub">Military School of Information and Technology &mdash; Your Gateway to Knowledge</p>
-    
+  <!-- Welcome Banner with Logo -->
+  <div class="welcome-banner">
+    <div class="d-flex align-items-center gap-3">
+      {% if logo and logo.image %}
+      {#<img src="{{ logo.image.url }}" alt="MSICT" class="wb-logo">#}
+      {% else %}
+      <img src="{% static 'images/msict_logo.png' %}" alt="MSICT" class="wb-logo">
+      {% endif %}
+      <div>
+        <p class="wb-title">MSICT Library Management System</p>
+        <p class="wb-sub">Military School of Information and Technology &mdash; Your Gateway to Knowledge</p>
+
+      </div>
+
     </div>
-  
+
   </div>
 
-</div>
-
-<!-- Hero Carousel - Media Slides -->
-{% if carousel_slides %}
-<div class="mb-4 rounded overflow-hidden shadow-lg">
-  <div class="swiper hero-carousel" id="heroSwiper">
-    <div class="swiper-wrapper">
-      {% for slide in carousel_slides %}
-      <div class="swiper-slide" {% if slide.link_url %}onclick="window.location.href='{{ slide.link_url }}'"{% endif %}>
-        <img src="{{ slide.image.url }}" alt="{{ slide.title }}">
-        <div class="slide-content">
-          <div class="slide-title">{{ slide.title }}</div>
-          {% if slide.description %}
-          <div class="slide-desc">{{ slide.description|truncatechars:120 }}</div>
-          {% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    <div class="swiper-pagination"></div>
-    <div class="swiper-button-next"></div>
-    <div class="swiper-button-prev"></div>
-  </div>
-</div>
-{% endif %}
-
-<!-- Quick Search -->
-<div class="card p-4 mb-4" style="border-top:4px solid var(--accent)">
-  <h5 class="fw-bold mb-3"><i class="bi bi-search"></i> Search the Catalog</h5>
-  <form action="{% url 'catalog_search' %}" method="get" class="row g-2" id="homeSearchForm" autocomplete="off" data-no-auto-submit>
-    <div class="col-md-9 position-relative">
-      <input type="text" name="q" id="homeSearchInput"
-             class="form-control form-control-lg"
-             placeholder="Type a title, author, or ISBN…"
-             autocomplete="off" spellcheck="false">
-      <div class="search-dropdown" id="homeSearchDropdown"></div>
-    </div>
-    <div class="col-md-3">
-      <button type="submit" class="btn btn-msict btn-lg w-100"><i class="bi bi-search"></i> Search</button>
-    </div>
-  </form>
-<!-- Advertisements Section -->
-{% if advertisements %}
-<div class="row g-3 mb-4">
-  {% for ad in advertisements %}
-  <div class="col-md-4">
-    <div class="ad-card shadow-sm" {% if ad.link_url %}onclick="window.location.href='{{ ad.link_url }}'"{% endif %}>
-      <img src="{{ ad.image.url }}" alt="{{ ad.title }}">
-      <div class="ad-overlay">
-        <h6 class="fw-bold mb-1">{{ ad.title }}</h6>
-        {% if ad.description %}
-        <p class="small mb-0 opacity-75">{{ ad.description|truncatechars:60 }}</p>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-<!-- Stats Banner - Circular Style -->
-<div class="row g-1 mb-4">
-  <div class="col-md-3">
-    <a href="{% url 'catalog_search' %}" class="text-decoration-none">
-    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
-      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(13, 110, 253, 0.35);"></div>
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
-        <div class="text-center position-relative z-1">
-          <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ total_books_count }}</div>
-        </div>
-      </div>
-      <div class="text-center mt-2">
-        <div class="fw-semibold small">Books in Catalog</div>
-      </div>
-    </div>
-    </a>
-  </div>
-  <div class="col-2">
-    <a href="{% url 'catalog_search' %}?copy_type=softcopy" class="text-decoration-none">
-    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
-      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#198754 0% 100%, rgba(25, 135, 84, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(25, 135, 84, 0.35);"></div>
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
-        <div class="text-center position-relative z-1">
-          <div class="fs-3 fw-bold" style="color: #198754;">{{ softcopy_count }}</div>
-        </div>
-      </div>
-      <div class="text-center mt-2">
-        <div class="fw-semibold small">Softcopies</div>
-      </div>
-    </div>
-    </a>
-  </div>
-  <div class="col-2">
-    <a href="{% url 'catalog_search' %}?copy_type=hardcopy" class="text-decoration-none">
-    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
-      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#7c3aed 0% 100%, rgba(124, 58, 237, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);"></div>
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
-        <div class="text-center position-relative z-1">
-          <div class="fs-3 fw-bold" style="color: #7c3aed;">{{ hardcopy_count }}</div>
-        </div>
-      </div>
-      <div class="text-center mt-2">
-        <div class="fw-semibold small">Hardcopies</div>
-      </div>
-    </div>
-    </a>
-  </div>
-  <div class="col-2">
-    <a href="{% url 'catalog_search' %}?has_course=1" class="text-decoration-none">
-    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
-      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#d97706 0% 100%, rgba(217, 119, 6, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(217, 119, 6, 0.35);"></div>
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
-        <div class="text-center position-relative z-1">
-          <div class="fs-3 fw-bold" style="color: #d97706;">Course</div>
-        </div>
-      </div>
-      <div class="text-center mt-2">
-        <div class="fw-semibold small">Related Books</div>
-      </div>
-    </div>
-    </a>
-  </div>
-  <div class="col-2">
-    <a href="{% url 'catalog_search' %}#federated-section" class="text-decoration-none">
-    <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;" onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
-      <div class="position-relative d-flex align-items-center justify-content-center" style="width: 90px; height: 90px;">
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 90px; background: conic-gradient(#0891b2 0% 100%, rgba(8, 145, 178, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(8, 145, 178, 0.35);"></div>
-        <div class="rounded-circle position-absolute" style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);"></div>
-        <div class="text-center position-relative z-1">
-          <div class="fs-3 fw-bold" style="color: #0891b2;">Fed</div>
-        </div>
-      </div>
-      <div class="text-center mt-2">
-        <div class="fw-semibold small">Federated Search</div>
-      </div>
-    </div>
-    </a>
-  </div>
-</div>
-
-<!-- Most Reading Books -->
-{% if most_borrowed_books %}
-<div class="card mb-4 shadow-sm">
-  <div class="card-header bg-light">
-    <h5 class="fw-bold mb-0"><i class="bi bi-fire"></i> Most Reading Books</h5>
-  </div>
-  <div class="card-body p-0">
-    <div class="row g-0">
-      {% for book in most_borrowed_books %}
-      <div class="col-6 col-md-3">
-        <a href="{% url 'book_detail_public' book.pk %}" class="text-decoration-none">
-          <div class="book-card-simple">
-            {% if book.cover_image %}
-              <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" class="book-cover-simple">
-            {% else %}
-              <div class="book-cover-placeholder">
-                <i class="bi bi-book"></i>
-              </div>
-            {% endif %}
-            <div class="book-info-simple">
-              <div class="book-title-simple">{{ book.title|truncatechars:30 }}</div>
-              <div class="book-author-simple">{{ book.author|truncatechars:25 }}</div>
-              <div class="book-borrow-count">
-                <i class="bi bi-graph-up-arrow"></i> {{ book.borrow_count }} borrows
-              </div>
-            </div>
-          </div>
-        </a>
-      </div>
-      {% endfor %}
-    </div>
-  </div>
-</div>
-{% endif %}
-
-<!-- 3D Circular Carousel - New Arrivals -->
-{% if latest_books %}
-<div class="carousel-3d-container" id="carousel3d">
-  <div class="carousel-3d-header">
-    <div class="carousel-3d-title">
-      <i class="bi bi-stars"></i>
-      New Arrivals
-      <span class="carousel-3d-badge">Latest</span>
-    </div>
-    <div class="carousel-3d-badge">{{ latest_books|length }} Books</div>
-  </div>
-
-  <div class="carousel-3d-ring" id="carousel3dRing">
-    {% for book in latest_books %}
-    <a class="carousel-3d-item" data-index="{{ forloop.counter0 }}" href="{% url 'book_detail_public' book.pk %}" title="{{ book.title }}">
-      <div class="book-card-3d">
-        {% if book.cover_image %}
-          <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" loading="lazy">
-        {% else %}
-          <div class="d-flex align-items-center justify-content-center h-100 w-100" style="background: transparent;">
-            <div class="text-center p-3">
-              <i class="bi bi-book d-block mb-2" style="font-size: 2.5rem; opacity: 0.5; color: #94a3b8;"></i>
-              <div class="small" style="color: #94a3b8; font-size: 0.65rem; line-height: 1.3;">{{ book.title|truncatechars:20 }}</div>
-            </div>
-          </div>
-        {% endif %}
-        <div class="book-title-3d">{{ book.title|truncatechars:25 }}</div>
-      </div>
-    </a>
-    {% endfor %}
-  </div>
-
-  <div class="carousel-3d-indicators" id="carousel3dIndicators">
-    {% for book in latest_books %}
-    <div class="carousel-3d-dot{% if forloop.first %} active{% endif %}" data-index="{{ forloop.counter0 }}"></div>
-    {% endfor %}
-  </div>
-
-  <div class="carousel-3d-controls">
-    <button class="carousel-3d-btn" id="carousel3dPrev" title="Previous">
-      <i class="bi bi-chevron-left"></i>
-    </button>
-    <button class="carousel-3d-btn" id="carousel3dNext" title="Next">
-      <i class="bi bi-chevron-right"></i>
-    </button>
-  </div>
-
-  <div class="carousel-paused-indicator" id="pausedIndicator">
-    <i class="bi bi-pause-circle"></i> Paused
-  </div>
-</div>
-{% endif %}
-
-<!-- News Banners -->
-{% if news_banners %}
-<div class="row g-3 mb-4">
-  {% for banner in news_banners %}
-  <div class="col-md-6">
-    <div class="card border-0 shadow-sm overflow-hidden" {% if banner.link_url %}onclick="window.location.href='{{ banner.link_url }}'" style="cursor: pointer;"{% endif %}>
-      <div class="row g-0">
-        <div class="col-4">
-          <img src="{{ banner.image.url }}" class="img-fluid h-100" style="object-fit: cover;" alt="{{ banner.title }}">
-        </div>
-        <div class="col-8">
-          <div class="card-body">
-            <span class="badge bg-info mb-2">{{ banner.get_slide_type_display }}</span>
-            <h6 class="card-title fw-bold">{{ banner.title }}</h6>
-            <p class="card-text small text-muted">{{ banner.description|truncatechars:100 }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
-
-<!-- Featured Books Gallery -->
-{% if carousel_books %}
-<div class="card mb-4 shadow-sm">
-  <div class="card-header bg-light">
-    <h5 class="fw-bold mb-0"><i class="bi bi-book-half"></i> Featured Books</h5>
-  </div>
-  <div class="card-body p-0">
-    <div class="swiper book-gallery" id="bookSwiper">
+  <!-- Hero Carousel - Media Slides -->
+  {% if carousel_slides %}
+  <div class="mb-4 rounded overflow-hidden shadow-lg">
+    <div class="swiper hero-carousel" id="heroSwiper">
       <div class="swiper-wrapper">
-        {% for book in carousel_books %}
-        <div class="swiper-slide" onclick="window.location.href='{% url 'book_detail_public' book.pk %}'">
-          {% if book.cover_image %}
-            <img src="{{ book.cover_image.url }}" alt="{{ book.title }}">
-          {% else %}
-            <div class="d-flex align-items-center justify-content-center h-100 w-100" style="background: transparent;">
-              <div class="text-center p-3 text-white">
-                <i class="bi bi-book mb-2 d-block" style="font-size: 3rem; opacity: 0.5;"></i>
-                <div class="fw-bold small">{{ book.title|truncatechars:25 }}</div>
-              </div>
-            </div>
-          {% endif %}
-          <div class="book-overlay">
-            <div class="fw-bold small mb-1">{{ book.title|truncatechars:30 }}</div>
-            <div class="opacity-75" style="font-size: 0.7rem;">{{ book.author|truncatechars:25 }}</div>
+        {% for slide in carousel_slides %}
+        <div class="swiper-slide" {% if slide.link_url %}onclick="window.location.href='{{ slide.link_url }}'" {% endif %}>
+          <img src="{{ slide.image.url }}" alt="{{ slide.title }}">
+          <div class="slide-content">
+            <div class="slide-title">{{ slide.title }}</div>
+            {% if slide.description %}
+            <div class="slide-desc">{{ slide.description|truncatechars:120 }}</div>
+            {% endif %}
           </div>
         </div>
         {% endfor %}
@@ -903,205 +715,659 @@
       <div class="swiper-button-prev"></div>
     </div>
   </div>
-</div>
-{% endif %}
-
-<!-- News Section -->
-{% if news_items %}
-<div class="mb-2">
-  <h6 class="fw-bold mb-3"><i class="bi bi-newspaper"></i> Library News & Announcements</h6>
-  <div class="row g-3">
-    {% for item in news_items %}
-    <div class="col-md-{% if forloop.first and news_items|length > 1 %}8{% else %}4{% endif %}">
-      <div class="card h-100 border-0 shadow-sm overflow-hidden">
-
-        {% if item.image %}
-        <div style="height:{% if forloop.first and news_items|length > 1 %}200px{% else %}130px{% endif %};overflow:hidden;">
-          <img src="{{ item.image.url }}" alt="{{ item.title }}"
-               style="width:100%;height:100%;object-fit:cover;">
-        </div>
-        {% elif item.video_url %}
-        <div style="height:{% if forloop.first and news_items|length > 1 %}200px{% else %}130px{% endif %};">
-          <iframe src="{{ item.embed_video_url }}" style="width:100%;height:100%;border:none;"
-                  allowfullscreen loading="lazy"></iframe>
-        </div>
-        {% endif %}
-
-        <div class="card-body p-3">
-          <div class="mb-1">
-            {% if item.news_type == 'announcement' %}
-              <span class="badge bg-info text-dark" style="font-size:0.65rem;">Announcement</span>
-            {% elif item.news_type == 'event' %}
-              <span class="badge bg-success" style="font-size:0.65rem;">Event</span>
-            {% elif item.news_type == 'advertisement' %}
-              <span class="badge bg-warning text-dark" style="font-size:0.65rem;">Ad</span>
-            {% else %}
-              <span class="badge bg-primary" style="font-size:0.65rem;">News</span>
-            {% endif %}
-            {% if item.is_featured %}
-              <span class="badge bg-warning text-dark" style="font-size:0.65rem;"><i class="bi bi-star-fill"></i></span>
-            {% endif %}
-          </div>
-          <div class="fw-semibold mb-1" style="line-height:1.3;">
-            {% if forloop.first and news_items|length > 1 %}{{ item.title|truncatechars:100 }}{% else %}{{ item.title|truncatechars:60 }}{% endif %}
-          </div>
-          <div class="small text-muted mb-2">{% if forloop.first and news_items|length > 1 %}{{ item.content|truncatechars:200 }}{% else %}{{ item.content|truncatechars:80 }}{% endif %}</div>
-          <div class="small text-muted mb-2"><i class="bi bi-clock"></i> {{ item.created_at|date:"d M Y" }}</div>
-          <div class="d-flex gap-2 flex-wrap">
-            {% if item.link_url %}
-            <a href="{{ item.link_url }}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
-              <i class="bi bi-link-45deg"></i> Read More
-            </a>
-            {% endif %}
-            {% if item.attachment %}
-            <a href="{{ item.attachment.url }}" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2">
-              <i class="bi bi-file-earmark-arrow-down"></i> Download
-            </a>
-            {% endif %}
-          </div>
-        </div>
-
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
-
-<!-- Editable Footer -->
-{% if footer %}
-<footer class="bg-dark text-white mt-5 py-4">
-  <div class="container">
-    <div class="row g-4">
-      <!-- Contact Info -->
-      <div class="col-md-4">
-        <h6 class="fw-bold mb-3">{{ footer.school_name }}</h6>
-        {% if footer.address %}
-        <p class="small mb-2"><i class="bi bi-geo-alt"></i> {{ footer.address }}</p>
-        {% endif %}
-        {% if footer.phone %}
-        <p class="small mb-2"><i class="bi bi-telephone"></i> {{ footer.phone }}</p>
-        {% endif %}
-        {% if footer.email %}
-        <p class="small mb-2"><i class="bi bi-envelope"></i> {{ footer.email }}</p>
-        {% endif %}
-        {% if footer.location %}
-        <p class="small mb-0"><i class="bi bi-geo"></i> {{ footer.location }}</p>
-        {% endif %}
-      </div>
-      
-      <!-- Quick Links -->
-      <div class="col-md-4">
-        <h6 class="fw-bold mb-3">Quick Links</h6>
-        <ul class="list-unstyled small">
-          {% if footer.faq_link %}
-          <li class="mb-2"><a href="{{ footer.faq_link }}" class="text-white text-decoration-none"><i class="bi bi-question-circle"></i> FAQ</a></li>
-          {% endif %}
-          {% for link in footer.additional_links_parsed %}
-          <li class="mb-2"><a href="{{ link.url }}" class="text-white text-decoration-none"><i class="bi bi-link-45deg"></i> {{ link.label }}</a></li>
-          {% endfor %}
-        </ul>
-      </div>
-      
-      <!-- Social Media -->
-      <div class="col-md-4">
-        <h6 class="fw-bold mb-3">Connect With Us</h6>
-        <div class="d-flex gap-3">
-          {% if footer.social_facebook %}
-          <a href="{{ footer.social_facebook }}" target="_blank" class="text-white fs-5"><i class="bi bi-facebook"></i></a>
-          {% endif %}
-          {% if footer.social_twitter %}
-          <a href="{{ footer.social_twitter }}" target="_blank" class="text-white fs-5"><i class="bi bi-twitter-x"></i></a>
-          {% endif %}
-          {% if footer.social_linkedin %}
-          <a href="{{ footer.social_linkedin }}" target="_blank" class="text-white fs-5"><i class="bi bi-linkedin"></i></a>
-          {% endif %}
-          {% if footer.social_instagram %}
-          <a href="{{ footer.social_instagram }}" target="_blank" class="text-white fs-5"><i class="bi bi-instagram"></i></a>
-          {% endif %}
-        </div>
-      </div>
-    </div>
-    
-    <hr class="my-4 border-secondary">
-    
-    <!-- Copyright -->
-    <div class="text-center small text-muted">
-      {{ footer.copyright_text }}
-    </div>
-  </div>
-</footer>
-{% endif %}
-
-</div>{# /home-content-wrapper #}
-{% endblock %}
-
-{% block extra_js %}
-<script>
-  /* ── Login-first intercept for unauthenticated users ── */
-  {% if not user.is_authenticated %}
-  (function() {
-    const loginUrl = '{% url "login" %}';
-
-    function redirectToLogin(nextUrl) {
-      window.location.href = loginUrl + '?next=' + encodeURIComponent(nextUrl || window.location.href);
-    }
-
-    /* Intercept all <a> clicks inside home content */
-    document.addEventListener('click', function(e) {
-      const link = e.target.closest('a');
-      if (link && link.href && !link.href.startsWith('javascript:') && !link.href.startsWith('#')) {
-        e.preventDefault();
-        redirectToLogin(link.href);
-        return;
-      }
-      /* Intercept elements with onclick handlers (carousel slides, ad cards, etc.) */
-      const clickable = e.target.closest('[onclick], .swiper-slide, .ad-card, .carousel-3d-item, .book-card-simple');
-      if (clickable) {
-        e.preventDefault();
-        e.stopPropagation();
-        redirectToLogin(window.location.origin + window.location.pathname);
-        return;
-      }
-    }, true);
-
-    /* Intercept form submissions */
-    document.addEventListener('submit', function(e) {
-      e.preventDefault();
-      const form = e.target;
-      const nextUrl = form.action || window.location.href;
-      redirectToLogin(nextUrl);
-    }, true);
-  })();
   {% endif %}
 
-  /* ── Real-time catalog search ───────────────────────── */
-  (function () {
-    const input    = document.getElementById('homeSearchInput');
-    const dropdown = document.getElementById('homeSearchDropdown');
-    const API      = '{% url "catalog_autocomplete" %}';
-    let timer, activeIdx = -1;
+  <!-- Quick Search -->
+  <div class="card p-4 mb-4" style="border-top:4px solid var(--accent)">
+    <h5 class="fw-bold mb-3"><i class="bi bi-search"></i> Online Public Access Catalog (OPAC)</h5>
+    <form action="{% url 'catalog_search' %}" method="get" class="row g-2" id="homeSearchForm" autocomplete="off"
+      data-no-auto-submit>
+      <div class="col-md-9 position-relative">
+        <input type="text" name="q" id="homeSearchInput" class="form-control form-control-lg"
+          placeholder="Type a title, author, or ISBN…" autocomplete="off" spellcheck="false">
+        <div class="search-dropdown" id="homeSearchDropdown"></div>
+      </div>
+      <div class="col-md-3">
+        <button type="submit" class="btn btn-msict btn-lg w-100"><i class="bi bi-search"></i> Search</button>
+      </div>
+    </form>
+    
+    <div class="mt-3 text-center">
+      <p class="mb-0 text-muted">
+        <i class="bi bi-journal-text me-1"></i>
+        If you have an account, you can also login to search external books at 
+        <a href="https://search.ebscohost.com/" target="_blank" class="fw-bold text-decoration-none">EBSCOhost</a>.
+      </p>
+    </div>
 
-    if (!input) return;
+    <!-- Advertisements Section -->
+    {% if advertisements %}
+    <div class="row g-3 mb-4">
+      {% for ad in advertisements %}
+      <div class="col-md-4">
+        <div class="ad-card shadow-sm" {% if ad.link_url %}onclick="window.location.href='{{ ad.link_url }}'" {% endif %}>
+          <img src="{{ ad.image.url }}" alt="{{ ad.title }}">
+          <div class="ad-overlay">
+            <h6 class="fw-bold mb-1">{{ ad.title }}</h6>
+            {% if ad.description %}
+            <p class="small mb-0 opacity-75">{{ ad.description|truncatechars:60 }}</p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
 
-    function show(html) {
-      requestAnimationFrame(function() {
-        dropdown.innerHTML = html;
-        dropdown.style.display = 'block';
-      });
-    }
-    function hide() {
-      dropdown.style.display = 'none';
-      activeIdx = -1;
-    }
+    <!-- Stats Banner - Circular Style -->
+    <div class="row g-1 mb-4">
+      <div class="col-2">
+        <a href="{% url 'catalog_search' %}" class="text-decoration-none">
+          <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;"
+            onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+            <div class="position-relative d-flex align-items-center justify-content-center"
+              style="width: 90px; height: 90px;">
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 90px; background: conic-gradient(#0d6efd 0% 100%, rgba(13, 110, 253, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(13, 110, 253, 0.35);">
+              </div>
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);">
+              </div>
+              <div class="text-center position-relative z-1">
+                <div class="fs-3 fw-bold" style="color: #0d6efd;">{{ total_books_count }}</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <div class="fw-semibold small">Catalog</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="col-2">
+        <a href="{% url 'catalog_search' %}?copy_type=softcopy" class="text-decoration-none">
+          <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;"
+            onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+            <div class="position-relative d-flex align-items-center justify-content-center"
+              style="width: 90px; height: 90px;">
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 90px; background: conic-gradient(#198754 0% 100%, rgba(25, 135, 84, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(25, 135, 84, 0.35);">
+              </div>
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);">
+              </div>
+              <div class="text-center position-relative z-1">
+                <div class="fs-3 fw-bold" style="color: #198754;">{{ softcopy_count }}</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <div class="fw-semibold small">Softcopies</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="col-2">
+        <a href="{% url 'catalog_search' %}?copy_type=hardcopy" class="text-decoration-none">
+          <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;"
+            onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+            <div class="position-relative d-flex align-items-center justify-content-center"
+              style="width: 90px; height: 90px;">
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 90px; background: conic-gradient(#7c3aed 0% 100%, rgba(124, 58, 237, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(124, 58, 237, 0.35);">
+              </div>
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);">
+              </div>
+              <div class="text-center position-relative z-1">
+                <div class="fs-3 fw-bold" style="color: #7c3aed;">{{ hardcopy_count }}</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <div class="fw-semibold small">Hardcopies</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="col-2">
+        <a href="{% url 'catalog_search' %}?has_course=1" class="text-decoration-none">
+          <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;"
+            onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+            <div class="position-relative d-flex align-items-center justify-content-center"
+              style="width: 90px; height: 90px;">
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 90px; background: conic-gradient(#d97706 0% 100%, rgba(217, 119, 6, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(217, 119, 6, 0.35);">
+              </div>
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);">
+              </div>
+              <div class="text-center position-relative z-1">
+                <div class="fs-3 fw-bold" style="color: #d97706;">Course</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <div class="fw-semibold small">Related Books</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="col-2">
+        <a href="{% url 'catalog_search' %}#federated-section" class="text-decoration-none">
+          <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;"
+            onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+            <div class="position-relative d-flex align-items-center justify-content-center"
+              style="width: 90px; height: 90px;">
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 90px; background: conic-gradient(#0891b2 0% 100%, rgba(8, 145, 178, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(8, 145, 178, 0.35);">
+              </div>
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);">
+              </div>
+              <div class="text-center position-relative z-1">
+                <div class="fs-3 fw-bold" style="color: #0891b2;">Fed</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <div class="fw-semibold small">Federated Search</div>
+            </div>
+          </div>
+        </a>
+      </div>
+      <div class="col-2">
+        <a href="https://search.ebscohost.com/" target="_blank" class="text-decoration-none">
+          <div class="d-flex flex-column align-items-center" style="cursor:pointer;transition:transform .15s;"
+            onmouseover="this.style.transform='translateY(-5px)'" onmouseout="this.style.transform=''">
+            <div class="position-relative d-flex align-items-center justify-content-center"
+              style="width: 90px; height: 90px;">
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 90px; background: conic-gradient(#e11d48 0% 100%, rgba(225, 29, 72, 0.1) 100% 100%); box-shadow: 0 6px 18px rgba(225, 29, 72, 0.35);">
+              </div>
+              <div class="rounded-circle position-absolute"
+                style="width: 90px; height: 70px; background: white; box-shadow: inset 0 2px 8px rgba(0,0,0,0.08);">
+              </div>
+              <div class="text-center position-relative z-1">
+                <div class="fs-3 fw-bold" style="color: #e11d48;">Ebs</div>
+              </div>
+            </div>
+            <div class="text-center mt-2">
+              <div class="fw-semibold small">EBSCOhost</div>
+            </div>
+          </div>
+        </a>
+      </div>
+    </div>
 
-    function buildItems(results, q) {
-      if (!results.length) {
-        return `<div class="sd-empty"><i class="bi bi-search me-1"></i>No matches for "<b>${q}</b>"</div>`;
+    <!-- Most Reading Books -->
+    {% if most_borrowed_books %}
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-light">
+        <h5 class="fw-bold mb-0"><i class="bi bi-fire"></i> Most Reading Books</h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="row g-0">
+          {% for book in most_borrowed_books %}
+          <div class="col-6 col-md-3">
+            <a href="{% url 'book_detail_public' book.pk %}" class="text-decoration-none">
+              <div class="book-card-simple">
+                {% if book.cover_image %}
+                <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" class="book-cover-simple">
+                {% else %}
+                <div class="book-cover-placeholder">
+                  <i class="bi bi-book"></i>
+                </div>
+                {% endif %}
+                <div class="book-info-simple">
+                  <div class="book-title-simple">{{ book.title|truncatechars:30 }}</div>
+                  <div class="book-author-simple">{{ book.author|truncatechars:25 }}</div>
+                  <div class="book-borrow-count">
+                    <i class="bi bi-graph-up-arrow"></i> {{ book.borrow_count }} borrows
+                  </div>
+                </div>
+              </div>
+            </a>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- 3D Circular Carousel - New Arrivals -->
+    {% if latest_books %}
+    <div class="carousel-3d-container" id="carousel3d">
+      <div class="carousel-3d-header">
+        <div class="carousel-3d-title">
+          <i class="bi bi-stars"></i>
+          New Arrivals
+          <span class="carousel-3d-badge">Latest</span>
+        </div>
+        <div class="carousel-3d-badge">{{ latest_books|length }} Books</div>
+      </div>
+
+      <div class="carousel-3d-ring" id="carousel3dRing">
+        {% for book in latest_books %}
+        <a class="carousel-3d-item" data-index="{{ forloop.counter0 }}" href="{% url 'book_detail_public' book.pk %}"
+          title="{{ book.title }}">
+          <div class="book-card-3d">
+            {% if book.cover_image %}
+            <img src="{{ book.cover_image.url }}" alt="{{ book.title }}" loading="lazy">
+            {% else %}
+            <div class="d-flex align-items-center justify-content-center h-100 w-100" style="background: transparent;">
+              <div class="text-center p-3">
+                <i class="bi bi-book d-block mb-2" style="font-size: 2.5rem; opacity: 0.5; color: #94a3b8;"></i>
+                <div class="small" style="color: #94a3b8; font-size: 0.65rem; line-height: 1.3;">{{
+                  book.title|truncatechars:20 }}</div>
+              </div>
+            </div>
+            {% endif %}
+            <div class="book-title-3d">{{ book.title|truncatechars:25 }}</div>
+          </div>
+        </a>
+        {% endfor %}
+      </div>
+
+      <div class="carousel-3d-indicators" id="carousel3dIndicators">
+        {% for book in latest_books %}
+        <div class="carousel-3d-dot{% if forloop.first %} active{% endif %}" data-index="{{ forloop.counter0 }}"></div>
+        {% endfor %}
+      </div>
+
+      <div class="carousel-3d-controls">
+        <button class="carousel-3d-btn" id="carousel3dPrev" title="Previous">
+          <i class="bi bi-chevron-left"></i>
+        </button>
+        <button class="carousel-3d-btn" id="carousel3dNext" title="Next">
+          <i class="bi bi-chevron-right"></i>
+        </button>
+      </div>
+
+      <div class="carousel-paused-indicator" id="pausedIndicator">
+        <i class="bi bi-pause-circle"></i> Paused
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- News Banners -->
+    {% if news_banners %}
+    <div class="row g-3 mb-4">
+      {% for banner in news_banners %}
+      <div class="col-md-6">
+        <div class="card border-0 shadow-sm overflow-hidden" {% if banner.link_url %}onclick="window.location.href='{{ banner.link_url }}'" style="cursor: pointer;" {% endif %}>
+          <div class="row g-0">
+            <div class="col-4">
+              <img src="{{ banner.image.url }}" class="img-fluid h-100" style="object-fit: cover;"
+                alt="{{ banner.title }}">
+            </div>
+            <div class="col-8">
+              <div class="card-body">
+                <span class="badge bg-info mb-2">{{ banner.get_slide_type_display }}</span>
+                <h6 class="card-title fw-bold">{{ banner.title }}</h6>
+                <p class="card-text small text-muted">{{ banner.description|truncatechars:100 }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Featured Books Gallery -->
+    {% if carousel_books %}
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-light">
+        <h5 class="fw-bold mb-0"><i class="bi bi-book-half"></i> Featured Books</h5>
+      </div>
+      <div class="card-body p-0">
+        <div class="swiper book-gallery" id="bookSwiper">
+          <div class="swiper-wrapper">
+            {% for book in carousel_books %}
+            <div class="swiper-slide" onclick="window.location.href='{% url 'book_detail_public' book.pk %}'">
+              {% if book.cover_image %}
+              <img src="{{ book.cover_image.url }}" alt="{{ book.title }}">
+              {% else %}
+              <div class="d-flex align-items-center justify-content-center h-100 w-100"
+                style="background: transparent;">
+                <div class="text-center p-3 text-white">
+                  <i class="bi bi-book mb-2 d-block" style="font-size: 3rem; opacity: 0.5;"></i>
+                  <div class="fw-bold small">{{ book.title|truncatechars:25 }}</div>
+                </div>
+              </div>
+              {% endif %}
+              <div class="book-overlay">
+                <div class="fw-bold small mb-1">{{ book.title|truncatechars:30 }}</div>
+                <div class="opacity-75" style="font-size: 0.7rem;">{{ book.author|truncatechars:25 }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="swiper-pagination"></div>
+          <div class="swiper-button-next"></div>
+          <div class="swiper-button-prev"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    <!-- Opening Hours Widget -->
+    <div class="row g-3 mb-4">
+      <div class="col-12 col-lg-8 mx-auto">
+        <div class="opening-hours-widget">
+          <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <h5 class="fw-bold mb-0 text-white"><i class="bi bi-clock-history me-2"></i>Library opening hours</h5>
+            <div class="d-flex align-items-center gap-2">
+              <div class="oh-toggle-group">
+                <button type="button" class="oh-toggle-btn active" data-target="semester">Semester</button>
+                <button type="button" class="oh-toggle-btn" data-target="vacation">Vacation</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="oh-semester-pane" class="oh-pane">
+            <div class="oh-row">
+              <span class="oh-label">Monday – Friday</span>
+              <div class="oh-value">{{ opening_hours.semester.mon_fri }}</div>
+            </div>
+            <div class="oh-row">
+              <span class="oh-label">Saturday</span>
+              <div class="oh-value">{{ opening_hours.semester.sat }}</div>
+            </div>
+            <div class="oh-row">
+              <span class="oh-label">Sunday</span>
+              <div class="oh-value">{{ opening_hours.semester.sun }}</div>
+            </div>
+            <div class="oh-row">
+              <span class="oh-label">Public holidays</span>
+              <div class="oh-value">{{ opening_hours.semester.holidays }}</div>
+            </div>
+            <div class="mt-3">
+              <div class="oh-note">{{ opening_hours.semester.note }}</div>
+            </div>
+          </div>
+
+          <div id="oh-vacation-pane" class="oh-pane d-none">
+            <div class="oh-row">
+              <span class="oh-label">Monday – Friday</span>
+              <div class="oh-value">{{ opening_hours.vacation.mon_fri }}</div>
+            </div>
+            <div class="oh-row">
+              <span class="oh-label">Saturday</span>
+              <div class="oh-value">{{ opening_hours.vacation.sat }}</div>
+            </div>
+            <div class="oh-row">
+              <span class="oh-label">Sunday</span>
+              <div class="oh-value">{{ opening_hours.vacation.sun }}</div>
+            </div>
+            <div class="oh-row">
+              <span class="oh-label">Public holidays</span>
+              <div class="oh-value">{{ opening_hours.vacation.holidays }}</div>
+            </div>
+            <div class="mt-3">
+              <div class="oh-note">{{ opening_hours.vacation.note }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <style>
+      .opening-hours-widget {
+        background: linear-gradient(135deg, rgba(30, 50, 80, 0.85), rgba(15, 30, 55, 0.95));
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        padding: 24px;
+        color: #fff;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
       }
-      const esc = s => s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
-      const hi  = s => esc(s).replace(new RegExp(`(${esc(q)})`, 'gi'), '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 1px">$1</mark>');
-      let html  = results.map(b => `
+
+      .oh-toggle-group {
+        background: rgba(0, 0, 0, 0.4);
+        border-radius: 20px;
+        display: flex;
+        padding: 3px;
+      }
+
+      .oh-toggle-btn {
+        background: transparent;
+        border: none;
+        color: #fff;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .oh-toggle-btn.active {
+        background: #f59e0b;
+        color: #111;
+      }
+
+      .oh-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      }
+
+      .oh-row:last-child {
+        border-bottom: none;
+      }
+
+      .oh-label {
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.9);
+        white-space: nowrap;
+      }
+
+      .oh-value {
+        color: #fff;
+        font-weight: 600;
+        text-align: right;
+        font-size: 0.95rem;
+      }
+
+      .oh-note {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #eee;
+        width: 100%;
+        border-radius: 8px;
+        padding: 14px;
+        text-align: center;
+        font-size: 0.9rem;
+      }
+    </style>
+    <script>
+      document.addEventListener('DOMContentLoaded', function () {
+        const btns = document.querySelectorAll('.opening-hours-widget .oh-toggle-btn');
+        const panes = document.querySelectorAll('.opening-hours-widget .oh-pane');
+        btns.forEach(btn => {
+          btn.addEventListener('click', function () {
+            btns.forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            panes.forEach(p => p.classList.add('d-none'));
+            const target = this.dataset.target;
+            document.getElementById('oh-' + target + '-pane').classList.remove('d-none');
+          });
+        });
+      });
+    </script>
+
+    <!-- News Section -->
+    {% if news_items %}
+    <div class="mb-2">
+      <h6 class="fw-bold mb-3"><i class="bi bi-newspaper"></i> Library News & Announcements</h6>
+      <div class="row g-3">
+        {% for item in news_items %}
+        <div class="col-md-{% if forloop.first and news_items|length > 1 %}8{% else %}4{% endif %}">
+          <div class="card h-100 border-0 shadow-sm overflow-hidden">
+
+            {% if item.image %}
+            <div
+              style="height:{% if forloop.first and news_items|length > 1 %}200px{% else %}130px{% endif %};overflow:hidden;">
+              <img src="{{ item.image.url }}" alt="{{ item.title }}" style="width:100%;height:100%;object-fit:cover;">
+            </div>
+            {% elif item.video_url %}
+            <div style="height:{% if forloop.first and news_items|length > 1 %}200px{% else %}130px{% endif %};">
+              <iframe src="{{ item.embed_video_url }}" style="width:100%;height:100%;border:none;" allowfullscreen
+                loading="lazy"></iframe>
+            </div>
+            {% endif %}
+
+            <div class="card-body p-3">
+              <div class="mb-1">
+                {% if item.news_type == 'announcement' %}
+                <span class="badge bg-info text-dark" style="font-size:0.65rem;">Announcement</span>
+                {% elif item.news_type == 'event' %}
+                <span class="badge bg-success" style="font-size:0.65rem;">Event</span>
+                {% elif item.news_type == 'advertisement' %}
+                <span class="badge bg-warning text-dark" style="font-size:0.65rem;">Ad</span>
+                {% else %}
+                <span class="badge bg-primary" style="font-size:0.65rem;">News</span>
+                {% endif %}
+                {% if item.is_featured %}
+                <span class="badge bg-warning text-dark" style="font-size:0.65rem;"><i
+                    class="bi bi-star-fill"></i></span>
+                {% endif %}
+              </div>
+              <div class="fw-semibold mb-1" style="line-height:1.3;">
+                {% if forloop.first and news_items|length > 1 %}{{ item.title|truncatechars:100 }}{% else %}{{
+                item.title|truncatechars:60 }}{% endif %}
+              </div>
+              <div class="small text-muted mb-2">{% if forloop.first and news_items|length > 1 %}{{
+                item.content|truncatechars:200 }}{% else %}{{ item.content|truncatechars:80 }}{% endif %}</div>
+              <div class="small text-muted mb-2"><i class="bi bi-clock"></i> {{ item.created_at|date:"d M Y" }}</div>
+              <div class="d-flex gap-2 flex-wrap">
+                {% if item.link_url %}
+                <a href="{{ item.link_url }}" target="_blank" class="btn btn-sm btn-outline-primary py-0 px-2">
+                  <i class="bi bi-link-45deg"></i> Read More
+                </a>
+                {% endif %}
+                {% if item.attachment %}
+                <a href="{{ item.attachment.url }}" target="_blank" class="btn btn-sm btn-outline-success py-0 px-2">
+                  <i class="bi bi-file-earmark-arrow-down"></i> Download
+                </a>
+                {% endif %}
+              </div>
+            </div>
+
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+
+    <!-- Editable Footer -->
+    {% if footer %}
+    <footer class="text-white mt-5 py-4" {% if footer.bg_color %}style="background-color: {{ footer.bg_color }} !important;"{% else %}style="background-color: #212529 !important;"{% endif %}>
+      <div class="container">
+        <div class="row g-4">
+          <!-- Contact Info -->
+          <div class="col-md-4">
+            <h6 class="fw-bold mb-3">{{ footer.school_name }}</h6>
+            {% if footer.address %}
+            <p class="small mb-2"><i class="bi bi-geo-alt"></i> {{ footer.address }}</p>
+            {% endif %}
+            {% if footer.phone %}
+            <p class="small mb-2"><i class="bi bi-telephone"></i> {{ footer.phone }}</p>
+            {% endif %}
+            {% if footer.email %}
+            <p class="small mb-2"><i class="bi bi-envelope"></i> {{ footer.email }}</p>
+            {% endif %}
+            {% if footer.location %}
+            <p class="small mb-0"><i class="bi bi-geo"></i> {{ footer.location }}</p>
+            {% endif %}
+          </div>
+
+          <!-- Quick Links -->
+          <div class="col-md-4">
+            <h6 class="fw-bold mb-3">Quick Links</h6>
+            <ul class="list-unstyled small">
+              <li class="mb-2"><a href="{% url 'faq' %}" class="text-white text-decoration-none"><i
+                    class="bi bi-question-circle"></i> FAQ</a></li>
+              {% for link in footer.additional_links_parsed %}
+              <li class="mb-2"><a href="{{ link.url }}" class="text-white text-decoration-none"><i
+                    class="bi bi-link-45deg"></i> {{ link.label }}</a></li>
+              {% endfor %}
+            </ul>
+          </div>
+
+          <!-- Social Media -->
+          <div class="col-md-4">
+            <h6 class="fw-bold mb-3">Connect With Us</h6>
+            <div class="d-flex gap-3">
+              {% if footer.social_facebook %}
+              <a href="{{ footer.social_facebook }}" target="_blank" class="text-white fs-5"><i
+                  class="bi bi-facebook"></i></a>
+              {% endif %}
+              {% if footer.social_twitter %}
+              <a href="{{ footer.social_twitter }}" target="_blank" class="text-white fs-5"><i
+                  class="bi bi-twitter-x"></i></a>
+              {% endif %}
+              {% if footer.social_linkedin %}
+              <a href="{{ footer.social_linkedin }}" target="_blank" class="text-white fs-5"><i
+                  class="bi bi-linkedin"></i></a>
+              {% endif %}
+              {% if footer.social_instagram %}
+              <a href="{{ footer.social_instagram }}" target="_blank" class="text-white fs-5"><i
+                  class="bi bi-instagram"></i></a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-4 border-secondary">
+
+        <!-- Copyright -->
+        <div class="text-center small text-muted">
+          {{ footer.copyright_text }}
+        </div>
+      </div>
+    </footer>
+    {% endif %}
+
+  </div>{# /home-content-wrapper #}
+  {% endblock %}
+
+  {% block extra_js %}
+  <script>
+    /* ── Login-first intercept for unauthenticated users ── */
+    {% if not user.is_authenticated %}
+    // Login requirement for clicking cards has been removed as requested.
+    // Book details are accessible to guests, and borrowing is restricted on the book detail page.
+    {% endif %}
+
+    /* ── Real-time catalog search ───────────────────────── */
+    (function () {
+      const input = document.getElementById('homeSearchInput');
+      const dropdown = document.getElementById('homeSearchDropdown');
+      const API = '{% url "catalog_autocomplete" %}';
+      let timer, activeIdx = -1;
+
+      if (!input) return;
+
+      function show(html) {
+        requestAnimationFrame(function () {
+          dropdown.innerHTML = html;
+          dropdown.style.display = 'block';
+        });
+      }
+      function hide() {
+        dropdown.style.display = 'none';
+        activeIdx = -1;
+      }
+
+      function buildItems(results, q) {
+        if (!results.length) {
+          return `<div class="sd-empty"><i class="bi bi-search me-1"></i>No matches for "<b>${q}</b>"</div>`;
+        }
+        const esc = s => s.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        const hi = s => esc(s).replace(new RegExp(`(${esc(q)})`, 'gi'), '<mark style="background:#dbeafe;color:#1d4ed8;border-radius:2px;padding:0 1px">$1</mark>');
+        let html = results.map(b => `
         <a class="sd-item" href="/books/${b.id}/">
           <div class="sd-icon"><i class="bi bi-book"></i></div>
           <div>
@@ -1109,264 +1375,264 @@
             <div class="sd-sub">${esc(b.author)}${b.isbn ? ' &nbsp;·&nbsp; ISBN: ' + esc(b.isbn) : ''}</div>
           </div>
         </a>`).join('');
-      html += `<div class="sd-footer"><a href="/catalog/?q=${encodeURIComponent(q)}" style="color:#2563eb;font-weight:600;">View all results for "${q}" →</a></div>`;
-      return html;
-    }
-
-    input.addEventListener('input', function () {
-      clearTimeout(timer);
-      const q = this.value.trim();
-      activeIdx = -1;
-      if (q.length < 1) { hide(); return; }
-
-      show('<div class="sd-loading"><i class="bi bi-arrow-repeat"></i> Searching…</div>');
-
-      timer = setTimeout(() => {
-        fetch(`${API}?q=${encodeURIComponent(q)}`)
-          .then(r => r.json())
-          .then(d => show(buildItems(d.results || [], q)))
-          .catch(() => show('<div class="sd-empty text-danger"><i class="bi bi-exclamation-circle me-1"></i>Search error</div>'));
-      }, 180);
-    });
-
-    /* Keyboard navigation */
-    input.addEventListener('keydown', function (e) {
-      const items = dropdown.querySelectorAll('.sd-item');
-      if (!items.length) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        activeIdx = Math.min(activeIdx + 1, items.length - 1);
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        activeIdx = Math.max(activeIdx - 1, 0);
-      } else if (e.key === 'Escape') {
-        hide(); return;
-      } else if (e.key === 'Enter' && activeIdx >= 0) {
-        e.preventDefault();
-        items[activeIdx].click(); return;
-      } else { return; }
-      items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
-      if (activeIdx >= 0) items[activeIdx].scrollIntoView({ block: 'nearest' });
-    });
-
-    /* Close on outside click */
-    document.addEventListener('click', function (e) {
-      if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
-    });
-
-    /* Reopen on focus if value exists */
-    input.addEventListener('focus', function () {
-      if (this.value.trim().length >= 1 && dropdown.innerHTML) dropdown.style.display = 'block';
-    });
-  })();
-
-  document.addEventListener('DOMContentLoaded', function() {
-    // Hero Carousel — scoped selectors to avoid conflicts
-    {% if carousel_slides %}
-    var heroSwiper = new Swiper("#heroSwiper", {
-      slidesPerView: 1,
-      spaceBetween: 0,
-      loop: true,
-      speed: 700,
-      autoplay: { delay: 5000, disableOnInteraction: false },
-      pagination: { el: "#heroSwiper .swiper-pagination", clickable: true },
-      navigation: {
-        nextEl: "#heroSwiper .swiper-button-next",
-        prevEl: "#heroSwiper .swiper-button-prev",
-      },
-    });
-    {% endif %}
-
-    // Book Gallery Carousel — scoped selectors
-    {% if carousel_books %}
-    var bookSwiper = new Swiper("#bookSwiper", {
-      spaceBetween: 16,
-      loop: true,
-      speed: 600,
-      autoplay: { delay: 3000, disableOnInteraction: false },
-      pagination: { el: "#bookSwiper .swiper-pagination", clickable: true },
-      navigation: {
-        nextEl: "#bookSwiper .swiper-button-next",
-        prevEl: "#bookSwiper .swiper-button-prev",
-      },
-      breakpoints: {
-        320:  { slidesPerView: 2, spaceBetween: 10 },
-        640:  { slidesPerView: 3, spaceBetween: 12 },
-        768:  { slidesPerView: 4, spaceBetween: 14 },
-        1024: { slidesPerView: 5, spaceBetween: 16 },
-      }
-    });
-    {% endif %}
-
-    // 3D Circular Carousel — New Arrivals
-    {% if latest_books %}
-    (function() {
-      const container = document.getElementById('carousel3d');
-      const ring = document.getElementById('carousel3dRing');
-      const items = container.querySelectorAll('.carousel-3d-item');
-      const dots = container.querySelectorAll('.carousel-3d-dot');
-      const prevBtn = document.getElementById('carousel3dPrev');
-      const nextBtn = document.getElementById('carousel3dNext');
-      const pausedIndicator = document.getElementById('pausedIndicator');
-
-      const itemCount = items.length;
-      const radius = 320; // Distance from center
-      let currentIndex = 0;
-      let isAutoPlaying = true;
-      let autoPlayInterval;
-
-      // Position items in 3D circle
-      function positionItems() {
-        const angleStep = 360 / itemCount;
-
-        items.forEach((item, index) => {
-          const angle = angleStep * index;
-          const rotateY = angle;
-          const translateZ = radius;
-
-          // Calculate position on the ring
-          item.style.transform = `rotateY(${rotateY}deg) translateZ(${translateZ}px)`;
-          item.style.opacity = index === currentIndex ? '1' : '0.6';
-
-          // Add active class to current item
-          item.classList.toggle('active', index === currentIndex);
-        });
-
-        // Rotate the ring to show current item
-        const ringRotation = angleStep * currentIndex;
-        
-        ring.style.transform = `translateZ(-${radius}px) rotateY(${ringRotation}deg)`;
-
-        // Update dots
-        dots.forEach((dot, index) => {
-          dot.classList.toggle('active', index === currentIndex);
-        });
+        html += `<div class="sd-footer"><a href="/catalog/?q=${encodeURIComponent(q)}" style="color:#2563eb;font-weight:600;">View all results for "${q}" →</a></div>`;
+        return html;
       }
 
-      // Navigate to specific index
-      function goTo(index) {
-        currentIndex = ((index % itemCount) + itemCount) % itemCount;
-        positionItems();
-      }
+      input.addEventListener('input', function () {
+        clearTimeout(timer);
+        const q = this.value.trim();
+        activeIdx = -1;
+        if (q.length < 1) { hide(); return; }
 
-      function next() {
-        goTo(currentIndex + 1);
-      }
+        show('<div class="sd-loading"><i class="bi bi-arrow-repeat"></i> Searching…</div>');
 
-      function prev() {
-        goTo(currentIndex - 1);
-      }
-
-      // Auto-play
-      function startAutoPlay() {
-        if (!isAutoPlaying) return;
-        autoPlayInterval = setInterval(() => {
-          next();
-        }, 2500); // Rotate every 2-3 seconds
-      }
-
-      function stopAutoPlay() {
-        clearInterval(autoPlayInterval);
-      }
-
-      function pause() {
-        stopAutoPlay();
-        isAutoPlaying = false;
-        pausedIndicator.style.opacity = '1';
-      }
-
-      function resume() {
-        isAutoPlaying = true;
-        pausedIndicator.style.opacity = '0';
-        startAutoPlay();
-      }
-
-      // Event listeners
-      prevBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        prev();
-        pause();
-        setTimeout(resume, 5000); // Resume after 5 seconds
+        timer = setTimeout(() => {
+          fetch(`${API}?q=${encodeURIComponent(q)}`)
+            .then(r => r.json())
+            .then(d => show(buildItems(d.results || [], q)))
+            .catch(() => show('<div class="sd-empty text-danger"><i class="bi bi-exclamation-circle me-1"></i>Search error</div>'));
+        }, 180);
       });
 
-      nextBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        next();
-        pause();
-        setTimeout(resume, 5000);
+      /* Keyboard navigation */
+      input.addEventListener('keydown', function (e) {
+        const items = dropdown.querySelectorAll('.sd-item');
+        if (!items.length) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          activeIdx = Math.min(activeIdx + 1, items.length - 1);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          activeIdx = Math.max(activeIdx - 1, 0);
+        } else if (e.key === 'Escape') {
+          hide(); return;
+        } else if (e.key === 'Enter' && activeIdx >= 0) {
+          e.preventDefault();
+          items[activeIdx].click(); return;
+        } else { return; }
+        items.forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+        if (activeIdx >= 0) items[activeIdx].scrollIntoView({ block: 'nearest' });
       });
 
-      // Dot navigation
-      dots.forEach((dot, index) => {
-        dot.addEventListener('click', (e) => {
-          e.stopPropagation();
-          goTo(index);
-          pause();
-          setTimeout(resume, 5000);
-        });
+      /* Close on outside click */
+      document.addEventListener('click', function (e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
       });
 
-      // Pause on hover
-      container.addEventListener('mouseenter', () => {
-        stopAutoPlay();
-      });
-
-      container.addEventListener('mouseleave', () => {
-        if (isAutoPlaying) startAutoPlay();
-      });
-
-      // Keyboard navigation
-      document.addEventListener('keydown', (e) => {
-        if (!container.matches(':hover')) return;
-        if (e.key === 'ArrowLeft') {
-          prev();
-          pause();
-          setTimeout(resume, 5000);
-        } else if (e.key === 'ArrowRight') {
-          next();
-          pause();
-          setTimeout(resume, 5000);
-        }
-      });
-
-      // Touch/swipe support
-      let touchStartX = 0;
-      let touchEndX = 0;
-
-      container.addEventListener('touchstart', (e) => {
-        touchStartX = e.changedTouches[0].screenX;
-        pause();
-      }, { passive: true });
-
-      container.addEventListener('touchend', (e) => {
-        touchEndX = e.changedTouches[0].screenX;
-        handleSwipe();
-        setTimeout(resume, 5000);
-      }, { passive: true });
-
-      function handleSwipe() {
-        const swipeThreshold = 50;
-        const diff = touchStartX - touchEndX;
-        if (Math.abs(diff) > swipeThreshold) {
-          if (diff > 0) next();
-          else prev();
-        }
-      }
-
-      // Initialize
-      positionItems();
-      startAutoPlay();
-
-      // Visibility API - pause when tab is not visible
-      document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-          stopAutoPlay();
-        } else if (isAutoPlaying) {
-          startAutoPlay();
-        }
+      /* Reopen on focus if value exists */
+      input.addEventListener('focus', function () {
+        if (this.value.trim().length >= 1 && dropdown.innerHTML) dropdown.style.display = 'block';
       });
     })();
-    {% endif %}
-  });
-</script>
-{% endblock %}
+
+    document.addEventListener('DOMContentLoaded', function () {
+      // Hero Carousel — scoped selectors to avoid conflicts
+      {% if carousel_slides %}
+      var heroSwiper = new Swiper("#heroSwiper", {
+        slidesPerView: 1,
+        spaceBetween: 0,
+        loop: true,
+        speed: 700,
+        autoplay: { delay: 5000, disableOnInteraction: false },
+        pagination: { el: "#heroSwiper .swiper-pagination", clickable: true },
+        navigation: {
+          nextEl: "#heroSwiper .swiper-button-next",
+          prevEl: "#heroSwiper .swiper-button-prev",
+        },
+      });
+      {% endif %}
+
+      // Book Gallery Carousel — scoped selectors
+      {% if carousel_books %}
+      var bookSwiper = new Swiper("#bookSwiper", {
+        spaceBetween: 16,
+        loop: true,
+        speed: 600,
+        autoplay: { delay: 3000, disableOnInteraction: false },
+        pagination: { el: "#bookSwiper .swiper-pagination", clickable: true },
+        navigation: {
+          nextEl: "#bookSwiper .swiper-button-next",
+          prevEl: "#bookSwiper .swiper-button-prev",
+        },
+        breakpoints: {
+          320: { slidesPerView: 2, spaceBetween: 10 },
+          640: { slidesPerView: 3, spaceBetween: 12 },
+          768: { slidesPerView: 4, spaceBetween: 14 },
+          1024: { slidesPerView: 5, spaceBetween: 16 },
+        }
+      });
+      {% endif %}
+
+      // 3D Circular Carousel — New Arrivals
+      {% if latest_books %}
+      (function () {
+        const container = document.getElementById('carousel3d');
+        const ring = document.getElementById('carousel3dRing');
+        const items = container.querySelectorAll('.carousel-3d-item');
+        const dots = container.querySelectorAll('.carousel-3d-dot');
+        const prevBtn = document.getElementById('carousel3dPrev');
+        const nextBtn = document.getElementById('carousel3dNext');
+        const pausedIndicator = document.getElementById('pausedIndicator');
+
+        const itemCount = items.length;
+        const radius = 320; // Distance from center
+        let currentIndex = 0;
+        let isAutoPlaying = true;
+        let autoPlayInterval;
+
+        // Position items in 3D circle
+        function positionItems() {
+          const angleStep = 360 / itemCount;
+
+          items.forEach((item, index) => {
+            const angle = angleStep * index;
+            const rotateY = angle;
+            const translateZ = radius;
+
+            // Calculate position on the ring
+            item.style.transform = `rotateY(${rotateY}deg) translateZ(${translateZ}px)`;
+            item.style.opacity = index === currentIndex ? '1' : '0.6';
+
+            // Add active class to current item
+            item.classList.toggle('active', index === currentIndex);
+          });
+
+          // Rotate the ring to show current item
+          const ringRotation = angleStep * currentIndex;
+
+          ring.style.transform = `translateZ(-${radius}px) rotateY(${ringRotation}deg)`;
+
+          // Update dots
+          dots.forEach((dot, index) => {
+            dot.classList.toggle('active', index === currentIndex);
+          });
+        }
+
+        // Navigate to specific index
+        function goTo(index) {
+          currentIndex = ((index % itemCount) + itemCount) % itemCount;
+          positionItems();
+        }
+
+        function next() {
+          goTo(currentIndex + 1);
+        }
+
+        function prev() {
+          goTo(currentIndex - 1);
+        }
+
+        // Auto-play
+        function startAutoPlay() {
+          if (!isAutoPlaying) return;
+          autoPlayInterval = setInterval(() => {
+            next();
+          }, 2500); // Rotate every 2-3 seconds
+        }
+
+        function stopAutoPlay() {
+          clearInterval(autoPlayInterval);
+        }
+
+        function pause() {
+          stopAutoPlay();
+          isAutoPlaying = false;
+          pausedIndicator.style.opacity = '1';
+        }
+
+        function resume() {
+          isAutoPlaying = true;
+          pausedIndicator.style.opacity = '0';
+          startAutoPlay();
+        }
+
+        // Event listeners
+        prevBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          prev();
+          pause();
+          setTimeout(resume, 5000); // Resume after 5 seconds
+        });
+
+        nextBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          next();
+          pause();
+          setTimeout(resume, 5000);
+        });
+
+        // Dot navigation
+        dots.forEach((dot, index) => {
+          dot.addEventListener('click', (e) => {
+            e.stopPropagation();
+            goTo(index);
+            pause();
+            setTimeout(resume, 5000);
+          });
+        });
+
+        // Pause on hover
+        container.addEventListener('mouseenter', () => {
+          stopAutoPlay();
+        });
+
+        container.addEventListener('mouseleave', () => {
+          if (isAutoPlaying) startAutoPlay();
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+          if (!container.matches(':hover')) return;
+          if (e.key === 'ArrowLeft') {
+            prev();
+            pause();
+            setTimeout(resume, 5000);
+          } else if (e.key === 'ArrowRight') {
+            next();
+            pause();
+            setTimeout(resume, 5000);
+          }
+        });
+
+        // Touch/swipe support
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        container.addEventListener('touchstart', (e) => {
+          touchStartX = e.changedTouches[0].screenX;
+          pause();
+        }, { passive: true });
+
+        container.addEventListener('touchend', (e) => {
+          touchEndX = e.changedTouches[0].screenX;
+          handleSwipe();
+          setTimeout(resume, 5000);
+        }, { passive: true });
+
+        function handleSwipe() {
+          const swipeThreshold = 50;
+          const diff = touchStartX - touchEndX;
+          if (Math.abs(diff) > swipeThreshold) {
+            if (diff > 0) next();
+            else prev();
+          }
+        }
+
+        // Initialize
+        positionItems();
+        startAutoPlay();
+
+        // Visibility API - pause when tab is not visible
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            stopAutoPlay();
+          } else if (isAutoPlaying) {
+            startAutoPlay();
+          }
+        });
+      })();
+      {% endif %}
+    });
+  </script>
+  {% endblock %}

@@ -38,156 +38,157 @@
 </div>
 {% else %}
   {% for grp in grouped_reports %}
-  <div class="card mb-3">
-    <div class="card-header lr-member-header">
-      <div class="lr-member-meta">
-        <div>
-          <div class="fw-bold">{{ grp.user.get_full_name }}</div>
-          <div class="small text-muted">Military School of Information &amp; Technology</div>
+  <div class="card mb-4 shadow-sm border-0">
+    <div class="card-header bg-dark text-white p-3 rounded-top">
+      <div class="row align-items-center g-3">
+        <div class="col-md-4">
+          <div class="fw-bold fs-5 mb-1">{{ grp.user.get_full_name }}</div>
+          <div class="small text-white-50"><i class="bi bi-building"></i> Military School of IT</div>
         </div>
-        <div>
-          <div class="small">Army No: <strong class="text-muted">{{ grp.user.army_no|default:'—' }}</strong></div>
-          <div class="small">Email: <strong class="text-muted">{{ grp.user.email|default:'—' }}</strong></div>
-          <div class="small">Phone: <strong class="text-muted">{{ grp.user.phone|default:'—' }}</strong></div>
+        <div class="col-md-4">
+          <div class="small text-white-75"><span style="display:inline-block; width:65px;">Army No:</span> <strong class="text-white">{{ grp.user.army_no|default:'—' }}</strong></div>
+          <div class="small text-white-75"><span style="display:inline-block; width:65px;">Email:</span> <strong class="text-white">{{ grp.user.email|default:'—' }}</strong></div>
+          <div class="small text-white-75"><span style="display:inline-block; width:65px;">Phone:</span> <strong class="text-white">{{ grp.user.phone|default:'—' }}</strong></div>
         </div>
-        <div>
-          <div class="small">Role: <strong class="text-muted">{{ grp.user.get_role_display|default:'—' }}</strong></div>
-          <div class="rank-badge">{{ grp.user.rank.rank_name|default:'—' }}</div>
-        </div>
-      </div>
-      <div class="small text-muted">Reports: <span class="badge bg-secondary">{{ grp.reports|length }}</span></div>
-    </div>
-    <div class="card-body p-0">
-      <div class="table-responsive">
-        <table class="table table-hover mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th>Ref</th>
-              <th>Book / Acc</th>
-              <th>Reported</th>
-              <th>Fines (Loss / Overdue)</th>
-              <th>Remaining</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for report in grp.reports %}
-            {% with tx=report.transaction copy=report.transaction.copy %}
-            <tr>
-              <td><span class="badge bg-secondary">LR-{{ report.seq_no }}</span></td>
-              <td>
-                <div class="fw-semibold">{{ copy.book.title|truncatechars:50 }}</div>
-                <div class="small text-muted">Acc: {{ copy.accession_no }} · {{ copy.book.author|default:'—' }}</div>
-              </td>
-              <td class="small text-muted">{{ report.reported_at|date:"d M Y" }}<br>{{ report.reported_at|time:"H:i" }}</td>
-              <td>
-                {% if report.loss_fine %}
-                <div class="text-danger">Loss: TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}</div>
-                {% endif %}
-                {% if report.overdue_fine %}
-                <div class="text-warning">Overdue: TZS {{ report.overdue_fine.amount|floatformat:0|intcomma }}</div>
-                {% endif %}
-                {% if not report.loss_fine and not report.overdue_fine %}<span class="text-muted">—</span>{% endif %}
-              </td>
-              <td>
-                <strong class="text-danger">TZS {{ report.total_remaining|floatformat:0|intcomma }}</strong>
-              </td>
-              <td>
-                <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}bg-danger{% elif report.status == 'resolved' %}bg-success{% else %}bg-secondary{% endif %}">{{ report.get_status_display }}</span>
-              </td>
-                <td>
-                {% if report.total_remaining > 0 or report.status == 'pending' or report.status == 'confirmed' %}
-                <div class="dropdown">
-                  <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                    <i class="bi bi-three-dots-vertical me-1"></i> Actions
-                  </button>
-                  <ul class="dropdown-menu dropdown-menu-end shadow-sm" style="min-width:200px;">
-
-                    {% if report.total_remaining > 0 %}
-                    <li>
-                      <button class="dropdown-item fw-semibold" type="button"
-                              data-bs-toggle="modal" data-bs-target="#payModal-{{ report.pk }}">
-                        <i class="bi bi-cash-stack me-2 text-primary"></i> Record Payment
-                      </button>
-                    </li>
-                    {% endif %}
-
-                    {% if report.status == 'pending' %}
-                    {% if report.total_remaining > 0 %}<li><hr class="dropdown-divider my-1"></li>{% endif %}
-                    <li>
-                      <button class="dropdown-item fw-semibold" type="button"
-                              data-bs-toggle="modal" data-bs-target="#confirmModal-{{ report.pk }}">
-                        <i class="bi bi-check-circle me-2 text-danger"></i> Confirm Loss
-                      </button>
-                    </li>
-                    <li>
-                      <form method="post" action="{% url 'confirm_loss' report.pk %}" class="m-0"
-                            onsubmit="return confirm('Are you sure you want to dismiss LR-{{ report.seq_no }}?')">
-                        {% csrf_token %}
-                        <input type="hidden" name="action" value="dismiss">
-                        <button type="submit" class="dropdown-item fw-semibold">
-                          <i class="bi bi-x-circle me-2 text-secondary"></i> Dismiss Report
-                        </button>
-                      </form>
-                    </li>
-                    {% endif %}
-
-                    {% if report.status == 'pending' or report.status == 'confirmed' %}
-                    <li><hr class="dropdown-divider my-1"></li>
-                    <li>
-                      <button class="dropdown-item fw-semibold" type="button"
-                              data-bs-toggle="modal" data-bs-target="#recoverModal-{{ report.pk }}">
-                        <i class="bi bi-arrow-return-left me-2 text-success"></i> Mark Recovered
-                      </button>
-                    </li>
-                    {% endif %}
-
-                  </ul>
-                </div>
-                {% else %}
-                <a href="{% url 'loss_fine_receipt_pdf' report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
-                  <i class="bi bi-receipt"></i> Receipt
-                </a>
-                <a href="{% url 'loss_fine_receipt_pdf' report.pk %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
-                  <i class="bi bi-download"></i>
-                </a>
-                {% endif %}
-              </td>
-            </tr>
-            {% endwith %}
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Render full-width detail cards for each report so nothing is clipped -->
-      <div class="px-3 pb-3">
-        {% for report in grp.reports %}
-        <div class="card border-0 border-start border-4 {% if report.status == 'pending' %}border-warning{% elif report.status == 'confirmed' %}border-danger{% elif report.status == 'resolved' %}border-success{% else %}border-secondary{% endif %} mt-2 bg-light shadow-sm lr-report-card">
-          <div class="card-body py-3">
-            <div class="row">
-              <div class="col-md-6">
-                <p class="mb-1"><strong>Ref:</strong> <span class="badge bg-secondary">LR-{{ report.seq_no }}</span></p>
-                <p class="mb-1"><strong>Transaction:</strong> {{ report.transaction.id }}</p>
-                <p class="mb-1"><strong>Borrowed:</strong> {{ report.transaction.borrow_date|date:'d M Y' }}</p>
-                <p class="mb-1"><strong>Due:</strong> {{ report.transaction.due_date|date:'d M Y' }}</p>
-                <p class="mb-1"><strong>Last Known Location:</strong> {{ report.last_known_location|default:'—' }}</p>
-              </div>
-              <div class="col-md-6">
-                <p class="mb-1"><strong>Date Noticed:</strong> {{ report.date_noticed|date:'d M Y H:i'|default:'Not specified' }}</p>
-                <p class="mb-1"><strong>Authority Reported:</strong> {% if report.authority_reported %}Yes — Ref: {{ report.authority_reference|default:'—' }}{% else %}No{% endif %}</p>
-                <p class="mb-1"><strong>Circumstances:</strong> <span class="lr-text">{{ report.circumstances|default:'Not specified' }}</span></p>
-                <p class="mb-1"><strong>Status:</strong> <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}bg-danger{% elif report.status == 'resolved' %}bg-success{% else %}bg-secondary{% endif %}">{{ report.get_status_display }}</span></p>
-              </div>
-            </div>
-            <hr>
-            <p class="mb-1"><strong>Description:</strong><br><span class="lr-text">{{ report.description }}</span></p>
-            {% if report.librarian_notes %}
-            <p class="mb-1"><strong>Librarian Notes:</strong><br><span class="lr-text">{{ report.librarian_notes|linebreaksbr }}</span></p>
-            {% endif %}
+        <div class="col-md-4 d-flex justify-content-between align-items-center border-start border-secondary">
+          <div class="ps-2">
+            <div class="small text-white-75 mb-1"><span style="display:inline-block; width:45px;">Role:</span> <strong class="text-white">{{ grp.user.get_role_display|default:'—' }}</strong></div>
+            <div class="small text-white-75"><span style="display:inline-block; width:45px;">Rank:</span> <span class="badge bg-secondary">{{ grp.user.rank.rank_name|default:'—' }}</span></div>
+          </div>
+          <div class="text-end">
+            <div class="small text-white-50 mb-1">Reports</div>
+            <span class="badge bg-danger fs-6">{{ grp.reports|length }}</span>
           </div>
         </div>
+      </div>
+    </div>
+    <div class="card-body p-3 bg-light">
+        {% for report in grp.reports %}
+        {% with tx=report.transaction copy=report.transaction.copy %}
+        <div class="card mb-3 border-0 border-start border-4 {% if report.status == 'pending' %}border-warning{% elif report.status == 'confirmed' %}border-danger{% elif report.status == 'resolved' %}border-success{% elif report.status == 'recovered' %}border-primary{% else %}border-secondary{% endif %} shadow-sm">
+          <div class="card-header bg-white d-flex flex-wrap gap-2 justify-content-between align-items-center py-2">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              <span class="badge bg-secondary">LR-{{ report.seq_no }}</span>
+              <strong class="text-dark">{{ copy.book.title|truncatechars:70 }}</strong>
+            </div>
+            <div class="d-flex align-items-center flex-wrap gap-2">
+              <span class="badge {% if report.status == 'pending' %}bg-warning text-dark{% elif report.status == 'confirmed' %}{% if report.total_remaining == 0 %}bg-success{% elif report.total_amount > report.total_remaining %}bg-info text-dark{% else %}bg-danger{% endif %}{% elif report.status == 'resolved' %}bg-success{% elif report.status == 'recovered' %}bg-primary{% else %}bg-secondary{% endif %}">
+                {% if report.status == 'confirmed' %}
+                  {% if report.total_remaining == 0 %}Paid
+                  {% elif report.total_amount > report.total_remaining %}Partial Paid
+                  {% else %}Waiting Payment{% endif %}
+                {% elif report.status == 'resolved' %}Paid
+                {% else %}{{ report.get_status_display }}{% endif %}
+              </span>
+              
+              <div class="dropdown d-inline-block">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                  <i class="bi bi-three-dots-vertical"></i> Actions
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                  {% if report.total_remaining > 0 %}
+                  <li>
+                    <button class="dropdown-item fw-semibold" type="button" data-bs-toggle="modal" data-bs-target="#payModal-{{ report.pk }}">
+                      <i class="bi bi-cash-stack me-2 text-primary"></i> Record Payment
+                    </button>
+                  </li>
+                  {% endif %}
+                  {% if report.status == 'pending' %}
+                  {% if report.total_remaining > 0 %}<li><hr class="dropdown-divider my-1"></li>{% endif %}
+                  <li>
+                    <button class="dropdown-item fw-semibold" type="button" data-bs-toggle="modal" data-bs-target="#confirmModal-{{ report.pk }}">
+                      <i class="bi bi-check-circle me-2 text-danger"></i> Confirm Loss
+                    </button>
+                  </li>
+                  <li>
+                    <form method="post" action="{% url 'confirm_loss' report.pk %}" class="m-0" onsubmit="return confirm('Are you sure you want to dismiss LR-{{ report.seq_no }}?')">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="dismiss">
+                      <button type="submit" class="dropdown-item fw-semibold">
+                        <i class="bi bi-x-circle me-2 text-secondary"></i> Dismiss Report
+                      </button>
+                    </form>
+                  </li>
+                  {% endif %}
+                  {% if report.status == 'pending' or report.status == 'confirmed' %}
+                  <li><hr class="dropdown-divider my-1"></li>
+                  <li>
+                    <button class="dropdown-item fw-semibold" type="button" data-bs-toggle="modal" data-bs-target="#recoverModal-{{ report.pk }}">
+                      <i class="bi bi-arrow-return-left me-2 text-success"></i> Mark Recovered
+                    </button>
+                  </li>
+                  {% endif %}
+                  <li><hr class="dropdown-divider my-1"></li>
+                  <li>
+                    <form method="post" action="{% url 'delete_loss_report' report.pk %}" class="m-0" onsubmit="return confirm('Are you sure you want to permanently DELETE report LR-{{ report.seq_no }}?\nThis cannot be undone.')">
+                      {% csrf_token %}
+                      <button type="submit" class="dropdown-item fw-semibold text-danger">
+                        <i class="bi bi-trash me-2"></i> Delete Report
+                      </button>
+                    </form>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="card-body py-3">
+            <div class="row g-3">
+              <!-- Column 1: Info -->
+              <div class="col-lg-4 col-md-6">
+                <h6 class="text-uppercase text-muted mb-2" style="font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px;">Book & Timeline</h6>
+                <div class="d-flex flex-column gap-1 small">
+                  <div><span class="text-muted" style="width: 85px; display: inline-block;">Acc No:</span> <strong class="text-dark">{{ copy.accession_no }}</strong></div>
+                  <div><span class="text-muted" style="width: 85px; display: inline-block;">Borrowed:</span> {{ tx.borrow_date|date:'d M Y' }}</div>
+                  <div><span class="text-muted" style="width: 85px; display: inline-block;">Due:</span> {{ tx.due_date|date:'d M Y' }}</div>
+                  <div><span class="text-muted" style="width: 85px; display: inline-block;">Reported:</span> {{ report.reported_at|date:"d M Y, H:i" }}</div>
+                </div>
+              </div>
+
+              <!-- Column 2: Finances -->
+              <div class="col-lg-4 col-md-6">
+                <h6 class="text-uppercase text-muted mb-2" style="font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px;">Financials</h6>
+                <div class="d-flex flex-column gap-1 small">
+                  {% if report.loss_fine %}<div><span class="text-muted" style="width: 85px; display: inline-block;">Loss Fine:</span> <strong class="text-danger">TZS {{ report.loss_fine.amount|floatformat:0|intcomma }}</strong></div>{% endif %}
+                  {% if report.overdue_fine %}<div><span class="text-muted" style="width: 85px; display: inline-block;">Overdue:</span> <strong class="text-warning text-dark">TZS {{ report.overdue_fine.amount|floatformat:0|intcomma }}</strong></div>{% endif %}
+                  {% if not report.loss_fine and not report.overdue_fine %}<div><span class="text-muted">No fines issued yet.</span></div>{% endif %}
+                  <div class="mt-1 d-flex align-items-center"><span class="text-muted flex-shrink-0" style="width: 85px;">Remaining:</span> <strong class="text-danger fs-6 text-truncate">TZS {{ report.total_remaining|floatformat:0|intcomma }}</strong></div>
+                </div>
+                {% if report.total_amount > report.total_remaining and report.total_amount > 0 %}
+                <div class="mt-2">
+                  <a href="{% url 'loss_fine_receipt_pdf' report.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Print Receipt"><i class="bi bi-receipt"></i> Print</a>
+                  <a href="{% url 'loss_fine_receipt_pdf' report.pk %}?download=1" class="btn btn-sm btn-outline-primary py-0 px-2" title="Download Receipt"><i class="bi bi-download"></i> DL</a>
+                </div>
+                {% endif %}
+              </div>
+
+              <!-- Column 3: Incident Details -->
+              <div class="col-lg-4 col-md-12">
+                <h6 class="text-uppercase text-muted mb-2" style="font-size: 0.75rem; font-weight: 700; letter-spacing: 0.5px;">Incident Details</h6>
+                <div class="d-flex flex-column gap-1 small">
+                  <div><span class="text-muted" style="width: 80px; display: inline-block;">Noticed:</span> {{ report.date_noticed|date:'d M Y H:i'|default:'—' }}</div>
+                  <div><span class="text-muted" style="width: 80px; display: inline-block;">Location:</span> {{ report.last_known_location|default:'—' }}</div>
+                  <div><span class="text-muted" style="width: 80px; display: inline-block;">Authority:</span> {% if report.authority_reported %}Yes (Ref: {{ report.authority_reference|default:'—' }}){% else %}No{% endif %}</div>
+                </div>
+              </div>
+            </div>
+
+            <hr class="my-3 text-black-50">
+            
+            <div class="row">
+              <div class="col-12 small">
+                <p class="mb-2"><strong>Circumstances:</strong> <span class="lr-text text-muted">{{ report.circumstances|default:'—' }}</span></p>
+                <p class="mb-2"><strong>Description:</strong> <span class="lr-text text-muted">{{ report.description|default:'—' }}</span></p>
+                {% if report.librarian_notes %}
+                <div class="p-2 bg-warning bg-opacity-10 rounded border border-warning text-dark mt-2">
+                  <strong class="d-block mb-1"><i class="bi bi-journal-bookmark-fill me-1"></i> Librarian Notes:</strong>
+                  <span class="lr-text">{{ report.librarian_notes|linebreaksbr }}</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endwith %}
         {% endfor %}
       </div>
 
@@ -216,8 +217,9 @@
                   <p>Confirming will mark <strong>{{ copy.book.title }}</strong> (Acc: {{ copy.accession_no }}) as <span class="text-danger fw-bold">LOST</span>.</p>
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Loss Fine Amount (TZS)</label>
-                    <input type="number" name="loss_fine_amount" class="form-control" min="0" step="1" placeholder="0 = no fine" value="{{ copy.book.lost_fine|default:'' }}">
-                    <div class="form-text">Book's default loss fine: <strong>TZS {{ copy.book.lost_fine|default:0|floatformat:0 }}</strong>. Modify if needed.</div>
+                    <input type="text" class="form-control" value="TZS {{ copy.book.lost_fine|default:0|floatformat:0|intcomma }}" disabled>
+                    <input type="hidden" name="loss_fine_amount" value="{{ copy.book.lost_fine|default:0 }}">
+                    <div class="form-text">This fine is fixed based on the book's catalog settings.</div>
                   </div>
                   <div class="mb-3">
                     <label class="form-label fw-semibold">Librarian Notes</label>

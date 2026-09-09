@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.urls import path
 from django.shortcuts import redirect
-from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, GuestSession, BulkMessage, BulkMessageRecipient, UserManualSection
+from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, GuestSession, BulkMessage, BulkMessageRecipient, UserManualSection, TermsSection
 
 
 # ── Customise Django admin site ────────────────────────────────────────────
@@ -56,6 +56,15 @@ class OLMSUserAdmin(UserAdmin):
             'fields': ('username', 'army_no', 'rank', 'first_name', 'surname', 'email', 'phone', 'role', 'password1', 'password2'),
         }),
     )
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # If creating a new user via admin
+            obj.is_active = True
+            obj.registration_status = 'approved'
+            obj.approved_by = request.user
+            from django.utils import timezone
+            obj.approved_at = timezone.now()
+        super().save_model(request, obj, form, change)
 
     def lock_accounts(self, request, queryset):
         updated = queryset.update(is_active=False)
@@ -212,9 +221,34 @@ class UserManualSectionAdmin(admin.ModelAdmin):
     )
     
     def save_model(self, request, obj, form, change):
-        if not change:  # If creating a new object
-            obj.updated_by = request.user
-        else:
-            obj.updated_by = request.user
+        obj.updated_by = request.user
         super().save_model(request, obj, form, change)
 
+
+@admin.register(TermsSection)
+class TermsSectionAdmin(admin.ModelAdmin):
+    list_display = ('order', 'title', 'section_key', 'icon', 'is_active', 'updated_at', 'updated_by')
+    list_display_links = ('title',)
+    list_filter = ('is_active', 'section_key')
+    search_fields = ('title', 'section_key', 'content')
+    list_editable = ('order', 'is_active')
+    readonly_fields = ('updated_at', 'updated_by')
+    ordering = ('order', 'section_key')
+
+    fieldsets = (
+        ('Section Info', {
+            'fields': ('section_key', 'title', 'icon', 'order', 'is_active')
+        }),
+        ('Content', {
+            'description': 'You may use HTML tags: &lt;ul&gt;, &lt;li&gt;, &lt;p&gt;, &lt;strong&gt;, &lt;em&gt;, &lt;a&gt;, &lt;h6&gt;',
+            'fields': ('content',)
+        }),
+        ('Metadata', {
+            'fields': ('updated_at', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+
+    def save_model(self, request, obj, form, change):
+        obj.updated_by = request.user
+        super().save_model(request, obj, form, change)

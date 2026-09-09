@@ -11,7 +11,7 @@
       {% if active_guest_sessions_count %}<span class="badge bg-info text-dark ms-auto">{{ active_guest_sessions_count }}</span>{% endif %}
     </a>
     <a href="{% url 'chat_inbox' %}" class="nav-link{% if cur == 'chat_inbox' %} active{% endif %}" id="navMessages">
-      <i class="bi bi-chat-dots"></i> Messages
+      <i class="bi bi-chat-dots"></i> Messages/Support
       <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
     </a>
     <a href="{% url 'bulk_message' %}" class="nav-link{% if cur == 'bulk_message' %} active{% endif %}"><i class="bi bi-megaphone"></i> Bulk Messaging</a>
@@ -73,7 +73,7 @@
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'librarian_dashboard' %}" class="nav-link{% if cur == 'librarian_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
     <a href="{% url 'chat_inbox' %}" class="nav-link{% if cur == 'chat_inbox' %} active{% endif %}" id="navMessages">
-      <i class="bi bi-chat-dots"></i> Messages
+      <i class="bi bi-chat-dots"></i> Messages/Support
       <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
     </a>
     <a href="{% url 'bulk_message' %}" class="nav-link{% if cur == 'bulk_message' %} active{% endif %}"><i class="bi bi-megaphone"></i> Bulk Messaging</a>
@@ -166,7 +166,7 @@
       <a href="{% url 'media_slide_list' %}" class="nav-link"><i class="bi bi-images"></i> Media &amp; Carousel</a>
       <a href="{% url 'login_content_list' %}" class="nav-link{% if cur == 'login_content_list' or cur == 'login_content_edit' %} active{% endif %}"><i class="bi bi-window-sidebar"></i> Login Page Content</a>
       <a href="{% url 'footer_edit' %}" class="nav-link"><i class="bi bi-layout-text-sidebar-reverse"></i> Footer Settings</a>
-      <a href="{% url 'user_manual' %}" class="nav-link{% if cur == 'user_manual' %} active{% endif %}"><i class="bi bi-book"></i> User Manual</a>
+      <!--<a href="{% url 'user_manual' %}" class="nav-link{% if cur == 'user_manual' %} active{% endif %}"><i class="bi bi-book"></i> User Manual</a> -->
       <a href="{% url 'external_library_list' %}" class="nav-link"><i class="bi bi-globe2"></i> Ext. Libraries</a>
     </div>
   </div>
@@ -201,6 +201,10 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'guest_dashboard' %}" class="nav-link{% if cur == 'guest_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Guest Dashboard</a>
+    <a href="{% url 'chat_inbox' %}" class="nav-link{% if cur == 'chat_inbox' %} active{% endif %}" id="navMessages">
+      <i class="bi bi-chat-dots"></i> Messages/Support
+      <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
+    </a>
     <a href="{% url 'assistant_page' %}" class="nav-link{% if cur == 'assistant_page' %} active{% endif %}"><i class="bi bi-robot"></i> AI Assistant</a>
   </div>
 

@@ -7,6 +7,7 @@ from django.db.models import Q
 from django.conf import settings
 from django.views.decorators.http import require_POST
 from django.template.loader import render_to_string
+from django.utils import timezone
 
 from accounts.views import librarian_required
 from accounts.utils import log_audit, notify_user
@@ -192,6 +193,7 @@ def book_search_ajax(request):
 # ----------------------------------------------------------------------
 def librarian_dashboard_view(request):
     from circulation.models import BorrowRequest, BorrowingTransaction, Reservation, Fine
+    from accounts.models import GuestSession
     from django.db.models import Count, Sum
     from datetime import datetime, timedelta
     from collections import defaultdict
@@ -215,21 +217,33 @@ def librarian_dashboard_view(request):
     pending_accounts = OLMSUser.objects.filter(role='member', registration_status='pending').order_by('-created_at')
     total_books = Book.objects.count()
     total_copies = BookCopy.objects.count()
-    available_copies = BookCopy.objects.filter(status='available').count()
+    available_copies = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     total_members = OLMSUser.objects.filter(role='member', registration_status='approved').count()
+
+    # Active Guest Sessions
+    # Active and Renewed sessions are both considered active
+    active_guest_sessions = GuestSession.objects.filter(status__in=['active', 'renewed', 'expired']).select_related('user').order_by('-sign_in_time')
 
     # Calculate total unpaid fines amount
     total_unpaid_fines_amount = sum(fine.remaining_balance for fine in unpaid_fines)
 
     # Analytics data
     # Monthly borrowing stats for the last 6 months
-    monthly_borrows = defaultdict(int)
-    for i in range(6):
-        month = datetime.now() - timedelta(days=30*i)
-        month_key = month.strftime('%b %Y')
+    monthly_borrows = {}
+    today = timezone.now().date()
+    # Calculate exactly 6 months back, oldest first
+    for i in range(5, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        
+        import datetime as dt
+        month_key = dt.date(y, m, 1).strftime('%b %Y')
         count = BorrowingTransaction.objects.filter(
-            borrow_date__month=month.month,
-            borrow_date__year=month.year
+            borrow_date__month=m,
+            borrow_date__year=y
         ).count()
         monthly_borrows[month_key] = count
 
@@ -283,7 +297,7 @@ def librarian_dashboard_view(request):
     copy_status_data = _json.dumps({
         'labels': ['Available', 'Borrowed', 'Reserved', 'Lost', 'Damaged'],
         'values': [
-            BookCopy.objects.filter(status='available').count(),
+            BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count(),
             BookCopy.objects.filter(status='borrowed').count(),
             BookCopy.objects.filter(status='reserved').count(),
             BookCopy.objects.filter(status='lost').count(),
@@ -330,6 +344,7 @@ def librarian_dashboard_view(request):
         'total_copies': total_copies,
         'available_copies': available_copies,
         'total_members': total_members,
+        'active_guest_sessions': active_guest_sessions,
         'pending_count': pending_requests.count(),
         'overdue_count': overdue_transactions.count(),
         'unpaid_fines_count': unpaid_fines.count(),
@@ -344,6 +359,7 @@ def librarian_dashboard_view(request):
         'revenue_guest_fee': revenue['guest_fee'],
         'revenue_damage': revenue.get('damage', 0),
         'revenue_loss': revenue['loss'],
+        'revenue_unpaid': revenue['unpaid'],
         'revenue_total': revenue['total_revenue'],
         'revenue_net': revenue['net_revenue'],
         'copy_status_data': copy_status_data,
@@ -791,9 +807,21 @@ def copy_create_view(request, book_id):
             if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_EBOOK_EXTS, max_size=MAX_EBOOK_BYTES, label='Softcopy file'):
                 return redirect('book_detail', book_id=book_id)
 
+        # Derive prepaid_fee: use POST value if provided, else fall back to SOFTCOPY_PREPAID_FEE preference
+        if copy_type == 'softcopy':
+            default_fee = float(SystemPreference.get('SOFTCOPY_PREPAID_FEE', 0) or 0)
+            try:
+                prepaid_fee = float(request.POST.get('prepaid_fee', default_fee) or default_fee)
+            except (ValueError, TypeError):
+                prepaid_fee = default_fee
+        else:
+            prepaid_fee = 0
+
         copy = BookCopy(
             book=book, copy_type=copy_type, access_type=access_type,
-            accession_no=accession_no, shelf_location=shelf_location, barcode=barcode or accession_no,
+            accession_no=accession_no, shelf_location=shelf_location,
+            barcode=barcode or accession_no,
+            prepaid_fee=prepaid_fee,
         )
         if softcopy_file is not None:
             copy.file_path = softcopy_file
@@ -962,6 +990,32 @@ def external_library_create_view(request):
         messages.success(request, 'External library added.')
         return redirect('external_library_list')
     return render(request, 'catalog/external_library_form.html')
+
+
+@login_required
+@librarian_required
+def external_library_edit_view(request, lib_id):
+    lib = get_object_or_404(ExternalLibrary, pk=lib_id)
+    if request.method == 'POST':
+        lib.name = request.POST.get('name', '')
+        lib.base_url = request.POST.get('base_url', '')
+        lib.search_param = request.POST.get('search_param', 'q')
+        lib.lib_type = request.POST.get('lib_type', 'opac')
+        lib.is_active = request.POST.get('is_active') == 'on'
+        lib.save()
+        messages.success(request, 'External library updated successfully.')
+        return redirect('external_library_list')
+    return render(request, 'catalog/external_library_form.html', {'library': lib})
+
+
+@login_required
+@librarian_required
+@require_POST
+def external_library_delete_view(request, lib_id):
+    lib = get_object_or_404(ExternalLibrary, pk=lib_id)
+    lib.delete()
+    messages.success(request, 'External library deleted successfully.')
+    return redirect('external_library_list')
 
 
 @login_required
@@ -1306,7 +1360,7 @@ def shelf_location_view(request):
     categories = Category.objects.annotate(
         total_books=Count('books', distinct=True),
         total_copies=Count('books__copies'),
-        available=Count('books__copies', filter=Q(books__copies__status='available')),
+        available=Count('books__copies', filter=Q(books__copies__status='available') & ~Q(books__copies__transactions__status__in=['borrowed', 'overdue'])),
         borrowed=Count('books__copies', filter=Q(books__copies__status='borrowed')),
         reserved=Count('books__copies', filter=Q(books__copies__status='reserved')),
         lost=Count('books__copies', filter=Q(books__copies__status='lost')),
@@ -1410,7 +1464,7 @@ def shelf_detail_view(request, shelf_id):
         books_with_counts.append({
             'book': book,
             'total_copies': copies.count(),
-            'available_copies': copies.filter(status='available').count(),
+            'available_copies': copies.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count(),
             'borrowed_copies': copies.filter(status='borrowed').count(),
             'reserved_copies': copies.filter(status='reserved').count(),
             'lost_copies': copies.filter(status='lost').count(),
@@ -1619,7 +1673,6 @@ def shelves_by_category_api(request, category_id):
     })
 
 
-@login_required
 # ----------------------------------------------------------------------
 # View ya Tafuta Maktaba za Nje — Proxy kwa federated search
 # ----------------------------------------------------------------------
@@ -1842,6 +1895,35 @@ def media_slide_delete_view(request, slide_id):
 # View ya Orodha ya Habari — Mtunzaji anaona habari zote
 # ----------------------------------------------------------------------
 def news_list_view(request):
+    from accounts.models import SystemPreference
+    import json
+    
+    if request.method == 'POST' and request.POST.get('action') == 'update_opening_hours':
+        try:
+            hours_data = {
+                "semester": {
+                    "mon_fri": request.POST.get('sem_mon_fri', ''),
+                    "sat": request.POST.get('sem_sat', ''),
+                    "sun": request.POST.get('sem_sun', ''),
+                    "holidays": request.POST.get('sem_holidays', ''),
+                    "note": request.POST.get('sem_note', '')
+                },
+                "vacation": {
+                    "mon_fri": request.POST.get('vac_mon_fri', ''),
+                    "sat": request.POST.get('vac_sat', ''),
+                    "sun": request.POST.get('vac_sun', ''),
+                    "holidays": request.POST.get('vac_holidays', ''),
+                    "note": request.POST.get('vac_note', '')
+                }
+            }
+            pref, created = SystemPreference.objects.get_or_create(key='LIBRARY_OPENING_HOURS')
+            pref.value = json.dumps(hours_data)
+            pref.save()
+            messages.success(request, 'Library opening hours updated successfully.')
+        except Exception as e:
+            messages.error(request, f'Failed to update opening hours: {e}')
+        return redirect('news_list')
+
     type_filter = request.GET.get('type', '')
     status_filter = request.GET.get('status', 'active')
     query = request.GET.get('q', '')
@@ -1867,6 +1949,33 @@ def news_list_view(request):
         'advertisement': News.objects.filter(news_type='advertisement').count(),
     }
 
+    # Fetch opening hours
+    hours_pref = SystemPreference.get('LIBRARY_OPENING_HOURS')
+    opening_hours = None
+    if hours_pref:
+        try:
+            opening_hours = json.loads(hours_pref)
+        except:
+            pass
+            
+    if not opening_hours:
+        opening_hours = {
+            "semester": {
+                "mon_fri": "08:00 am - 06:30 pm · 07:30 pm - 10:30 pm",
+                "sat": "08:00 am - 06:30 pm · 07:30 pm - 10:30 pm",
+                "sun": "02:00 pm - 06:30 pm · 07:30 pm - 10:30 pm",
+                "holidays": "08:00 am - 06:30 pm · 07:30 pm - 10:30 pm",
+                "note": "Extended night hours during the semester for your convenience. One hour break between the day and night sessions."
+            },
+            "vacation": {
+                "mon_fri": "08:00 am - 05:00 pm",
+                "sat": "08:00 am - 03:30 pm",
+                "sun": "Closed",
+                "holidays": "Closed",
+                "note": "Vacation schedule — reduced hours on Saturday; closed on Sundays and public holidays."
+            }
+        }
+
     return render(request, 'catalog/news_list.html', {
         'news': news,
         'type_filter': type_filter,
@@ -1874,6 +1983,7 @@ def news_list_view(request):
         'query': query,
         'counts': counts,
         'type_choices': News.TYPE_CHOICES,
+        'opening_hours': opening_hours,
     })
 
 

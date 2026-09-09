@@ -8,7 +8,7 @@
 <div class="card">
   <div class="table-responsive">
     <table class="table table-hover mb-0">
-      <thead><tr><th>S/N</th><th>Name</th><th>Contact</th><th>Email</th><th>Phone</th><th>Orders</th></tr></thead>
+      <thead><tr><th>S/N</th><th>Name</th><th>Contact</th><th>Email</th><th>Phone</th><th>Orders</th><th class="text-end">Actions</th></tr></thead>
       <tbody>
         {% for v in vendors %}
         <tr>
@@ -18,9 +18,16 @@
           <td><small>{{ v.email|default:"-" }}</small></td>
           <td>{{ v.phone|default:"-" }}</td>
           <td><span class="badge bg-secondary">{{ v.purchase_orders.count }}</span></td>
+          <td class="text-end text-nowrap">
+            <a href="{% url 'vendor_edit' v.id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+            <form method="post" action="{% url 'vendor_delete' v.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this vendor? This might affect purchase orders.');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
         </tr>
         {% empty %}
-        <tr><td colspan="6" class="text-center py-4 text-muted">No vendors yet.</td></tr>
+        <tr><td colspan="7" class="text-center py-4 text-muted">No vendors yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

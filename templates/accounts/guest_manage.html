@@ -61,6 +61,14 @@
                       <i class="bi bi-stop-circle"></i>
                     </button>
                   </form>
+                  <form method="post" action="{% url 'librarian_guest_session_delete' s.id %}" class="d-inline"
+                        onsubmit="return confirm('Delete this guest session permanently?');">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="guest_manage">
+                    <button class="btn btn-outline-danger btn-sm" title="Delete session">
+                      <i class="bi bi-trash"></i>
+                    </button>
+                  </form>
                   {% if s.payment_status == 'paid' %}
                   <a href="{% url 'guest_session_receipt' s.id %}" target="_blank" class="btn btn-outline-secondary btn-sm" title="Print Receipt">
                     <i class="bi bi-receipt"></i>

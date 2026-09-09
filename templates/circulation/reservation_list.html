@@ -222,8 +222,13 @@
                 </button>
               </form>
             {% endif %}
-            {% if r.status == 'fulfilled' or r.status == 'cancelled' %}
-              <span class="text-muted small">—</span>
+            {% if r.status == 'fulfilled' or r.status == 'cancelled' or r.status == 'expired' %}
+              <form method="post" action="{% url 'delete_reservation_history' r.pk %}" style="display:inline" onsubmit="return confirm('Are you sure you want to permanently delete this reservation record? This cannot be undone.')">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-dark" title="Delete from history">
+                  <i class="bi bi-trash"></i> Delete
+                </button>
+              </form>
             {% endif %}
             </div>
           </td>

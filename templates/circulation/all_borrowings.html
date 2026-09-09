@@ -130,133 +130,224 @@
 </div>
 
 {# Main table #}
-<div id="liveResults">
-<div class="card">
-  <div class="table-responsive">
-    <table class="table table-hover table-sm mb-0 align-middle">
-      <thead class="table-dark">
-        <tr>
-          <th>S/N</th>
-          <th>Book Title</th>
-          <th>Member</th>
-          <th>Acc. No</th>
-          <th>Type</th>
-          <th>Borrow Date</th>
-          <th>Due Date</th>
-          <th>Status</th>
-          <th>Renewal</th>
-          <th>Fine</th>
-          <th>Days Info</th>
-          <th>Approved By</th>
-          <th>Return Date</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for tx in transactions %}
-        <tr class="{% if tx.status == 'overdue' %}table-danger{% elif tx.status == 'returned' %}table-light{% endif %}">
-          <td class="text-muted small">{{ forloop.counter }}</td>
-          <td>
-            <small class="fw-semibold">{{ tx.copy.book.title|truncatechars:40 }}</small>
-            <div class="text-muted" style="font-size:.72rem;">{{ tx.copy.book.author|truncatechars:25 }}</div>
-          </td>
-          <td>
-            <small class="fw-semibold">{{ tx.user.get_full_name }}</small>
-            <div class="text-muted" style="font-size:.72rem;">{{ tx.user.username }}</div>
-          </td>
-          <td><code class="small">{{ tx.copy.display_id }}</code></td>
-          <td>
-            {% if tx.borrow_type == 'hardcopy' %}
-            <span class="badge bg-secondary"><i class="bi bi-book"></i> Hard</span>
-            {% else %}
-            <span class="badge bg-primary"><i class="bi bi-file-earmark-pdf"></i> Soft</span>
-            {% endif %}
-          </td>
-          <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y" }}</small></td>
-          <td><small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% else %}text-muted{% endif %}">{{ tx.due_date|date:"d M Y" }}</small></td>
-          <td>
-            {% if tx.status == 'borrowed' %}
-              <span class="badge bg-success">Borrowed</span>
-            {% elif tx.status == 'overdue' %}
-              <span class="badge bg-danger">Overdue</span>
-            {% elif tx.status == 'lost' %}
-              <span class="badge bg-warning">Lost</span>
-            {% elif tx.status == 'returned' %}
-              <span class="badge bg-secondary">Returned</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if tx.renewal_status %}
-              <span class="badge bg-info"><i class="bi bi-arrow-clockwise"></i> {{ tx.renewal_status }}</span>
-            {% else %}
-              <span class="text-muted small">—</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if tx.renewed_count > 0 %}
-              <span class="text-muted small">—</span>
-            {% else %}
-              {% for tid, fine_info in tx_fines.items %}
-                {% if tid == tx.id %}
-                  {% if fine_info.paid %}
-                  <span class="badge bg-success">Paid</span>
-                  {% elif fine_info.amount_paid > 0 %}
-                  <span class="badge bg-warning text-dark">Partial</span>
-                  {% else %}
-                  <span class="badge bg-danger">Unpaid</span>
+<ul class="nav nav-tabs mb-3 border-bottom-0" id="borrowingTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active fw-bold rounded-top shadow-sm" id="hardcopy-tab" data-bs-toggle="tab" data-bs-target="#hardcopy-pane" type="button" role="tab" aria-controls="hardcopy-pane" aria-selected="true" style="margin-right: 5px;">
+      <i class="bi bi-book text-primary"></i> Physical Hardcopies
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold rounded-top shadow-sm" id="softcopy-tab" data-bs-toggle="tab" data-bs-target="#softcopy-pane" type="button" role="tab" aria-controls="softcopy-pane" aria-selected="false">
+      <i class="bi bi-file-earmark-pdf text-danger"></i> Digital Softcopies
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="borrowingTabsContent">
+  <!-- HARDCOPY TAB -->
+  <div class="tab-pane fade show active" id="hardcopy-pane" role="tabpanel" aria-labelledby="hardcopy-tab" tabindex="0">
+    <div class="card shadow-sm border-top-0 rounded-bottom">
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0 align-middle">
+          <thead class="table-dark">
+            <tr>
+              <th>S/N</th>
+              <th>Book Title</th>
+              <th>Member</th>
+              <th>Acc. No</th>
+              <th>Borrow Date</th>
+              <th>Due Date</th>
+              <th>Status</th>
+              <th>Renewal</th>
+              <th>Fine</th>
+              <th>Days Info</th>
+              <th>Approved By</th>
+              <th>Return Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in transactions %}
+              {% if tx.borrow_type == 'hardcopy' %}
+              <tr class="{% if tx.status == 'overdue' %}table-danger{% elif tx.status == 'returned' %}table-light{% endif %}">
+                <td class="text-muted small">{{ forloop.counter }}</td>
+                <td>
+                  <small class="fw-semibold">{{ tx.copy.book.title|truncatechars:40 }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ tx.copy.book.author|truncatechars:25 }}</div>
+                </td>
+                <td>
+                  <small class="fw-semibold">{{ tx.user.get_full_name }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ tx.user.username }}</div>
+                </td>
+                <td><code class="small">{{ tx.copy.display_id }}</code></td>
+                <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y" }}</small></td>
+                <td><small class="{% if tx.status == 'overdue' %}text-danger fw-bold{% else %}text-muted{% endif %}">{{ tx.due_date|date:"d M Y" }}</small></td>
+                <td>
+                  {% if tx.status == 'borrowed' %}
+                    <span class="badge bg-success">Borrowed</span>
+                  {% elif tx.status == 'overdue' %}
+                    <span class="badge bg-danger">Overdue</span>
+                  {% elif tx.status == 'lost' %}
+                    <span class="badge bg-warning text-dark">Lost</span>
+                  {% elif tx.status == 'returned' %}
+                    <span class="badge bg-secondary">Returned</span>
                   {% endif %}
-                {% endif %}
-              {% empty %}
-              <span class="text-muted small">—</span>
-              {% endfor %}
-            {% endif %}
-          </td>
-          <td>
-            {% if tx.status == 'returned' and tx.return_date %}
-              <span class="badge bg-light text-dark border"><i class="bi bi-check-circle"></i> {{ tx.return_date|timesince:tx.borrow_date }}</span>
-            {% else %}
-              <span class="badge {{ tx.time_remaining_badge_class }}">
-                <i class="bi bi-clock"></i> {{ tx.time_remaining_display }}
-              </span>
-            {% endif %}
-          </td>
-          <td>
-            {% if tx.approved_by %}
-              <small><i class="bi bi-person-badge text-muted"></i> {{ tx.approved_by.get_full_name }}</small>
-            {% else %}
-              <span class="text-muted small">—</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if tx.return_date %}
-              <small class="text-success">{{ tx.return_date|date:"d M Y H:i" }}</small>
-            {% else %}
-              <span class="text-muted small">—</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if tx.status == 'borrowed' or tx.status == 'overdue' %}
-              <button class="btn btn-sm btn-outline-secondary border-0 p-1"
-                      disabled title="Cannot delete — book is still active. Return it first.">
-                <i class="bi bi-trash text-muted"></i>
-              </button>
-            {% else %}
-              <form method="POST" action="{% url 'delete_borrowing' tx.id %}" class="d-inline"
-                    onsubmit="return confirm('Delete this record?\n\nBook: {{ tx.copy.book.title|escapejs }}\nMember: {{ tx.user.get_full_name|escapejs }}\n\nThis action is permanent and cannot be undone.');">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Delete Record">
-                  <i class="bi bi-trash"></i>
-                </button>
-              </form>
-            {% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="13" class="text-center py-5 text-muted">No borrowing transactions found.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+                </td>
+                <td>
+                  {% if tx.renewal_status %}
+                    <span class="badge bg-info text-dark"><i class="bi bi-arrow-clockwise"></i> {{ tx.renewal_status }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.renewed_count > 0 %}
+                    <span class="text-muted small">—</span>
+                  {% else %}
+                    {% for tid, fine_info in tx_fines.items %}
+                      {% if tid == tx.id %}
+                        {% if fine_info.paid %}
+                          {% if tx.status == 'overdue' %}
+                            <span class="badge bg-warning text-dark border border-warning" title="Paid up to today, but book is still not returned">Paid (Unreturned)</span>
+                          {% else %}
+                            <span class="badge bg-success">Paid</span>
+                          {% endif %}
+                        {% elif fine_info.amount_paid > 0 %}
+                          <span class="badge bg-warning text-dark">Partial</span>
+                        {% else %}
+                          <span class="badge bg-danger">Unpaid</span>
+                        {% endif %}
+                      {% endif %}
+                    {% empty %}
+                    <span class="text-muted small">—</span>
+                    {% endfor %}
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.status == 'returned' and tx.return_date %}
+                    <span class="badge bg-light text-dark border"><i class="bi bi-check-circle"></i> {{ tx.return_date|timesince:tx.borrow_date }}</span>
+                  {% else %}
+                    <span class="badge {{ tx.time_remaining_badge_class }}">
+                      <i class="bi bi-clock"></i> {{ tx.time_remaining_display }}
+                    </span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.approved_by %}
+                    <small><i class="bi bi-person-badge text-muted"></i> {{ tx.approved_by.get_full_name }}</small>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.return_date %}
+                    <small class="text-success">{{ tx.return_date|date:"d M Y H:i" }}</small>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.status == 'borrowed' or tx.status == 'overdue' %}
+                    <button class="btn btn-sm btn-outline-secondary border-0 p-1" disabled title="Cannot delete — book is still active. Return it first.">
+                      <i class="bi bi-trash text-muted"></i>
+                    </button>
+                  {% else %}
+                    <form method="POST" action="{% url 'delete_borrowing' tx.id %}" class="d-inline" onsubmit="return confirm('Delete this record?\n\nBook: {{ tx.copy.book.title|escapejs }}\nMember: {{ tx.user.get_full_name|escapejs }}\n\nThis action is permanent and cannot be undone.');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Delete Record">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
-</div>
+
+  <!-- SOFTCOPY TAB -->
+  <div class="tab-pane fade" id="softcopy-pane" role="tabpanel" aria-labelledby="softcopy-tab" tabindex="0">
+    <div class="card shadow-sm border-top-0 rounded-bottom">
+      <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0 align-middle">
+          <thead class="table-secondary">
+            <tr>
+              <th>S/N</th>
+              <th>Book Title</th>
+              <th>Member</th>
+              <th>File Acc. No</th>
+              <th>Access Date</th>
+              <th>Expiry Date</th>
+              <th>Status</th>
+              <th>Days Info</th>
+              <th>Approved By</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for tx in transactions %}
+              {% if tx.borrow_type == 'softcopy' %}
+              <tr class="{% if tx.status == 'returned' %}table-light{% endif %}">
+                <td class="text-muted small">{{ forloop.counter }}</td>
+                <td>
+                  <small class="fw-semibold">{{ tx.copy.book.title|truncatechars:40 }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ tx.copy.book.author|truncatechars:25 }}</div>
+                </td>
+                <td>
+                  <small class="fw-semibold">{{ tx.user.get_full_name }}</small>
+                  <div class="text-muted" style="font-size:.72rem;">{{ tx.user.username }}</div>
+                </td>
+                <td><code class="small text-primary">{{ tx.copy.display_id }}</code></td>
+                <td><small class="text-muted">{{ tx.borrow_date|date:"d M Y H:i" }}</small></td>
+                <td><small class="fw-bold text-muted">{{ tx.due_date|date:"d M Y H:i" }}</small></td>
+                <td>
+                  {% if tx.status == 'borrowed' %}
+                    <span class="badge bg-success">Active Access</span>
+                  {% elif tx.status == 'returned' %}
+                    <span class="badge bg-secondary">Expired</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.status == 'returned' %}
+                    <span class="badge bg-light text-dark border"><i class="bi bi-clock-history"></i> Ended</span>
+                  {% else %}
+                    <span class="badge {{ tx.time_remaining_badge_class }}">
+                      <i class="bi bi-clock"></i> {{ tx.time_remaining_display }}
+                    </span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.approved_by %}
+                    <small><i class="bi bi-person-badge text-muted"></i> {{ tx.approved_by.get_full_name }}</small>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if tx.status == 'borrowed' %}
+                    <button class="btn btn-sm btn-outline-secondary border-0 p-1" disabled title="Cannot delete — access is still active.">
+                      <i class="bi bi-trash text-muted"></i>
+                    </button>
+                  {% else %}
+                    <form method="POST" action="{% url 'delete_borrowing' tx.id %}" class="d-inline" onsubmit="return confirm('Delete this record?\n\nBook: {{ tx.copy.book.title|escapejs }}\nMember: {{ tx.user.get_full_name|escapejs }}\n\nThis action is permanent and cannot be undone.');">
+                      {% csrf_token %}
+                      <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Delete Record">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}

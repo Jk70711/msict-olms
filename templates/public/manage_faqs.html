@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}Manage FAQs{% endblock %}
+{% block content %}
+<div class="container my-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Manage FAQs</h2>
+        <div>
+            <a href="{% url 'faq_create' %}" class="btn btn-primary"><i class="fas fa-plus"></i> Add FAQ</a>
+            <a href="{% url 'librarian_dashboard' %}" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+    </div>
+    
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped">
+            <thead class="table-dark">
+                <tr>
+                    <th>Order</th>
+                    <th>Question</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for faq in faqs %}
+                <tr>
+                    <td>{{ faq.order }}</td>
+                    <td>{{ faq.question }}</td>
+                    <td>
+                        {% if faq.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'faq_edit' faq.id %}" class="btn btn-sm btn-warning">Edit</a>
+                        <a href="{% url 'faq_delete' faq.id %}" class="btn btn-sm btn-danger">Delete</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center">No FAQs found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

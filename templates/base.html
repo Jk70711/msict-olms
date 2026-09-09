@@ -1013,18 +1013,105 @@
 {% if guest_session_expiry_iso %}
 <div id="guestExpiryModal" class="modal fade" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
   <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content border-warning">
+    <div class="modal-content border-warning shadow-lg">
       <div class="modal-header bg-warning text-dark">
-        <h5 class="modal-title"><i class="bi bi-clock-history"></i> Session Expiring Soon</h5>
+        <h5 class="modal-title"><i class="bi bi-clock-history me-2"></i>Session Expiring Soon</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
-      <div class="modal-body text-center">
-        <p class="fs-5">Your guest session will expire in <span id="guestExpiryCountdown" class="fw-bold text-danger">5:00</span> minutes.</p>
-        <p class="text-muted">Renew now to continue using the library without interruption.</p>
+      <div class="modal-body text-center py-4">
+        <div class="display-6 fw-bold text-danger mb-2" id="guestExpiryCountdown">5:00</div>
+        <p class="fs-6 text-muted mb-3">minutes remaining in your session</p>
+        <div class="d-flex justify-content-center gap-4 text-start small text-muted">
+          <div><i class="bi bi-hash me-1"></i><strong>Session:</strong> #{{ guest_session_id }}</div>
+          <div><i class="bi bi-alarm me-1"></i><strong>Expires:</strong> <span id="guestExpiryTime">--:--</span></div>
+        </div>
+        <p class="mt-3 mb-0 text-muted small">Please renew now or save your work to avoid interruption.</p>
       </div>
-      <div class="modal-footer justify-content-center">
-        <a href="{% url 'guest_dashboard' %}" class="btn btn-outline-secondary" data-bs-dismiss="modal">Dismiss</a>
-        <a href="{% url 'guest_session_renew' %}" class="btn btn-warning fw-bold"><i class="bi bi-arrow-repeat"></i> Renew Session</a>
+      <div class="modal-footer justify-content-center gap-2">
+        <a href="{% url 'guest_dashboard' %}" class="btn btn-outline-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle me-1"></i>Dismiss</a>
+        <a href="{% url 'guest_session_renew' %}" class="btn btn-warning fw-bold"><i class="bi bi-arrow-repeat me-1"></i>Renew Session</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── Librarian Guest Expiry Alert Popup ───────────────── -->
+{% if librarian_expiring_sessions %}
+<div id="librarianGuestExpiryModal" class="modal fade" tabindex="-1" data-bs-backdrop="false" data-bs-keyboard="true"
+     aria-labelledby="librarianGuestExpiryModalLabel">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content border-0 shadow-lg">
+
+      <!-- Header -->
+      <div class="modal-header text-white" style="background:linear-gradient(135deg,#dc2626,#b91c1c);">
+        <div class="d-flex align-items-center gap-2">
+          <span class="fs-4">&#x1F514;</span>
+          <div>
+            <h5 class="modal-title mb-0 fw-bold" id="librarianGuestExpiryModalLabel">Guest Sessions Expiring Soon</h5>
+            <small class="opacity-75">{{ librarian_expiring_sessions|length }} session{{ librarian_expiring_sessions|length|pluralize }} ending within 5 minutes</small>
+          </div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <!-- Body -->
+      <div class="modal-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0 small">
+            <thead class="table-dark">
+              <tr>
+                <th class="ps-3">#</th>
+                <th>Guest</th>
+                <th>Phone</th>
+                <th class="text-center">Hrs</th>
+                <th class="text-center">Amount</th>
+                <th class="text-center">Payment</th>
+                <th class="text-center">Expires</th>
+                <th class="text-center fw-bold text-warning">Time Left</th>
+              </tr>
+            </thead>
+            <tbody id="librarianExpiryTableBody">
+              {% for s in librarian_expiring_sessions %}
+              <tr id="librarianRow_{{ s.id }}">
+                <td class="ps-3 text-muted">{{ s.id }}</td>
+                <td>
+                  <div class="fw-semibold">{{ s.name }}</div>
+                  <div class="text-muted" style="font-size:.78rem;">{{ s.username }}</div>
+                </td>
+                <td>{{ s.phone|default:"—" }}</td>
+                <td class="text-center">{{ s.paid_hours }}</td>
+                <td class="text-center">TZS {{ s.amount_paid|floatformat:0 }}</td>
+                <td class="text-center">
+                  {% if s.payment_status == 'Paid' %}
+                    <span class="badge bg-success">Paid</span>
+                  {% elif s.payment_status == 'Waived' %}
+                    <span class="badge bg-info text-dark">Waived</span>
+                  {% else %}
+                    <span class="badge bg-warning text-dark">Pending</span>
+                  {% endif %}
+                </td>
+                <td class="text-center fw-semibold">{{ s.expiry_display }}</td>
+                <td class="text-center">
+                  <span id="librarianCountdown_{{ s.id }}" class="fw-bold text-danger fs-6"
+                        data-expiry="{{ s.expiry_iso }}">{{ s.mins_left }}:{{ s.secs_left|stringformat:"02d" }}</span>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="modal-footer bg-light justify-content-between">
+        <small class="text-muted"><i class="bi bi-info-circle me-1"></i>Popup shown once per browser session per alert.</small>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Dismiss</button>
+          <a href="{% url 'guest_manage' %}" class="btn btn-danger btn-sm fw-bold">
+            <i class="bi bi-people me-1"></i>View All Sessions
+          </a>
+        </div>
       </div>
     </div>
   </div>
@@ -1195,7 +1282,7 @@
       <i class="bi bi-stars"></i> New Arrivals
     </a>
   {# user manual page link #}
-    <a href="{% url 'user_manual' %}" class="catbar-link d-none d-md-inline-flex">
+    <a href="{% url 'user_manual' %}" class="catbar-link d-inline-flex">
       <i class="bi bi-question-circle"></i> User Manual
     </a>
     <span class="catbar-count d-none d-sm-block">{{ cat_menu|length }} categor{{ cat_menu|pluralize:"y,ies" }}</span>
@@ -1303,7 +1390,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <footer>
+  <footer {% if active_footer and active_footer.bg_color %}style="background-color: {{ active_footer.bg_color }} !important;"{% endif %}>
     <span>&copy; {% now "Y" %} MSICT Library Management System</span>
     <span class="d-none d-md-inline">Military School of Information and Technology</span>
     <span class="ms-3"><a href="{% url 'terms_and_conditions' %}" class="text-decoration-none text-muted">Terms and Conditions</a></span>
@@ -1971,51 +2058,55 @@
 {% if guest_session_expiry_iso %}
 <script>
 (function() {
-  var expiryIso = "{{ guest_session_expiry_iso }}";
-  var sessionId = "{{ guest_session_id }}";
+  var expiryIso  = "{{ guest_session_expiry_iso }}";
   var expiryDate = new Date(expiryIso);
   var popupShown = false;
   var redirecting = false;
 
+  // Fill the expiry time label once
+  var guestTimeEl = document.getElementById('guestExpiryTime');
+  if (guestTimeEl) {
+    var h = expiryDate.getHours();
+    var mi = String(expiryDate.getMinutes()).padStart(2, '0');
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    guestTimeEl.textContent = (h % 12 || 12) + ':' + mi + ' ' + ampm;
+  }
+
   function tick() {
     if (redirecting) return;
-    var now = new Date();
+    var now  = new Date();
     var diff = expiryDate - now;
 
     if (diff <= 0) {
-      // Session expired — submit end_guest_session form with auto_expire
+      // Session expired — submit end_guest_session form or redirect
       redirecting = true;
       clearInterval(timerId);
-
-      // Try to find an existing end_guest_session form (guest_dashboard)
       var form = document.querySelector('form[action*="end_guest_session"]');
       if (form) {
         var btn = document.createElement('input');
-        btn.type = 'hidden';
-        btn.name = 'auto_expire';
+        btn.type  = 'hidden';
+        btn.name  = 'auto_expire';
         btn.value = '1';
         form.appendChild(btn);
         if (window.showGlobalLoader) window.showGlobalLoader();
         form.submit();
       } else {
-        // No form on this page — redirect to start-session (middleware will handle it)
         if (window.showGlobalLoader) window.showGlobalLoader();
         window.location.href = "{% url 'guest_start_session' %}";
       }
       return;
     }
 
-    // 5-minute popup
+    // Show popup at 5-minute mark
     if (diff <= 5 * 60 * 1000 && !popupShown) {
       popupShown = true;
       var modalEl = document.getElementById('guestExpiryModal');
       if (modalEl) {
-        var bsModal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        bsModal.show();
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
       }
     }
 
-    // Update countdown text inside modal
+    // Live countdown inside the modal
     var cdEl = document.getElementById('guestExpiryCountdown');
     if (cdEl && popupShown) {
       var totalSec = Math.floor(diff / 1000);
@@ -2030,6 +2121,91 @@
 })();
 </script>
 {% endif %}
+
+{% if librarian_expiring_sessions %}
+<!-- ── Librarian Guest Expiry Alert — per-row countdown JS ── -->
+<script>
+(function() {
+  // Collect expiry timestamps from the rendered rows
+  var rows = document.querySelectorAll('[data-expiry]');
+  if (!rows.length) return;
+
+  // Build a stable key from all session IDs so the popup re-shows if the
+  // expiring set changes (new sessions enter the 5-min window on next page load)
+  var sessionIds = Array.from(rows).map(function(el) {
+    return el.id.replace('librarianCountdown_', '');
+  }).sort().join(',');
+  var storageKey = 'librarianGuestAlert_' + sessionIds;
+
+  // Only show once per unique alert set in this browser session
+  if (!sessionStorage.getItem(storageKey)) {
+    sessionStorage.setItem(storageKey, '1');
+    document.addEventListener('DOMContentLoaded', function() {
+      var modalEl = document.getElementById('librarianGuestExpiryModal');
+      if (modalEl) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      }
+    });
+    // If DOM already loaded, show immediately
+    if (document.readyState !== 'loading') {
+      var modalEl = document.getElementById('librarianGuestExpiryModal');
+      if (modalEl) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      }
+    }
+  }
+
+  // Per-row live countdown
+  function tickLibrarian() {
+    var now = Date.now();
+    var allExpired = true;
+
+    rows.forEach(function(el) {
+      var expiry = new Date(el.getAttribute('data-expiry')).getTime();
+      var diff   = expiry - now;
+
+      if (diff <= 0) {
+        el.textContent = '0:00';
+        el.classList.remove('text-danger');
+        el.classList.add('text-secondary');
+        // Fade out the row
+        var row = document.getElementById('librarianRow_' + el.id.replace('librarianCountdown_', ''));
+        if (row) row.style.opacity = '0.35';
+      } else {
+        allExpired = false;
+        var totalSec = Math.floor(diff / 1000);
+        var m = Math.floor(totalSec / 60);
+        var s = totalSec % 60;
+        el.textContent = String(m) + ':' + String(s).padStart(2, '0');
+
+        // Pulse red when under 60 seconds
+        if (totalSec <= 60) {
+          el.classList.add('text-danger');
+        }
+      }
+    });
+
+    // Auto-dismiss when every session has expired
+    if (allExpired) {
+      clearInterval(libTimerId);
+      var modalEl = document.getElementById('librarianGuestExpiryModal');
+      if (modalEl) {
+        var bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) bsModal.hide();
+      }
+    }
+  }
+
+  var libTimerId = setInterval(tickLibrarian, 1000);
+  tickLibrarian();
+})();
+</script>
+{% endif %}
+
+<!-- ── Toast Notification Container ── -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1060;">
+  <!-- Toasts will be injected here dynamically by JS -->
+</div>
 
 <!-- ── Back-to-top button ─────────────────────────────────── -->
 <button id="backToTop" title="Back to top" aria-label="Back to top"
@@ -2066,6 +2242,29 @@
 </style>
 
 <script>
+/* ── Toast Helper ────────────────────────────────────────── */
+window.showSystemToast = function(title, message, type='primary') {
+  var container = document.querySelector('.toast-container');
+  if (!container || typeof bootstrap === 'undefined') return;
+  var id = 'toast-' + Math.random().toString(36).substring(2, 9);
+  var toastHTML = `
+    <div id="${id}" class="toast border-0 shadow" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header bg-${type} text-white">
+        <i class="bi bi-bell-fill me-2"></i>
+        <strong class="me-auto">${title}</strong>
+        <small class="text-white-50">Just now</small>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body bg-white text-dark fw-medium">${message}</div>
+    </div>
+  `;
+  container.insertAdjacentHTML('beforeend', toastHTML);
+  var toastEl = document.getElementById(id);
+  var toast = new bootstrap.Toast(toastEl, { delay: 10000 });
+  toast.show();
+  toastEl.addEventListener('hidden.bs.toast', function () { toastEl.remove(); });
+};
+
 /* ── Back-to-top ─────────────────────────────────────────── */
 (function () {
   var btn = document.getElementById('backToTop');

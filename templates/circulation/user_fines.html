@@ -115,7 +115,11 @@
             </td>
             <td>
               {% if fine.paid %}
-                <span class="badge bg-success">Paid</span>
+                {% if fine.transaction and fine.transaction.status == 'overdue' %}
+                  <span class="badge bg-warning text-dark border border-warning" title="Paid up to today, but book is still not returned">Paid (Unreturned)</span>
+                {% else %}
+                  <span class="badge bg-success">Paid</span>
+                {% endif %}
               {% elif fine.amount_paid > 0 %}
                 <span class="badge bg-warning text-dark">Partial</span>
                 {% if fine.transaction and fine.transaction.status == 'overdue' %}

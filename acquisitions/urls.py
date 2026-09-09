@@ -10,6 +10,8 @@ urlpatterns = [
     # ── Wauzaji wa Vitabu ─────────────────────────────────
     path('vendors/', views.vendor_list_view, name='vendor_list'),                                  # Orodha ya wauzaji
     path('vendors/create/', views.vendor_create_view, name='vendor_create'),                       # Ongeza muuzaji mpya
+    path('vendors/<int:vendor_id>/edit/', views.vendor_edit_view, name='vendor_edit'),             # Hariri muuzaji
+    path('vendors/<int:vendor_id>/delete/', views.vendor_delete_view, name='vendor_delete'),       # Futa muuzaji
 
     # ── Bajeti ──────────────────────────────────────────
     path('budgets/', views.budget_list_view, name='budget_list'),                                  # Orodha ya bajeti
@@ -19,10 +21,12 @@ urlpatterns = [
     path('orders/', views.purchase_order_list_view, name='purchase_order_list'),                   # Maagizo yote ya kununua
     path('orders/create/', views.purchase_order_create_view, name='purchase_order_create'),        # Unda agizo jipya
     path('orders/<int:po_id>/', views.purchase_order_detail_view, name='purchase_order_detail'),   # Maelezo ya agizo moja
+    path('orders/<int:po_id>/delete/', views.purchase_order_delete_view, name='purchase_order_delete'), # Futa agizo
     path('orders/items/<int:item_id>/delete/', views.purchase_order_delete_item_view, name='purchase_order_delete_item'),  # Futa item
 
     # ── ILL — Kukopa kutoka Maktaba Nyingine ────────────────
     path('ill/', views.ill_request_list_view, name='ill_request_list'),                            # Maombi ya ILL
     path('ill/create/', views.ill_request_create_view, name='ill_request_create'),                 # Ombi jipya la ILL
     path('ill/<int:ill_id>/status/', views.ill_request_update_status_view, name='ill_request_update_status'),  # Sasisha hali ya ILL
+    path('ill/<int:ill_id>/delete/', views.ill_request_delete_view, name='ill_request_delete'),    # Futa ILL request
 ]

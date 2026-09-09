@@ -38,6 +38,38 @@ def vendor_create_view(request):
 
 @login_required
 @librarian_required
+def vendor_edit_view(request, vendor_id):
+    vendor = get_object_or_404(Vendor, pk=vendor_id)
+    if request.method == 'POST':
+        phone = request.POST.get('phone', '').strip()
+        if phone and not re.match(r'^0\d{9}$', phone):
+            messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
+            return render(request, 'acquisitions/vendor_form.html', {'vendor': vendor})
+        
+        vendor.name = request.POST.get('name', '')
+        vendor.contact_person = request.POST.get('contact_person', '')
+        vendor.email = request.POST.get('email', '')
+        vendor.phone = phone
+        vendor.address = request.POST.get('address', '')
+        vendor.save()
+        messages.success(request, 'Vendor updated successfully.')
+        return redirect('vendor_list')
+    return render(request, 'acquisitions/vendor_form.html', {'vendor': vendor})
+
+
+@login_required
+@librarian_required
+@require_POST
+def vendor_delete_view(request, vendor_id):
+    vendor = get_object_or_404(Vendor, pk=vendor_id)
+    # Could check for related purchase orders here, but let's assume on_delete=CASCADE or PROTECT
+    vendor.delete()
+    messages.success(request, 'Vendor deleted successfully.')
+    return redirect('vendor_list')
+
+
+@login_required
+@librarian_required
 def budget_list_view(request):
     budgets = Budget.objects.prefetch_related('funds').order_by('-fiscal_year')
     return render(request, 'acquisitions/budget_list.html', {'budgets': budgets})
@@ -115,6 +147,17 @@ def purchase_order_detail_view(request, po_id):
 @login_required
 @librarian_required
 @require_POST
+def purchase_order_delete_view(request, po_id):
+    order = get_object_or_404(PurchaseOrder, pk=po_id)
+    log_audit(request.user, f"Deleted purchase order PO-{po_id}", request)
+    order.delete()
+    messages.success(request, 'Purchase order deleted successfully.')
+    return redirect('purchase_order_list')
+
+
+@login_required
+@librarian_required
+@require_POST
 def purchase_order_delete_item_view(request, item_id):
     """POST-only — prevents CSRF-style attacks via image tags or malicious links."""
     item = get_object_or_404(PurchaseOrderItem, pk=item_id)
@@ -182,4 +225,16 @@ def ill_request_update_status_view(request, ill_id):
         notify_user(ill.user, msg, 'email', subject=f"ILL Request {new_status.title()}")
         log_audit(request.user, f"Updated ILL request '{ill.title}' status from {old_status} to {new_status}", request)
         messages.success(request, f'ILL request status updated to {new_status}. Member notified.')
+    return redirect('ill_request_list')
+
+
+@login_required
+@librarian_required
+@require_POST
+def ill_request_delete_view(request, ill_id):
+    """POST-only — protected by CSRF + librarian role decorator. Delete ILL request."""
+    ill = get_object_or_404(ILLRequest, pk=ill_id)
+    log_audit(request.user, f"Deleted ILL request '{ill.title}'", request)
+    ill.delete()
+    messages.success(request, 'ILL request deleted successfully.')
     return redirect('ill_request_list')

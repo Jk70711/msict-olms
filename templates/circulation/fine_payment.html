@@ -217,12 +217,12 @@
               <hr class="my-1">
               <label class="form-label fw-bold">Amount to Pay (TZS) <span class="text-danger">*</span></label>
               <input type="number" name="payment_amount" id="paymentAmount" class="form-control form-control-lg"
-                     value="{{ fine.remaining_balance }}" min="1" step="1" required>
+                     value="{{ fine.remaining_balance|floatformat:'0u' }}" min="1" step="1" max="{{ fine.remaining_balance|floatformat:'0u' }}" required>
               <div class="d-flex justify-content-between mt-1">
                 <small class="text-muted">Remaining: <strong class="text-danger">TZS {{ fine.remaining_balance|floatformat:2|intcomma }}</strong></small>
                 <small>
                   <a href="#" class="text-primary text-decoration-none"
-                     onclick="document.getElementById('paymentAmount').value='{{ fine.remaining_balance }}'; return false;">
+                     onclick="document.getElementById('paymentAmount').value='{{ fine.remaining_balance|floatformat:'0u' }}'; return false;">
                     Pay full remaining ↑
                   </a>
                 </small>

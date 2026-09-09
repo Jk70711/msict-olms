@@ -25,7 +25,13 @@
           </td>
           <td>TZS {{ order.total_amount|floatformat:0|intcomma }}</td>
           <td><span class="badge bg-info">{{ order.items.count }}</span></td>
-          <td><a href="{% url 'purchase_order_detail' order.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a></td>
+          <td class="text-nowrap">
+            <a href="{% url 'purchase_order_detail' order.pk %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-eye"></i></a>
+            <form method="post" action="{% url 'purchase_order_delete' order.pk %}" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this purchase order?');">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+            </form>
+          </td>
         </tr>
         {% empty %}
         <tr><td colspan="8" class="text-center py-4 text-muted">No purchase orders.</td></tr>

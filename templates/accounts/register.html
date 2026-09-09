@@ -265,6 +265,32 @@
               <div class="help-text">Select prefix then enter digits. E.g. MT 134513, PW 456</div>
             </div>
           </div>
+
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="rank">Rank</label>
+              <select name="rank" id="rank">
+                <option value="">-- Select Rank --</option>
+                {% for rank_name in rank_list %}
+                <option value="{{ rank_name }}">{{ rank_name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-6">
+            <div class="form-group">
+              <label for="member_type">Member Type *</label>
+              <select name="member_type" id="member_type" required>
+                <option value="">-- Select Type --</option>
+                <option value="student">Student</option>
+                <option value="lecturer">Instructor</option>
+                <option value="staff">School Staff</option>
+              </select>
+            </div>
+          </div>
           <div class="col-md-6">
             <div class="form-group">
               <label for="registration_no">Registration Number</label>
@@ -291,31 +317,6 @@
             <div class="form-group">
               <label for="surname">Surname *</label>
               <input type="text" name="surname" id="surname" placeholder="Doe" value="{{ prefill.surname|default:'' }}" required>
-            </div>
-          </div>
-        </div>
-
-        <div class="row">
-          <div class="col-md-6">
-            <div class="form-group">
-              <label for="member_type">Member Type *</label>
-              <select name="member_type" id="member_type" required>
-                <option value="">-- Select Type --</option>
-                <option value="student">Student</option>
-                <option value="lecturer">Instructor</option>
-                <option value="staff">School Staff</option>
-              </select>
-            </div>
-          </div>
-          <div class="col-md-6">
-            <div class="form-group">
-              <label for="rank">Rank</label>
-              <select name="rank" id="rank">
-                <option value="">-- Select Rank (Optional) --</option>
-                {% for rank_name in rank_list %}
-                <option value="{{ rank_name }}">{{ rank_name }}</option>
-                {% endfor %}
-              </select>
             </div>
           </div>
         </div>
@@ -351,7 +352,8 @@
       </form>
 
       <div class="register-footer">
-        Already have an account? <a href="{% url 'login' %}">Sign In</a>
+        <p class="mb-1">Already have an account? <a href="{% url 'login' %}">Sign In</a></p>
+        <p class="mb-0">Guest Access: <a href="{% url 'guest_register' %}">Register</a> | <a href="{% url 'guest_start_session' %}">Start Session</a></p>
       </div>
     </div>
   </div>

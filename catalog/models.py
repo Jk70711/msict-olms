@@ -94,7 +94,9 @@ class Book(models.Model):
         return self.title
 
     def available_hardcopy_count(self):
-        return self.copies.filter(copy_type='hardcopy', status='available').count()
+        return self.copies.filter(copy_type='hardcopy', status='available').exclude(
+            transactions__status__in=['borrowed', 'overdue']
+        ).count()
 
     def has_free_softcopy(self):
         return self.copies.filter(copy_type='softcopy', access_type='free', status='available').exists()
@@ -112,7 +114,7 @@ class Book(models.Model):
         return self.copies.filter(copy_type='softcopy', access_type='borrow').count()
 
     def available_special_softcopy_count(self):
-        return self.copies.filter(copy_type='softcopy', access_type='borrow', status='available').count()
+        return self.copies.filter(copy_type='softcopy', access_type='borrow', status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
 
     def special_softcopy_fee(self):
         """Return the prepaid_fee of the first special softcopy, or 0 if none."""
@@ -529,6 +531,7 @@ class Footer(models.Model):
     social_linkedin = models.URLField(max_length=500, blank=True)
     social_instagram = models.URLField(max_length=500, blank=True)
     additional_links = models.TextField(blank=True, help_text='Additional footer links (one per line: Label|URL)')
+    bg_color = models.CharField(max_length=20, default='#020617', help_text='Footer background color (hex code, e.g. #020617)')
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True)
