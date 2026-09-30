@@ -6,10 +6,7 @@
     <div class="sidebar-section-label">Overview</div>
     <a href="{% url 'admin_dashboard' %}" class="nav-link{% if cur == 'admin_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
     <a href="{% url 'user_list' %}" class="nav-link{% if cur == 'user_list' %} active{% endif %}"><i class="bi bi-people"></i> Members</a>
-    <a href="{% url 'guest_manage' %}" class="nav-link{% if cur == 'guest_manage' %} active{% endif %}">
-      <i class="bi bi-person-badge"></i> Guest Management
-      {% if active_guest_sessions_count %}<span class="badge bg-info text-dark ms-auto">{{ active_guest_sessions_count }}</span>{% endif %}
-    </a>
+
     <a href="{% url 'chat_inbox' %}" class="nav-link{% if cur == 'chat_inbox' %} active{% endif %}" id="navMessages">
       <i class="bi bi-chat-dots"></i> Messages/Support
       <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>
@@ -146,9 +143,7 @@
     <button class="nav-link nav-group" type="button"
             data-bs-toggle="collapse" data-bs-target="#lib-members" aria-expanded="{% if cur == 'public_registrations' %}true{% else %}false{% endif %}">
       <i class="bi bi-people"></i> Members &amp; Media
-      {% with mem_total=pending_registrations_count|add:active_guest_sessions_count %}
-        {% if mem_total %}<span class="badge bg-warning text-dark ms-auto">{{ mem_total }}</span>{% endif %}
-      {% endwith %}
+      {% if pending_registrations_count %}<span class="badge bg-warning text-dark ms-auto">{{ pending_registrations_count }}</span>{% endif %}
       <i class="bi bi-chevron-down sidebar-chevron"></i>
     </button>
     <div class="collapse sidebar-submenu{% if cur == 'public_registrations' %} show{% endif %}" id="lib-members">
@@ -158,10 +153,7 @@
         {% if pending_registrations_count %}<span class="badge bg-warning text-dark ms-auto">{{ pending_registrations_count }}</span>{% endif %}
       </a>
       <a href="{% url 'create_user' %}" class="nav-link"><i class="bi bi-person-plus"></i> Add Member</a>
-      <a href="{% url 'guest_manage' %}" class="nav-link{% if cur == 'guest_manage' %} active{% endif %}">
-        <i class="bi bi-person-badge"></i> Guest Management
-        {% if active_guest_sessions_count %}<span class="badge bg-info text-dark ms-auto">{{ active_guest_sessions_count }}</span>{% endif %}
-      </a>
+
       <a href="{% url 'news_list' %}" class="nav-link"><i class="bi bi-newspaper"></i> News</a>
       <a href="{% url 'media_slide_list' %}" class="nav-link"><i class="bi bi-images"></i> Media &amp; Carousel</a>
       <a href="{% url 'login_content_list' %}" class="nav-link{% if cur == 'login_content_list' or cur == 'login_content_edit' %} active{% endif %}"><i class="bi bi-window-sidebar"></i> Login Page Content</a>
@@ -200,7 +192,7 @@
   {# ── GUEST ─────────────────────────────────────────────── #}
   <div class="sidebar-section">
     <div class="sidebar-section-label">Overview</div>
-    <a href="{% url 'guest_dashboard' %}" class="nav-link{% if cur == 'guest_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Guest Dashboard</a>
+    <a href="{% url 'guest_dashboard' %}" class="nav-link{% if cur == 'guest_dashboard' %} active{% endif %}"><i class="bi bi-speedometer2"></i> Dashboard</a>
     <a href="{% url 'chat_inbox' %}" class="nav-link{% if cur == 'chat_inbox' %} active{% endif %}" id="navMessages">
       <i class="bi bi-chat-dots"></i> Messages/Support
       <span class="badge bg-danger ms-auto d-none" id="navUnreadBadge"></span>

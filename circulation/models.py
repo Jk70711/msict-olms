@@ -110,14 +110,15 @@ class BorrowingTransaction(models.Model):
         return f"{self.user.username} – {self.copy.book.title} (due {self.due_date.date()})"
 
     def save(self, *args, **kwargs):
+        # Only hardcopy transactions get a due_date based on loan period
+        # Softcopy: no longer tracked here — access is always free and permanent
         if not self.pk and not self.due_date:
-            loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-            self.due_date = timezone.now() + timedelta(days=loan_days)
-        if self.copy.copy_type == 'softcopy' and self.borrow_type == 'softcopy':
-            if not self.access_token:
-                self.access_token = uuid.uuid4()
-            if not self.token_expires:
-                self.token_expires = self.due_date
+            if self.borrow_type == 'hardcopy':
+                loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
+                self.due_date = timezone.now() + timedelta(days=loan_days)
+            else:
+                # Softcopy: permanent (no expiry) — set far future date as placeholder
+                self.due_date = timezone.now() + timedelta(days=36500)  # 100 years
         super().save(*args, **kwargs)
 
     @property
@@ -215,16 +216,14 @@ class BorrowingTransaction(models.Model):
     @property
     def is_link_active(self):
         """For softcopy: True only when borrow period has not yet expired."""
-        # For free softcopies, link is always active while borrowed
-        if self.copy.copy_type == 'softcopy' and self.copy.access_type == 'free':
-            return self.status == 'borrowed'
-        # For special (borrow) softcopies, link is only active within due_date
-        return self.status == 'borrowed' and timezone.now() <= self.due_date
+        if self.copy.copy_type == 'softcopy':
+            return self.status == 'borrowed' and timezone.now() <= self.due_date
+        return False
     
     @property
     def is_link_expired(self):
-        """Check if special softcopy link has expired (past due date)."""
-        if self.copy.copy_type == 'softcopy' and self.copy.access_type == 'borrow':
+        """Check if softcopy link has expired (past due date)."""
+        if self.copy.copy_type == 'softcopy':
             return self.status == 'borrowed' and timezone.now() > self.due_date
         return False
     
@@ -319,22 +318,7 @@ class BorrowingTransaction(models.Model):
         self.renewed_count += 1
         if self.status == 'overdue':
             self.status = 'borrowed'
-        # For softcopy: generate new access token and extend expiry
-        is_soft = self.copy.copy_type == 'softcopy' and self.borrow_type == 'softcopy'
-        if is_soft:
-            self.access_token = uuid.uuid4()
-            self.token_expires = self.due_date
         self.save()
-        # Create new SoftcopyAccessLog entry for softcopy renewals
-        if is_soft:
-            SoftcopyAccessLog.objects.create(
-                user=self.user,
-                copy=self.copy,
-                transaction=self,
-                access_token=str(self.access_token),
-                access_url='',  # URL will be built by the view when needed
-                expires_at=self.due_date,
-            )
         return True, "Renewal successful"
 
 
@@ -683,16 +667,14 @@ class PrepaidTransaction(models.Model):
 
 
 # ----------------------------------------------------------------------
-# Model ya SoftcopyAccessLogs — Kufuatilia links za softcopy access
-# Inahifadhi links za kipekee zinazoexpire baada ya siku 7
+# Model ya SoftcopyAccessLogs — Kufuatilia downloads za softcopy
+# Inahifadhi log ya kila mtumiaji aliyefikia/kupakua softcopy (bila malipo, bila expiry)
 # ----------------------------------------------------------------------
 class SoftcopyAccessLog(models.Model):
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='softcopy_access_logs')
     copy = models.ForeignKey(BookCopy, on_delete=models.CASCADE, related_name='softcopy_access_logs')
-    transaction = models.ForeignKey(BorrowingTransaction, on_delete=models.CASCADE, related_name='softcopy_access_logs')
-    access_token = models.CharField(max_length=100, unique=True)  # Unique token for URL
-    access_url = models.URLField()  # Full secure URL
-    expires_at = models.DateTimeField()  # 7 days from creation
+    access_token = models.CharField(max_length=100, unique=True)  # Unique one-time token for secure download URL
+    access_url = models.URLField(blank=True)  # Full secure URL (optional, for logging)
     access_count = models.IntegerField(default=0)  # How many times accessed
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -702,28 +684,19 @@ class SoftcopyAccessLog(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.copy.book.title} (expires: {self.expires_at})"
-
-    def is_expired(self):
-        return timezone.now() > self.expires_at
-
-    def days_until_expiry(self):
-        delta = self.expires_at - timezone.now()
-        return max(0, delta.days)
+        return f"{self.user.username} - {self.copy.book.title} @ {self.created_at.date()}"
 
 
 # ----------------------------------------------------------------------
 # Model ya RevenueTransaction — Ufuatiliaji wa mapato/hasara
-# account_type: overdue, link_fee, guest_fee, loss
+# account_type: overdue, loss, damage
 # amount: chanya = mapato, hasi = hasara/refund
 # ----------------------------------------------------------------------
 class RevenueTransaction(models.Model):
     ACCOUNT_TYPE_CHOICES = [
         ('overdue', 'Overdue Fee'),
-        ('link_fee', 'Softcopy Link Fee'),
-        ('guest_fee', 'Guest Session Fee'),
-        ('loss', 'Loss / Refund'),
-        ('damage', 'Damage Fee'),
+        ('loss', 'Loss Fine'),
+        ('damage', 'Damage Fine'),
     ]
 
     user = models.ForeignKey(OLMSUser, on_delete=models.SET_NULL, null=True, blank=True, related_name='revenue_transactions')

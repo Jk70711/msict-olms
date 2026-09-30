@@ -20,7 +20,6 @@ def security_badges(request):
     unpaid_fines_count = 0
     pending_damage_reports_count = 0
     pending_ill_requests_count = 0
-    active_guest_sessions_count = 0
     member_active_borrowings = 0
     member_reservations = 0
     member_unpaid_fines = 0
@@ -33,7 +32,7 @@ def security_badges(request):
                 Notification, BorrowRequest, Reservation,
                 BorrowingTransaction, Fine, LossReport, DamageReport,
             )
-            from accounts.models import OLMSUser, LoginAttempt, GuestSession, SystemPreference
+            from accounts.models import OLMSUser, LoginAttempt, SystemPreference
             from django.db.models import Q, Count, Sum
             from datetime import timedelta
             from django.utils import timezone
@@ -156,12 +155,6 @@ def security_badges(request):
                     ill_qs = ill_qs.filter(request_date__gt=ill_last)
                 pending_ill_requests_count = ill_qs.count()
 
-                # Active Guest Sessions: match guest_manage_view
-                gs_last = _badge_last_viewed(request.user, 'active_guest_sessions')
-                gs_qs = GuestSession.objects.filter(status__in=['active', 'renewed'])
-                if gs_last:
-                    gs_qs = gs_qs.filter(sign_in_time__gt=gs_last)
-                active_guest_sessions_count = gs_qs.count()
 
             # ── Member-specific counts (match actual page queries) ──
             if request.user.role == 'member':
@@ -175,7 +168,6 @@ def security_badges(request):
                     copy__book__isnull=False,
                 ).exclude(
                     copy__copy_type='softcopy',
-                    copy__access_type='borrow',
                     due_date__lt=now,
                 )
                 if mb_last:
@@ -241,7 +233,6 @@ def security_badges(request):
         'unpaid_fines_count': unpaid_fines_count,
         'pending_damage_reports_count': pending_damage_reports_count,
         'pending_ill_requests_count': pending_ill_requests_count,
-        'active_guest_sessions_count': active_guest_sessions_count,
         'member_active_borrowings': member_active_borrowings,
         'member_reservations': member_reservations,
         'member_unpaid_fines': member_unpaid_fines,
@@ -273,8 +264,7 @@ def overdue_counter(request):
             od_qs = BorrowingTransaction.objects.filter(
                 status='overdue'
             ).exclude(
-                copy__copy_type='softcopy',
-                copy__access_type='borrow'
+                copy__copy_type='softcopy'
             ).filter(
                 has_unpaid_fine | has_no_fine
             )
@@ -400,58 +390,3 @@ def category_menu(request):
 
     return {'cat_menu': cats}
 
-
-def guest_expiry_alerts(request):
-    """Inject expiring-soon guest sessions for the librarian in-app popup.
-
-    For librarians and admins only: returns a list of active sessions that
-    will expire within the next 5 minutes (300 seconds), with full detail
-    per session so the librarian popup can show a per-guest countdown table.
-
-    Returned context key: ``librarian_expiring_sessions``  — a list of dicts:
-        id, name, username, phone, session_id, paid_hours, amount_paid,
-        expiry_iso (ISO-8601), minutes_left, seconds_left
-    """
-    empty = {'librarian_expiring_sessions': []}
-    try:
-        user = getattr(request, 'user', None)
-        if not (user and user.is_authenticated and getattr(user, 'role', '') in ('admin', 'librarian')):
-            return empty
-
-        from accounts.models import GuestSession
-        from django.utils import timezone
-        from datetime import timedelta
-
-        now = timezone.now()
-        window_end = now + timedelta(minutes=5)
-
-        active = GuestSession.objects.filter(
-            status__in=['active', 'renewed']
-        ).select_related('user').order_by('sign_in_time')
-
-        expiring = []
-        for s in active:
-            expiry = s.sign_in_time + timedelta(hours=float(s.paid_hours))
-            delta = expiry - now
-            total_secs = delta.total_seconds()
-            # Include sessions expiring between now and 5 min from now
-            if 0 < total_secs <= 300:
-                mins_left = int(total_secs // 60)
-                secs_left = int(total_secs % 60)
-                expiring.append({
-                    'id': s.id,
-                    'name': s.user.get_full_name() or s.user.username,
-                    'username': s.user.username,
-                    'phone': getattr(s.user, 'phone', '') or '',
-                    'paid_hours': float(s.paid_hours),
-                    'amount_paid': float(s.amount_paid),
-                    'payment_status': s.get_payment_status_display(),
-                    'expiry_iso': expiry.isoformat(),
-                    'expiry_display': expiry.strftime('%H:%M'),
-                    'mins_left': mins_left,
-                    'secs_left': secs_left,
-                })
-
-        return {'librarian_expiring_sessions': expiring}
-    except Exception:
-        return empty

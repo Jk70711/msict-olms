@@ -193,7 +193,6 @@ def book_search_ajax(request):
 # ----------------------------------------------------------------------
 def librarian_dashboard_view(request):
     from circulation.models import BorrowRequest, BorrowingTransaction, Reservation, Fine
-    from accounts.models import GuestSession
     from django.db.models import Count, Sum
     from datetime import datetime, timedelta
     from collections import defaultdict
@@ -209,7 +208,7 @@ def librarian_dashboard_view(request):
     overdue_transactions = BorrowingTransaction.objects.filter(
         status='overdue'
     ).exclude(
-        copy__copy_type='softcopy', copy__access_type='borrow'
+        copy__copy_type='softcopy'
     ).filter(
         has_unpaid_fine | has_no_fine
     ).select_related('user__virtual_card', 'copy__book')
@@ -219,10 +218,6 @@ def librarian_dashboard_view(request):
     total_copies = BookCopy.objects.count()
     available_copies = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     total_members = OLMSUser.objects.filter(role='member', registration_status='approved').count()
-
-    # Active Guest Sessions
-    # Active and Renewed sessions are both considered active
-    active_guest_sessions = GuestSession.objects.filter(status__in=['active', 'renewed', 'expired']).select_related('user').order_by('-sign_in_time')
 
     # Calculate total unpaid fines amount
     total_unpaid_fines_amount = sum(fine.remaining_balance for fine in unpaid_fines)
@@ -325,13 +320,11 @@ def librarian_dashboard_view(request):
 
     # Revenue breakdown doughnut
     revenue_chart_data = _json.dumps({
-        'labels': ['Overdue', 'Link Fee', 'Guest Fee', 'Damage', 'Loss'],
+        'labels': ['Overdue', 'Damage', 'Loss'],
         'values': [
-            float(revenue['overdue']),
-            float(revenue['link_fee']),
-            float(revenue['guest_fee']),
+            float(revenue.get('overdue', 0)),
             float(revenue.get('damage', 0)),
-            float(revenue['loss']),
+            float(revenue.get('loss', 0)),
         ],
     })
 
@@ -344,7 +337,6 @@ def librarian_dashboard_view(request):
         'total_copies': total_copies,
         'available_copies': available_copies,
         'total_members': total_members,
-        'active_guest_sessions': active_guest_sessions,
         'pending_count': pending_requests.count(),
         'overdue_count': overdue_transactions.count(),
         'unpaid_fines_count': unpaid_fines.count(),
@@ -355,8 +347,7 @@ def librarian_dashboard_view(request):
         'copy_type_stats': copy_type_stats,
         'most_borrowed_books': most_borrowed_books,
         'revenue_overdue': revenue['overdue'],
-        'revenue_link_fee': revenue['link_fee'],
-        'revenue_guest_fee': revenue['guest_fee'],
+
         'revenue_damage': revenue.get('damage', 0),
         'revenue_loss': revenue['loss'],
         'revenue_unpaid': revenue['unpaid'],
@@ -484,18 +475,11 @@ def book_create_view(request):
 
         # ── Softcopy creation ──────────────────────────────────────
         if book_type in ('softcopy', 'both'):
-            if book_type == 'both':
-                access_type = 'borrow'
-            else:
-                access_type = request.POST.get('access_type') or request.POST.get('access_type_forced') or 'free'
-            prepaid_fee = request.POST.get('prepaid_fee', 0)
             softcopy = BookCopy(
                 book=book,
                 copy_type='softcopy',
-                access_type=access_type,
                 accession_no=BookCopy.get_next_accession_number(for_softcopy=True),
                 status='available',
-                prepaid_fee=prepaid_fee if prepaid_fee else 0,
             )
             if 'softcopy_file' in request.FILES:
                 f = request.FILES['softcopy_file']
@@ -505,8 +489,8 @@ def book_create_view(request):
                 softcopy.file_path = f
             softcopy.save()
             InventoryLog.objects.create(copy=softcopy, action='added', performed_by=request.user)
-            log_audit(request.user, f"Created softcopy ({access_type}) for '{book.title}'", request)
-            created_summary.append(f"1 softcopy ({access_type})")
+            log_audit(request.user, f"Created softcopy for '{book.title}'", request)
+            created_summary.append(f"1 softcopy")
 
         if created_summary:
             messages.success(request, f"Book '{book.title}' created with {', '.join(created_summary)}.")
@@ -730,11 +714,6 @@ def book_edit_view(request, book_id):
         # Update softcopy if exists
         softcopy = book.copies.filter(copy_type='softcopy').first()
         if softcopy:
-            access_type = request.POST.get('access_type_forced') or request.POST.get('access_type')
-            if access_type:
-                softcopy.access_type = access_type
-            prepaid_fee = request.POST.get('prepaid_fee', 0)
-            softcopy.prepaid_fee = prepaid_fee if prepaid_fee else 0
             # Handle file upload if provided
             if 'softcopy_file' in request.FILES:
                 f = request.FILES['softcopy_file']
@@ -788,7 +767,6 @@ def copy_create_view(request, book_id):
     book = get_object_or_404(Book, pk=book_id)
     if request.method == 'POST':
         copy_type = request.POST.get('copy_type', 'hardcopy')
-        access_type = request.POST.get('access_type') or None
         accession_no = request.POST.get('accession_no', '').strip()
         shelf_location = request.POST.get('shelf_location', '')
         barcode = request.POST.get('barcode', accession_no)
@@ -807,21 +785,10 @@ def copy_create_view(request, book_id):
             if not _check_upload(request, softcopy_file, allowed_extensions=ALLOWED_EBOOK_EXTS, max_size=MAX_EBOOK_BYTES, label='Softcopy file'):
                 return redirect('book_detail', book_id=book_id)
 
-        # Derive prepaid_fee: use POST value if provided, else fall back to SOFTCOPY_PREPAID_FEE preference
-        if copy_type == 'softcopy':
-            default_fee = float(SystemPreference.get('SOFTCOPY_PREPAID_FEE', 0) or 0)
-            try:
-                prepaid_fee = float(request.POST.get('prepaid_fee', default_fee) or default_fee)
-            except (ValueError, TypeError):
-                prepaid_fee = default_fee
-        else:
-            prepaid_fee = 0
-
         copy = BookCopy(
-            book=book, copy_type=copy_type, access_type=access_type,
+            book=book, copy_type=copy_type,
             accession_no=accession_no, shelf_location=shelf_location,
             barcode=barcode or accession_no,
-            prepaid_fee=prepaid_fee,
         )
         if softcopy_file is not None:
             copy.file_path = softcopy_file
@@ -847,7 +814,6 @@ def copy_add_standalone_view(request):
         book_id = request.POST.get('book_id')
         book = get_object_or_404(Book, pk=book_id)
         copy_type = request.POST.get('copy_type', 'hardcopy')
-        access_type = request.POST.get('access_type') or None
         accession_no = request.POST.get('accession_no', '').strip()
         shelf_location = request.POST.get('shelf_location', '')
         barcode = request.POST.get('barcode', '').strip()
@@ -873,11 +839,9 @@ def copy_add_standalone_view(request):
         copy = BookCopy(
             book=book,
             copy_type=copy_type,
-            access_type=access_type if copy_type == 'softcopy' else None,
             accession_no=accession_no,
             shelf_location=shelf_location,
             barcode=barcode or accession_no,
-            prepaid_fee=request.POST.get('prepaid_fee', 0) if copy_type == 'softcopy' else 0,
         )
         if softcopy_file is not None:
             copy.file_path = softcopy_file
@@ -1019,7 +983,6 @@ def external_library_delete_view(request, lib_id):
 
 
 @login_required
-@librarian_required
 # ----------------------------------------------------------------------
 # View ya Simamia Carousel — Mtunzaji anasimamia picha za carousel
 # ----------------------------------------------------------------------
@@ -1041,167 +1004,21 @@ def carousel_manage_view(request):
 # ----------------------------------------------------------------------
 def serve_softcopy_view(request, copy_id):
     copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy')
-
-    if copy.access_type == 'free':
-        if not copy.file_path:
-            messages.error(request, 'File not available.')
-            return redirect('book_detail', book_id=copy.book_id)
-        file_ext = ''
-        if copy.file_path:
-            name = copy.file_path.name.lower()
-            file_ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
-        return render(request, 'catalog/softcopy_viewer.html', {
-            'copy': copy,
-            'tx': None,
-            'file_ext': file_ext,
-            'is_free': True,
-        })
-
-    if copy.access_type == 'borrow':
-        from circulation.models import BorrowingTransaction
-        from django.utils import timezone as tz
-        now = tz.now()
-        tx = BorrowingTransaction.objects.filter(
-            user=request.user, copy=copy
-        ).order_by('-borrow_date').first()
-        if not tx or tx.status == 'returned':
-            messages.error(
-                request,
-                f'Access denied — you do not have an active borrowing for '
-                f'"{copy.book.title}". Please submit a borrow request first.'
-            )
-            return redirect('book_detail_public', book_id=copy.book_id)
-        if now > tx.due_date:
-            messages.warning(
-                request,
-                f'Your access to "{copy.book.title}" expired on '
-                f'{tx.due_date.strftime("%d %b %Y")}. '
-                f'Renew your borrowing to restore access.'
-            )
-            return redirect('member_msict_borrowings')
-        if not copy.file_path:
-            messages.error(request, 'File not available. Contact the librarian.')
-            return redirect('member_msict_borrowings')
-        # Render HTML viewer — never serve the raw file directly for special copies
-        file_ext = ''
-        if copy.file_path:
-            name = copy.file_path.name.lower()
-            file_ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
-        return render(request, 'catalog/softcopy_viewer.html', {
-            'copy': copy,
-            'tx': tx,
-            'file_ext': file_ext,
-        })
-
-    # Invalid access type
-    messages.error(request, 'Unauthorized access.')
-    return redirect('home')
-
-
-# ----------------------------------------------------------------------
-# View ya Tokenized Softcopy Access — Access with a per-user secret link
-# ----------------------------------------------------------------------
-def softcopy_access_link_view(request, token):
-    from circulation.models import BorrowingTransaction, SoftcopyAccessLog
-    from django.utils import timezone as tz
-
-    # Require login to prevent link sharing
-    if not request.user.is_authenticated:
-        messages.error(request, 'You must be logged in to access this softcopy. Please log in first.')
-        return redirect('login')
-
-    tx = get_object_or_404(
-        BorrowingTransaction,
-        access_token=token,
-        borrow_type='softcopy',
-        copy__access_type='borrow',
-    )
-
-    if tx.status == 'returned':
-        messages.error(request, 'This access link has already ended because the borrowing was returned.')
-        return redirect('member_msict_borrowings')
-
-    if tx.token_expires and tz.now() > tx.token_expires:
-        messages.warning(request, 'This softcopy access link has expired. Please request access again.')
-        return redirect('member_msict_borrowings')
-
-    if not tx.copy.file_path:
-        messages.error(request, 'File not available. Contact the librarian.')
-        return redirect('member_msict_borrowings')
-
-    if request.user.is_authenticated and request.user != tx.user:
-        messages.error(request, 'This link belongs to another user.')
-        return redirect('home')
-
-    # Increment access count in SoftcopyAccessLog
-    try:
-        access_log = SoftcopyAccessLog.objects.filter(
-            transaction=tx, access_token=str(token), is_active=True
-        ).order_by('-created_at').first()
-        if access_log and not access_log.is_expired():
-            access_log.access_count += 1
-            access_log.save(update_fields=['access_count'])
-    except Exception:
-        pass
+    if not copy.file_path:
+        messages.error(request, 'File not available.')
+        return redirect('book_detail', book_id=copy.book_id)
 
     file_ext = ''
-    if tx.copy.file_path:
-        name = tx.copy.file_path.name.lower()
+    if copy.file_path:
+        name = copy.file_path.name.lower()
         file_ext = '.' + name.rsplit('.', 1)[-1] if '.' in name else ''
+
     return render(request, 'catalog/softcopy_viewer.html', {
-        'copy': tx.copy,
-        'tx': tx,
-        'access_token': token,
+        'copy': copy,
+        'tx': None,
         'file_ext': file_ext,
+        'is_free': True,
     })
-
-
-# ----------------------------------------------------------------------
-# View ya Data ya PDF — Inatoa data ya PDF kwa ajili ya kusoma
-# ----------------------------------------------------------------------
-def special_pdf_data_view(request, copy_id):
-    """Serve raw PDF bytes for special softcopy — only called by the in-browser viewer.
-    Direct access still requires active borrow; the URL is not guessable without auth.
-    """
-    from circulation.models import BorrowingTransaction
-    from django.utils import timezone as tz
-    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='borrow')
-    token = request.GET.get('token')
-    tx = None
-    if token:
-        try:
-            tx = BorrowingTransaction.objects.get(access_token=token, copy=copy)
-            # Ensure logged-in user is the owner of the transaction
-            if request.user.is_authenticated and request.user != tx.user:
-                return HttpResponseForbidden('This link belongs to another user.')
-            # Require login even with token to prevent sharing
-            if not request.user.is_authenticated:
-                return HttpResponseForbidden('Authentication required.')
-        except BorrowingTransaction.DoesNotExist:
-            return HttpResponseForbidden('Invalid access token.')
-    else:
-        if not request.user.is_authenticated:
-            return HttpResponseForbidden('Authentication required.')
-        tx = BorrowingTransaction.objects.filter(
-            user=request.user, copy=copy
-        ).order_by('-borrow_date').first()
-
-    if not tx or tx.status == 'returned':
-        return HttpResponseForbidden('Access denied.')
-    if tz.now() > tx.due_date:
-        return HttpResponseForbidden('Access expired.')
-    if not copy.file_path:
-        return HttpResponseForbidden('File not available.')
-    ct = _ebook_content_type(copy.file_path)
-    fname = _ebook_filename(copy.file_path, 'document')
-    response = FileResponse(copy.file_path.open('rb'), content_type=ct)
-    response['Content-Disposition'] = f'inline; filename="{fname}"'
-    response['X-Content-Type-Options'] = 'nosniff'
-    response['Cache-Control'] = 'no-store, no-cache, must-revalidate, private, max-age=0'
-    response['Pragma'] = 'no-cache'
-    response['Expires'] = '0'
-    response['X-Robots-Tag'] = 'noindex, nofollow'
-    return response
 
 
 @login_required
@@ -1209,7 +1026,7 @@ def special_pdf_data_view(request, copy_id):
 # View ya Pakua Softcopy Bure — Mtumiaji anapakua PDF bure
 # ----------------------------------------------------------------------
 def free_softcopy_download_view(request, copy_id):
-    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='free')
+    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy')
     if not copy.file_path:
         messages.error(request, 'File not available for this copy.')
         return redirect('book_detail_public', book_id=copy.book_id)
@@ -1225,7 +1042,7 @@ def free_softcopy_data_view(request, copy_id):
     """Serve raw file bytes for the in-browser viewer (free softcopy).
     Only called by the viewer — not for direct download.
     """
-    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy', access_type='free')
+    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy')
     if not copy.file_path:
         return HttpResponseForbidden('File not available.')
     ct = _ebook_content_type(copy.file_path)
@@ -1298,9 +1115,6 @@ def copy_edit_view(request, copy_id):
             copy.barcode = request.POST.get('barcode', copy.barcode)
         copy.shelf_location = request.POST.get('shelf_location', copy.shelf_location)
         
-        # Handle prepaid_fee for softcopies
-        if copy.copy_type == 'softcopy':
-            copy.prepaid_fee = request.POST.get('prepaid_fee', 0)
 
         # Validate status against the model's allowed choices — never trust
         # arbitrary POST values. Refusing to corrupt copy.status is the

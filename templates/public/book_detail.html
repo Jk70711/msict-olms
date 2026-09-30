@@ -31,40 +31,6 @@
           </a>
         {% endfor %}
 
-        {# ── Special soft copies ──────────────────── #}
-        {% if special_copies %}
-          {% if user_active_softcopy_tx %}
-            {# User already has active borrow – show Read link #}
-            {% if user_active_softcopy_tx.is_link_active %}
-            <a href="{% url 'softcopy_access' user_active_softcopy_tx.access_token %}"
-               class="btn btn-primary" target="_blank">
-              <i class="bi bi-file-pdf"></i> Read Now
-            </a>
-            {% endif %}
-          {% elif user_pending_softcopy_req %}
-            <button class="btn btn-outline-warning" disabled>
-              <i class="bi bi-hourglass-split"></i> Soft Copy Request Pending…
-            </button>
-          {% elif not user_can_borrow_softcopy %}
-            {# Blocked – show reason #}
-            <button class="btn btn-outline-danger" disabled title="Borrow limit reached">
-              <i class="bi bi-slash-circle"></i> Borrow Limit Reached (3)
-            </button>
-          {% else %}
-            {# Eligible – request the first available special softcopy #}
-            {% with copy=special_copies.first %}
-            <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-warning">
-              <i class="bi bi-file-earmark-lock"></i> Request Special Soft Copy
-              {% if copy.prepaid_fee > 0 %}
-                <span class="badge bg-light text-dark ms-1">TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}</span>
-              {% else %}
-                <span class="badge bg-light text-dark ms-1">Fee not set</span>
-              {% endif %}
-            </a>
-            {% endwith %}
-          {% endif %}
-        {% endif %}
-
         {# ── Hardcopy borrow / reserve ──────────────── #}
         {% if book.available_hardcopy_count > 0 %}
           {% if user_can_borrow_hardcopy %}
@@ -110,15 +76,7 @@
       {% if book.book_type == 'both' %}<span class="badge bg-info text-dark border"><i class="bi bi-layers"></i> Both Formats</span>
       {% elif book.book_type == 'softcopy' %}<span class="badge bg-success border"><i class="bi bi-file-earmark-pdf"></i> Softcopy</span>
       {% else %}<span class="badge bg-primary border"><i class="bi bi-book"></i> Hardcopy</span>{% endif %}
-      {% if special_copies %}
-        {% with copy=special_copies.first %}
-          {% if copy.prepaid_fee > 0 %}
-            <span class="badge bg-warning text-dark border"><i class="bi bi-cash-coin"></i> Fee: TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}</span>
-          {% else %}
-            <span class="badge bg-warning text-dark border"><i class="bi bi-cash-coin"></i> Fee not set</span>
-          {% endif %}
-        {% endwith %}
-      {% elif free_copies %}
+      {% if free_copies %}
         <span class="badge bg-success border"><i class="bi bi-check-circle"></i> Free Access</span>
       {% endif %}
     </div>
@@ -171,18 +129,7 @@
           <div class="small text-muted">Loss Fine</div>
         </div>
       </div>
-      {% if special_copies %}
-      <div class="col-6 col-md-3">
-        <div class="card p-2 text-center border-warning">
-          <div class="fs-5 fw-bold text-warning">
-            {% with copy=special_copies.first %}
-              {% if copy.prepaid_fee > 0 %}TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}{% else %}—{% endif %}
-            {% endwith %}
-          </div>
-          <div class="small text-muted">Borrowing Fee</div>
-        </div>
-      </div>
-      {% endif %}
+
     </div>
     {% if copies %}
     <h6 class="fw-bold">Copies</h6>
@@ -203,10 +150,8 @@
             <td>
               {% if copy.copy_type == 'hardcopy' %}
                 <span class="badge bg-primary"><i class="bi bi-arrow-return-right"></i> Borrowing</span>
-              {% elif copy.access_type == 'free' %}
+              {% elif copy.copy_type == 'softcopy' %}
                 <span class="badge bg-success"><i class="bi bi-download"></i> Free Download</span>
-              {% elif copy.access_type == 'borrow' %}
-                <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special Borrow</span>
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}
@@ -236,7 +181,7 @@
               {% endif %}
             </td>
             <td>
-              {% if copy.copy_type == 'softcopy' and copy.access_type == 'free' and copy.file_path %}
+              {% if copy.copy_type == 'softcopy' and copy.file_path %}
                 {% if user.is_authenticated %}
                 <div class="btn-group btn-group-sm">
                   <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-success" target="_blank">
@@ -251,8 +196,7 @@
                   <i class="bi bi-book"></i> Login to Read
                 </a>
                 {% endif %}
-              {% elif copy.copy_type == 'softcopy' and copy.access_type == 'borrow' %}
-                <span class="text-muted small"><i class="bi bi-lock"></i> Request required</span>
+
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}

@@ -113,26 +113,7 @@
                 <i class="bi bi-trash"></i>
               </button>
             </form>
-            {% elif req.status == 'approved' and req.copy_id and req.copy.copy_type == 'softcopy' and req.copy.prepaid_fee > 0 %}
-            {% if not req.borrowing_transactions.exists %}
-            <a href="{% url 'process_softcopy_payment' req.pk %}" class="btn btn-sm btn-warning py-0 px-2">
-              <i class="bi bi-credit-card me-1"></i> Process Payment
-            </a>
-            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this payment-pending request? This cannot be undone.')">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-            {% else %}
-            <small class="text-success"><i class="bi bi-check2-all"></i> Paid & Issued</small>
-            <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this issued request? This cannot be undone.')">
-              {% csrf_token %}
-              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Delete">
-                <i class="bi bi-trash"></i>
-              </button>
-            </form>
-            {% endif %}
+
             {% elif req.status == 'rejected' %}
             <small class="text-muted">{{ req.rejection_reason|truncatechars:30 }}</small>
             <form method="post" action="{% url 'delete_borrow_request' req.pk %}" class="d-inline ms-1" onsubmit="return confirm('Permanently delete this rejected request? This cannot be undone.')">

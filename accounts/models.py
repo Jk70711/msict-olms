@@ -106,8 +106,7 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
     card_no = models.CharField(max_length=25, unique=True, null=True, blank=True, db_index=True,
                                help_text='Auto-generated card number e.g. MSICT-2026-00001')
     is_guest = models.BooleanField(default=False)
-    total_guest_hours = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    total_guest_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    total_guest_visits = models.IntegerField(default=0, help_text='Total number of library visits by this guest')
     rank = models.ForeignKey(
         'Rank', on_delete=models.SET_NULL, null=True, blank=True,
         related_name='users', db_column='rank_id'
@@ -256,12 +255,11 @@ class OLMSUser(AbstractBaseUser, PermissionsMixin):
 
     def active_borrows_count(self):
         from circulation.models import BorrowingTransaction
-        from django.db.models import Q
+        # Softcopy is no longer tracked as a borrow — only count hardcopy transactions
         return BorrowingTransaction.objects.filter(
             user=self,
             status__in=['borrowed', 'overdue'],
-        ).exclude(
-            Q(copy__copy_type='softcopy', copy__access_type='borrow', due_date__lt=timezone.now())
+            copy__copy_type='hardcopy',
         ).count()
 
     def has_unpaid_fines(self):
@@ -339,33 +337,20 @@ class UserSession(models.Model):
         db_table = 'user_sessions'
 
 
-# Vikao vya wageni (walk-in) — ufuatiliaji wa muda, malipo na hali ya session
+# Vikao vya wageni (walk-in) — ufuatiliaji wa ziara bila malipo
 class GuestSession(models.Model):
-    PAYMENT_STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('paid', 'Paid'),
-        ('waived', 'Waived'),
-    ]
     STATUS_CHOICES = [
         ('active', 'Active'),
-        ('renewed', 'Renewed'),
         ('ended', 'Ended'),
-        ('expired', 'Expired'),
     ]
 
     user = models.ForeignKey(OLMSUser, on_delete=models.CASCADE, related_name='guest_sessions')
     sign_in_time = models.DateTimeField(auto_now_add=True)
     sign_out_time = models.DateTimeField(null=True, blank=True)
-    paid_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
-    duration_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
-    amount_paid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    payment_status = models.CharField(max_length=10, choices=PAYMENT_STATUS_CHOICES, default='pending')
-    payment_method = models.CharField(max_length=20, blank=True, default='')
-    renewed = models.BooleanField(default=False)
+    duration_minutes = models.IntegerField(null=True, blank=True, help_text='Actual visit duration in minutes (set on sign-out)')
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     device_info = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
-    expiry_notification_sent = models.BooleanField(default=False, help_text='True if 15-min pre-expiry SMS/email was sent')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

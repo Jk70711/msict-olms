@@ -1,6 +1,6 @@
 """
 Management command: send_due_reminders
-Sends SMS + email reminders for borrowing transactions due in ~2 days, ~1 day, and on due day.
+Sends SMS + email reminders for hardcopy borrowing transactions due in ~2 days, ~1 day, and on due day.
 
 Schedule via cron to run every hour:
     0 * * * * /path/to/olmsvenv/bin/python /path/to/manage.py send_due_reminders
@@ -22,7 +22,7 @@ from circulation.models import BorrowingTransaction
 
 
 class Command(BaseCommand):
-    help = 'Send due-date reminder SMS/email: 2 days before, 1 day before, and on due day'
+    help = 'Send due-date reminder SMS/email: 2 days before, 1 day before, and on due day (hardcopy only)'
 
     def handle(self, *args, **options):
         now = timezone.now()
@@ -36,12 +36,7 @@ class Command(BaseCommand):
                 '2-day',
                 now + timedelta(hours=47),
                 now + timedelta(hours=49),
-                lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: EXPIRY NOTICE - '{book}' access expires in 2 days "
-                    f"({due.strftime('%d %b %Y %H:%M')}). "
-                    f"Renew from your dashboard to keep reading. "
-                    f"No fine applies — the link simply becomes inactive."
-                ) if copy_type == 'softcopy' else (
+                lambda book, due, fpd=fine_per_day: (
                     f"MSICT OLMS: REMINDER - '{book}' is due in 2 days "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
                     f"Please return the book to the library on time to avoid fines (TZS {fpd:,.0f}/day)."
@@ -51,11 +46,7 @@ class Command(BaseCommand):
                 '1-day',
                 now + timedelta(hours=23),
                 now + timedelta(hours=25),
-                lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: '{book}' access expires TOMORROW "
-                    f"({due.strftime('%d %b %Y %H:%M')}). "
-                    f"Renew from your dashboard before it expires to keep reading."
-                ) if copy_type == 'softcopy' else (
+                lambda book, due, fpd=fine_per_day: (
                     f"MSICT OLMS: URGENT - '{book}' is due TOMORROW "
                     f"({due.strftime('%d %b %Y %H:%M')}). "
                     f"Bring the book to the library tomorrow to avoid a TZS {fpd:,.0f}/day overdue fine."
@@ -65,11 +56,7 @@ class Command(BaseCommand):
                 'due-day',
                 now - timedelta(hours=1),
                 now + timedelta(hours=1),
-                lambda book, copy_type, due, fpd=fine_per_day: (
-                    f"MSICT OLMS: '{book}' access expires TODAY at "
-                    f"{due.strftime('%H:%M')}. "
-                    f"Renew now from your dashboard to keep reading."
-                ) if copy_type == 'softcopy' else (
+                lambda book, due, fpd=fine_per_day: (
                     f"MSICT OLMS: DUE TODAY - '{book}' must be returned by "
                     f"{due.strftime('%H:%M')}. "
                     f"Return the book to the library immediately. A TZS {fpd:,.0f}/day fine starts after the deadline."
@@ -82,6 +69,8 @@ class Command(BaseCommand):
                 status='borrowed',
                 due_date__gte=window_start,
                 due_date__lte=window_end,
+            ).exclude(
+                copy__copy_type='softcopy'
             ).select_related('user', 'copy__book')
 
             count = qs.count()
@@ -90,10 +79,9 @@ class Command(BaseCommand):
                 continue
 
             for tx in qs:
-                book      = tx.copy.book.title
-                copy_type = tx.copy.copy_type
-                due       = timezone.localtime(tx.due_date)
-                msg       = msg_fn(book, copy_type, due)
+                book = tx.copy.book.title
+                due  = timezone.localtime(tx.due_date)
+                msg  = msg_fn(book, due)
 
                 _priority = 'normal' if label == '2-day' else 'high'
                 notify_user(tx.user, msg, 'sms', priority=_priority, message_type='borrowing')

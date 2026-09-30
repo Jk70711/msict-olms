@@ -143,7 +143,7 @@ def _cell_value(obj, col_key):
         return 'Yes' if val else 'No'
     if col_key == 'member_type' and val:
         return obj.get_member_type_display() if hasattr(obj, 'get_member_type_display') else str(val)
-    if col_key in ('role', 'status', 'borrow_type', 'copy_type', 'access_type', 'channel', 'priority', 'news_type'):
+    if col_key in ('role', 'status', 'borrow_type', 'copy_type', 'channel', 'priority', 'news_type'):
         display = getattr(obj, f'get_{col_key}_display', None)
         if callable(display):
             return display()

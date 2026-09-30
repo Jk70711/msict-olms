@@ -80,10 +80,8 @@
           <td>
             {% if copy.copy_type == 'hardcopy' %}
               <span class="badge bg-primary"><i class="bi bi-arrow-return-right"></i> Borrowing</span>
-            {% elif copy.access_type == 'free' %}
+            {% elif copy.copy_type == 'softcopy' %}
               <span class="badge bg-success"><i class="bi bi-download"></i> Free Download</span>
-            {% elif copy.access_type == 'borrow' %}
-              <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special Borrow</span>
             {% else %}
               <span class="text-muted">—</span>
             {% endif %}

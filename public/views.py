@@ -295,9 +295,9 @@ def book_detail_public_view(request, book_id):
     from django.conf import settings as _settings
     book = get_object_or_404(Book, pk=book_id)  # Tafuta kitabu au onyesha ukurasa wa 404
     copies = book.copies.exclude(status__in=['lost', 'damaged'])
-    free_copies = copies.filter(copy_type='softcopy', access_type='free')
-    special_copies = copies.filter(copy_type='softcopy', access_type='borrow')
-    available_special = special_copies.filter(status='available')
+    free_copies = copies.filter(copy_type='softcopy')
+    special_copies = copies.none()
+    available_special = copies.none()
     hardcopies = copies.filter(copy_type='hardcopy')
 
     user_can_borrow_hardcopy = True

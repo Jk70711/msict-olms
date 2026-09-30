@@ -9,7 +9,7 @@
         <strong>Book:</strong> {{ copy.book.title }}<br>
         <strong>ID:</strong> <code>{{ copy.display_id }}</code>{% if copy.copy_type == 'softcopy' %} <span class="badge bg-info text-dark ms-1"><i class="bi bi-link-45deg"></i> Softcopy Link</span>{% endif %}<br>
         <strong>Type:</strong> {{ copy.copy_type|title }}
-        {% if copy.copy_type == 'softcopy' %}({{ copy.access_type|title }}){% endif %}
+
       </div>
       <form method="post">{% csrf_token %}
         <div class="row g-3">
@@ -30,16 +30,7 @@
               It displays as <strong>Link</strong> to all users.
             </div>
           </div>
-          {% if copy.access_type == 'borrow' %}
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Link Access Fee (TZS) <span class="text-danger">*</span></label>
-            <div class="input-group">
-              <span class="input-group-text">TZS</span>
-              <input type="number" name="prepaid_fee" class="form-control" value="{{ copy.prepaid_fee|default:0 }}" min="0" step="0.01" placeholder="0.00" required>
-            </div>
-            <div class="form-text">Fee required for softcopy access. Set to 0 for free access.</div>
-          </div>
-          {% endif %}
+
           {% endif %}
           <div class="col-md-6">
             <label class="form-label">Shelf Location</label>

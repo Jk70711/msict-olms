@@ -3,7 +3,7 @@ from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 from django.urls import path
 from django.shortcuts import redirect
-from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, GuestSession, BulkMessage, BulkMessageRecipient, UserManualSection, TermsSection
+from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, UserSession, BulkMessage, BulkMessageRecipient, UserManualSection, TermsSection
 
 
 # ── Customise Django admin site ────────────────────────────────────────────
@@ -169,15 +169,6 @@ class UserSessionAdmin(admin.ModelAdmin):
     ordering = ('-login_time',)
     actions = ['delete_selected']
 
-
-@admin.register(GuestSession)
-class GuestSessionAdmin(admin.ModelAdmin):
-    list_display = ('user', 'sign_in_time', 'sign_out_time', 'paid_hours', 'duration_hours', 'amount_paid', 'payment_status', 'status')
-    list_filter = ('status', 'payment_status')
-    search_fields = ('user__username', 'user__email', 'user__phone', 'ip_address')
-    readonly_fields = ('sign_in_time', 'created_at')
-    date_hierarchy = 'sign_in_time'
-    ordering = ('-sign_in_time',)
 
 
 @admin.register(BulkMessage)

@@ -220,8 +220,8 @@ def report_books_view(request):
     available_copies = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     borrowed_copies = BookCopy.objects.filter(status='borrowed').count()
     lost_copies = BookCopy.objects.filter(status='lost').count()
-    free_softcopies = BookCopy.objects.filter(copy_type='softcopy', access_type='free').count()
-    special_softcopies = BookCopy.objects.filter(copy_type='softcopy', access_type='borrow').count()
+    free_softcopies = BookCopy.objects.filter(copy_type='softcopy').count()
+    special_softcopies = 0
     category_stats = Category.objects.annotate(book_count=Count('books')).order_by('-book_count')[:10]
     
     # Loss fine statistics for lost copies
@@ -372,48 +372,49 @@ def _parse_custom_period(raw):
     return timezone.now() - delta, label
 
 
-ALL_ACCOUNT_TYPES = ['overdue', 'link_fee', 'guest_fee', 'damage', 'loss']
+# Active revenue types (new records only)
+ACTIVE_ACCOUNT_TYPES = ['overdue', 'damage', 'loss']
+# Only active types for display/filtering now
+ALL_ACCOUNT_TYPES = ['overdue', 'damage', 'loss']
 
 
 def _revenue_summary(since=None, account_types=None):
     """Compute revenue aggregates from RevenueTransaction. Returns a dict.
-    account_types: list of account_type values to include; None = all."""
+    account_types: list of account_type values to include; None = all active."""
     from circulation.models import RevenueTransaction, Fine
     from django.db.models import F
     from decimal import Decimal
-    qs = RevenueTransaction.objects.all()
     
+    # Always exclude legacy fee types (link_fee, guest_fee)
+    qs = RevenueTransaction.objects.filter(account_type__in=ACTIVE_ACCOUNT_TYPES)
+
     # Base query for unpaid fines
     fines_qs = Fine.objects.filter(paid=False)
-    
+
     if since:
         qs = qs.filter(recorded_at__gte=since)
         fines_qs = fines_qs.filter(created_at__gte=since)
-        
+
     if account_types:
         qs = qs.filter(account_type__in=account_types)
 
     def _sum(**kw):
         return qs.filter(**kw).aggregate(t=Sum('amount'))['t'] or Decimal('0')
 
-    overdue    = _sum(account_type='overdue')
-    link_fee   = _sum(account_type='link_fee')
-    guest_fee  = _sum(account_type='guest_fee')
-    loss       = _sum(account_type='loss')  # Fine for lost books (income)
-    damage     = _sum(account_type='damage')
+    overdue = _sum(account_type='overdue')
+    loss    = _sum(account_type='loss')
+    damage  = _sum(account_type='damage')
 
-    # Total collected revenue
-    total_revenue = overdue + link_fee + guest_fee + damage + loss
-    
+    # Total collected revenue (active types only)
+    total_revenue = overdue + damage + loss
+
     # Calculate unpaid fines (outstanding money)
     unpaid = fines_qs.aggregate(t=Sum(F('amount') - F('amount_paid')))['t'] or Decimal('0')
-    
+
     net_revenue = total_revenue - unpaid
 
     return {
         'overdue': overdue,
-        'link_fee': link_fee,
-        'guest_fee': guest_fee,
         'loss': loss,
         'damage': damage,
         'unpaid': unpaid,
@@ -462,16 +463,12 @@ def report_revenue_view(request):
 
     breakdown = [
         {'label': 'Overdue Fees',  'amount': data['overdue'],   'pct': _pct(data['overdue']),   'color': '#f59e0b'},
-        {'label': 'Link Fees',     'amount': data['link_fee'],  'pct': _pct(data['link_fee']),  'color': '#3b82f6'},
-        {'label': 'Guest Fees',    'amount': data['guest_fee'], 'pct': _pct(data['guest_fee']), 'color': '#10b981'},
         {'label': 'Damage Fines',  'amount': data['damage'],    'pct': _pct(data['damage']),    'color': '#ea580c'},
         {'label': 'Loss Fines',    'amount': data['loss'],      'pct': _pct(data['loss']),      'color': '#dc3545'},
     ]
 
     return render(request, 'reports/report_revenue.html', {
         'overdue':        data['overdue'],
-        'link_fee':       data['link_fee'],
-        'guest_fee':      data['guest_fee'],
         'damage':         data['damage'],
         'loss':           data['loss'],
         'unpaid':         data['unpaid'],
@@ -527,8 +524,6 @@ def export_revenue_pdf_view(request):
         subtitle=f'{period_label}  |  {type_label}  |  {timezone.now().strftime("%d %b %Y")}',
         summary_pairs=[
             ('Overdue Fees',  f'TZS {data["overdue"]:,.2f}'),
-            ('Link Fees',     f'TZS {data["link_fee"]:,.2f}'),
-            ('Guest Fees',    f'TZS {data["guest_fee"]:,.2f}'),
             ('Damage Fines',  f'TZS {data["damage"]:,.2f}'),
             ('Loss Fines',    f'TZS {data["loss"]:,.2f}'),
             ('Total Revenue', f'TZS {data["total_revenue"]:,.2f}'),
@@ -646,8 +641,8 @@ def export_books_pdf_view(request):
     available      = BookCopy.objects.filter(status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
     borrowed       = BookCopy.objects.filter(status='borrowed').count()
     lost           = BookCopy.objects.filter(status='lost').count()
-    free_sc        = BookCopy.objects.filter(copy_type='softcopy', access_type='free').count()
-    special_sc     = BookCopy.objects.filter(copy_type='softcopy', access_type='borrow').count()
+    free_sc        = BookCopy.objects.filter(copy_type='softcopy').count()
+    special_sc     = 0
     category_stats = Category.objects.annotate(book_count=Count('books')).order_by('-book_count')[:10]
 
     # Add shelf information to books - query actual shelf per book per category

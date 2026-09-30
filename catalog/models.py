@@ -98,28 +98,11 @@ class Book(models.Model):
             transactions__status__in=['borrowed', 'overdue']
         ).count()
 
-    def has_free_softcopy(self):
-        return self.copies.filter(copy_type='softcopy', access_type='free', status='available').exists()
+    def has_softcopy(self):
+        return self.copies.filter(copy_type='softcopy', status='available').exists()
 
-    def has_special_softcopy(self):
-        return self.copies.filter(copy_type='softcopy', access_type='borrow').exists()
-
-    def total_hardcopies(self):
-        return self.copies.filter(copy_type='hardcopy').exclude(status__in=['lost', 'damaged']).count()
-
-    def free_softcopy_count(self):
-        return self.copies.filter(copy_type='softcopy', access_type='free').count()
-
-    def special_softcopy_count(self):
-        return self.copies.filter(copy_type='softcopy', access_type='borrow').count()
-
-    def available_special_softcopy_count(self):
-        return self.copies.filter(copy_type='softcopy', access_type='borrow', status='available').exclude(transactions__status__in=['borrowed', 'overdue']).count()
-
-    def special_softcopy_fee(self):
-        """Return the prepaid_fee of the first special softcopy, or 0 if none."""
-        copy = self.copies.filter(copy_type='softcopy', access_type='borrow').first()
-        return copy.prepaid_fee if copy else 0
+    def softcopy_count(self):
+        return self.copies.filter(copy_type='softcopy').count()
 
     @property
     def softcopy(self):
@@ -162,7 +145,6 @@ class BookCourse(models.Model):
 # ----------------------------------------------------------------------
 class BookCopy(models.Model):
     COPY_TYPE_CHOICES = [('hardcopy', 'Hardcopy'), ('softcopy', 'Softcopy')]
-    ACCESS_TYPE_CHOICES = [('borrow', 'Special Soft Copy'), ('free', 'Free Soft Copy')]
     STATUS_CHOICES = [
         ('available', 'Available'),
         ('borrowed', 'Borrowed'),
@@ -173,7 +155,6 @@ class BookCopy(models.Model):
 
     book = models.ForeignKey(Book, on_delete=models.CASCADE, related_name='copies')
     copy_type = models.CharField(max_length=10, choices=COPY_TYPE_CHOICES)
-    access_type = models.CharField(max_length=10, choices=ACCESS_TYPE_CHOICES, null=True, blank=True)
     accession_no = models.CharField(max_length=50, unique=True)
     file_path = models.FileField(
         upload_to='ebooks/',
@@ -185,7 +166,6 @@ class BookCopy(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='available')
     shelf_location = models.CharField(max_length=50, blank=True)
     barcode = models.CharField(max_length=50, unique=True, blank=True)
-    prepaid_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0, help_text='Prepaid fee for softcopy access (TZS)')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -197,21 +177,13 @@ class BookCopy(models.Model):
         return f"{self.book.title} [{self.accession_no}] - {self.copy_type}"
 
     def get_access_display(self):
-        """Human-readable access label (used in all templates)."""
+        """Human-readable access label."""
         if self.copy_type == 'hardcopy':
             return 'Borrowing'
-        if self.access_type == 'free':
-            return 'Free Download'
-        if self.access_type == 'borrow':
-            return 'Special Borrow'
-        return '—'
+        return 'Free Download'
 
     def clean(self):
-        from django.core.exceptions import ValidationError
-        if self.copy_type == 'hardcopy' and self.access_type:
-            raise ValidationError("Hardcopy cannot have access_type set.")
-        if self.copy_type == 'softcopy' and not self.access_type:
-            raise ValidationError("Softcopy must have access_type set.")
+        pass  # No access_type constraints — all softcopy is free
 
     @classmethod
     def get_next_accession_number(cls, offset=0, for_softcopy=False):
@@ -260,8 +232,6 @@ class BookCopy(models.Model):
         return self.accession_no if self.copy_type == 'hardcopy' else 'Link'
 
     def save(self, *args, **kwargs):
-        if self.copy_type == 'hardcopy':
-            self.access_type = None
         if not self.barcode:
             self.barcode = self.accession_no
         super().save(*args, **kwargs)

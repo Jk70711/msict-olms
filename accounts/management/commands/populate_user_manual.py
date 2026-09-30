@@ -272,27 +272,17 @@ class Command(BaseCommand):
                 'title': 'Guest Access',
                 'icon': 'bi-person-badge',
                 'order': 13,
-                'content': '''<h6 class="fw-bold">Guest Sessions</h6>
+                'content': '''<h6 class="fw-bold">Guest Access</h6>
 <ul>
-  <li>Guests can access the library for limited time sessions</li>
-  <li>Session duration is purchased in hours (max {{ guest_max_hours }} hours per session)</li>
-  <li>Hourly rate is <strong>TZS {{ guest_hourly_rate }}/hour</strong></li>
-  <li>Guests can browse the catalog but cannot borrow</li>
-  <li>Guest sessions expire after the purchased time</li>
-  <li>Daily limit: Maximum {{ guest_max_hours }} hours total per day</li>
+  <li>Guests can browse the library catalog freely.</li>
+  <li>Guests can read and download digital softcopy books for free.</li>
+  <li>Guests cannot borrow hardcopy books or make reservations.</li>
+  <li>Guest sessions are free and do not expire while logged in.</li>
 </ul>
-<h6 class="fw-bold mt-3">Session Renewal</h6>
+<h6 class="fw-bold mt-3">Upgrading to Member</h6>
 <ul>
-  <li>Guests can renew their session before expiry</li>
-  <li>Renewal payment is based on remaining available hours</li>
-  <li>Session expiry countdown is displayed in real-time</li>
-  <li>5-minute warning popup before session expires</li>
-</ul>
-<h6 class="fw-bold mt-3">Guest to Member Upgrade</h6>
-<ul>
-  <li>Guests can upgrade to full member status</li>
-  <li>Complete registration form with your details</li>
-  <li>Requires librarian approval</li>
+  <li>Guests can request to upgrade to full Membership via their dashboard.</li>
+  <li>Membership requires approval by a librarian.</li>
 </ul>'''
             },
             {

@@ -522,14 +522,6 @@
       </div>
       {% endif %}
 
-      {% if login_content.guest_payment %}
-      <div class="guest-info-card">
-        <div class="guest-icon"><i class="bi {{ login_content.guest_payment.icon|default:'bi-credit-card' }}"></i></div>
-        <h6>{{ login_content.guest_payment.title }}</h6>
-        <p style="font-size: {{ login_content.guest_payment.font_size|default:'18' }}px;">{{ login_content.guest_payment.body }}</p>
-      </div>
-      {% endif %}
-
       {% if login_content.guest_upgrade %}
       <div class="guest-info-card">
         <div class="guest-icon"><i class="bi {{ login_content.guest_upgrade.icon|default:'bi-arrow-up-circle' }}"></i></div>

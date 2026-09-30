@@ -90,10 +90,8 @@
             <td>
               {% if copy.copy_type == 'hardcopy' %}
                 <span class="badge bg-primary"><i class="bi bi-arrow-return-right"></i> Borrowing</span>
-              {% elif copy.access_type == 'free' %}
+              {% elif copy.copy_type == 'softcopy' %}
                 <span class="badge bg-success"><i class="bi bi-download"></i> Free Download</span>
-              {% elif copy.access_type == 'borrow' %}
-                <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special Borrow</span>
               {% else %}
                 <span class="text-muted">—</span>
               {% endif %}
@@ -187,13 +185,7 @@
             </div>
             {% endif %}
           </div>
-          <div id="accessTypeGroup" style="display:none" class="mb-3">
-            <label class="form-label">Access Type</label>
-            <select name="access_type" class="form-select">
-              <option value="free">Free Soft Copy</option>
-              <option value="borrow">Special Soft Copy (Borrow Required)</option>
-            </select>
-          </div>
+
           <div class="mb-3" id="accessionGroup">
             <label class="form-label">Accession Number <span class="text-danger">*</span></label>
             <div class="input-group">

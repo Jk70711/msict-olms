@@ -26,7 +26,7 @@ from django.views.decorators.http import require_POST
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 
-from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, GuestSession, BulkMessage, BulkMessageRecipient
+from .models import OLMSUser, LoginAttempt, OTPRecord, VirtualCard, AuditLog, SystemPreference, BlockedIP, BulkMessage, BulkMessageRecipient
 from .utils import get_client_ip, notify_user, send_sms, send_email_notification, log_audit, generate_virtual_card, generate_virtual_card_pdf, create_otp_for_user, log_credentials_fallback, mark_badge_viewed
 from .forms import LoginForm
 from .security_utils import safe_redirect, build_content_disposition
@@ -92,8 +92,7 @@ def user_manual_view(request):
     suspend_attempts = int(SystemPreference.get('SUSPEND_ATTEMPTS', 3))
     suspend_duration_minutes = int(SystemPreference.get('SUSPEND_DURATION_MINUTES', 10))
     session_timeout_minutes = int(SystemPreference.get('SESSION_TIMEOUT_MINUTES', 30))
-    guest_max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12))
-    guest_hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500))
+
     
     # Prepare template context for rendering section content
     # Pre-format values that need intcomma since filter may not be available in sub-template
@@ -110,8 +109,7 @@ def user_manual_view(request):
         'suspend_attempts': suspend_attempts,
         'suspend_duration_minutes': suspend_duration_minutes,
         'session_timeout_minutes': session_timeout_minutes,
-        'guest_max_hours': guest_max_hours,
-        'guest_hourly_rate': intcomma(guest_hourly_rate),
+
     }
     
     # Fetch editable sections from database and render their content
@@ -152,8 +150,7 @@ def user_manual_view(request):
         'suspend_attempts': suspend_attempts,
         'suspend_duration_minutes': suspend_duration_minutes,
         'session_timeout_minutes': session_timeout_minutes,
-        'guest_max_hours': guest_max_hours,
-        'guest_hourly_rate': guest_hourly_rate,
+
         'intcomma': intcomma,
         'sections': sections,
     })
@@ -788,601 +785,51 @@ def dashboard_redirect(request):
     elif role == 'librarian':
         return redirect('librarian_dashboard')
     elif role == 'guest' or request.user.is_guest:
-        has_active = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).exists()
-        if has_active:
-            return redirect('guest_dashboard')
-        return redirect('guest_start_session')
+        return redirect('guest_dashboard')
     return redirect('member_dashboard')
 
 
 @login_required
 def guest_dashboard_view(request):
-    if request.user.role != 'guest' and not request.user.is_guest:
-        return redirect('dashboard')
+    """Informational landing dashboard for guests — shows library highlights, membership steps,
+    top borrowed books, catalog stats, and library rules."""
+    from circulation.models import BorrowingTransaction
+    from catalog.models import Book, BookCopy, Category
+    from django.db.models import Count
 
-    active_session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).order_by('-sign_in_time').first()
-
-    # Server-side auto-expiry enforcement
-    if active_session:
-        now = timezone.now()
-        expiry = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
-        if now >= expiry:
-            duration_hours = max(0.01, (now - active_session.sign_in_time).total_seconds() / 3600)
-            active_session.sign_out_time = now
-            active_session.duration_hours = round(duration_hours, 2)
-            active_session.status = 'expired'
-            # amount_paid already set at payment time — no refund
-            active_session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-            request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(active_session.paid_hours))
-            request.user.save(update_fields=['total_guest_hours'])
-            # Revenue already recorded at payment time — no new RevenueTransaction
-            log_audit(request.user, f"Guest session auto-expired ({active_session.duration_hours}h, TZS {active_session.amount_paid:,.0f} already paid)", request)
-            messages.warning(request, f'Your previous session has expired. Duration: {active_session.duration_hours} hour(s). Amount paid: TZS {active_session.amount_paid:,.0f}.')
-            active_session = None
-
-    # No active session → redirect to standalone start-session page
-    if not active_session:
-        return redirect('guest_start_session')
-
-    recent_sessions = GuestSession.objects.filter(user=request.user).order_by('-sign_in_time')[:10]
-    return render(request, 'accounts/guest_dashboard.html', {
-        'active_session': active_session,
-        'recent_sessions': recent_sessions,
-    })
-
-
-@login_required
-def guest_start_session_page_view(request):
-    """GET page: standalone start-session form (no nav, no sidebar).
-    Guest must fill hours and pay before accessing the dashboard."""
-    if request.user.role != 'guest' and not request.user.is_guest:
-        return redirect('dashboard')
-
-    existing = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
-    if existing:
-        return redirect('guest_dashboard')
-
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
-
-    return render(request, 'accounts/guest_start_session.html', {
-        'hourly_rate': hourly_rate,
-        'max_hours': max_hours,
-        'show_payment': False,
-    })
-
-
-@login_required
-@require_POST
-def start_guest_session_view(request):
-    """Guest fills hours → render payment form on standalone page (no session created yet)."""
-    if request.user.role != 'guest' and not request.user.is_guest:
-        messages.error(request, 'Only guest accounts can start guest sessions.')
-        return redirect('dashboard')
-
-    existing = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
-    if existing:
-        messages.info(request, 'You already have an active session. End it or renew it.')
-        return redirect('guest_dashboard')
-
-    try:
-        paid_hours = float(request.POST.get('paid_hours', '1') or '1')
-    except ValueError:
-        paid_hours = 1.0
-
-    paid_hours = max(1.0, paid_hours)
-    max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
-
-    # Enforce daily limit: max 12h total per day
-    hours_used_today = float(_guest_hours_used_today(request.user))
-    available_today = float(max_hours) - hours_used_today
-    if available_today <= 0:
-        messages.error(request, f'You have reached the daily limit of {max_hours}h. Try again tomorrow.')
-        return redirect('guest_start_session')
-    paid_hours = min(paid_hours, available_today)
-
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    total_amount = paid_hours * hourly_rate
-
-    return render(request, 'accounts/guest_start_session.html', {
-        'paid_hours': paid_hours,
-        'hourly_rate': hourly_rate,
-        'total_amount': total_amount,
-        'show_payment': True,
-    })
-
-
-@login_required
-@require_POST
-def guest_payment_view(request):
-    """Process guest payment, create session, and record revenue immediately."""
-    if request.user.role != 'guest' and not request.user.is_guest:
-        messages.error(request, 'Only guest accounts can start guest sessions.')
-        return redirect('dashboard')
-
-    existing = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
-    if existing:
-        messages.info(request, 'You already have an active session. End it or renew it.')
-        return redirect('guest_dashboard')
-
-    try:
-        paid_hours = float(request.POST.get('paid_hours', '1') or '1')
-    except ValueError:
-        paid_hours = 1.0
-
-    paid_hours = max(1.0, paid_hours)
-    max_hours = int(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-
-    # Enforce daily limit: max 12h total per day
-    hours_used_today = float(_guest_hours_used_today(request.user))
-    available_today = float(max_hours) - hours_used_today
-    if available_today <= 0:
-        messages.error(request, f'Daily limit of {max_hours}h reached. Try again tomorrow.')
-        return redirect('guest_start_session')
-    paid_hours = min(paid_hours, available_today)
-    total_amount = paid_hours * hourly_rate
-
-    payment_method = request.POST.get('payment_method', '').strip()
-    if not payment_method:
-        messages.error(request, 'Please select a payment method.')
-        return render(request, 'accounts/guest_start_session.html', {
-            'paid_hours': paid_hours,
-            'hourly_rate': hourly_rate,
-            'total_amount': total_amount,
-            'show_payment': True,
-        })
-
-    # Collect payment details based on method
-    phone_number = request.POST.get('phone_number', '').strip()
-    bank_name = request.POST.get('bank_name', '').strip()
-    bank_account_no = request.POST.get('bank_account_no', '').strip()
-    card_holder = request.POST.get('card_holder', '').strip()
-    card_last4 = request.POST.get('card_last4', '').strip()
-    card_expiry = request.POST.get('card_expiry', '').strip()
-    receipt_ref = request.POST.get('receipt_no', '').strip()
-
-    # Validate required fields per payment method
-    is_mobile = payment_method in ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']
-    is_bank = payment_method == 'bank_transfer'
-    is_card = payment_method in ['visa', 'mastercard']
-
-    if is_mobile and not phone_number:
-        messages.error(request, 'Phone number is required for mobile money payment.')
-        return render(request, 'accounts/guest_start_session.html', {
-            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
-            'show_payment': True,
-        })
-    if is_mobile and phone_number and not re.match(r'^0\d{9}$', phone_number):
-        messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
-        return render(request, 'accounts/guest_start_session.html', {
-            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
-            'show_payment': True,
-        })
-    if is_bank and (not bank_name or not bank_account_no):
-        messages.error(request, 'Bank name and account number are required for bank transfer.')
-        return render(request, 'accounts/guest_start_session.html', {
-            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
-            'show_payment': True,
-        })
-    if is_card and (not card_holder or not card_last4):
-        messages.error(request, 'Cardholder name and last 4 digits are required for card payment.')
-        return render(request, 'accounts/guest_start_session.html', {
-            'paid_hours': paid_hours, 'hourly_rate': hourly_rate, 'total_amount': total_amount,
-            'show_payment': True,
-        })
-
-    # Create session with payment already recorded
-    # Calculate paid_hours based on actual amount paid, not user input
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    calculated_paid_hours = round(total_amount / hourly_rate, 2)
-    
-    session = GuestSession.objects.create(
-        user=request.user,
-        paid_hours=calculated_paid_hours,
-        duration_hours=calculated_paid_hours,
-        amount_paid=total_amount,
-        payment_status='paid',
-        payment_method=payment_method,
-        ip_address=get_client_ip(request),
-        device_info=request.META.get('HTTP_USER_AGENT', '')[:400],
-        status='active',
+    # --- Top 8 most borrowed books (all time) ---
+    most_borrowed = (
+        BorrowingTransaction.objects
+        .filter(copy__book__isnull=False)
+        .values('copy__book__id', 'copy__book__title', 'copy__book__author')
+        .annotate(borrow_count=Count('id'))
+        .order_by('-borrow_count')[:8]
     )
 
-    # Record revenue immediately
-    try:
-        from circulation.models import RevenueTransaction
-        RevenueTransaction.objects.create(
-            user=request.user,
-            account_type='guest_fee',
-            amount=total_amount,
-            description=f'Guest session fee ({calculated_paid_hours:.0f}h) — {payment_method.upper()}',
-            reference_id=session.id,
-            reference_table='accounts_guestsession',
-            recorded_by=request.user,
-        )
-    except Exception:
-        pass
+    # --- Quick catalog stats ---
+    total_books = Book.objects.count()
+    total_hardcopy = BookCopy.objects.filter(copy_type='hardcopy').count()
+    total_softcopy = BookCopy.objects.filter(copy_type='softcopy').count()
+    total_categories = Category.objects.count()
 
-    # Update user totals
-    request.user.total_guest_hours = (request.user.total_guest_hours or 0) + Decimal(str(calculated_paid_hours))
-    request.user.total_guest_paid = (request.user.total_guest_paid or 0) + Decimal(str(total_amount))
-    request.user.save(update_fields=['total_guest_hours', 'total_guest_paid'])
-
-    log_audit(request.user, f"Guest session started ({calculated_paid_hours}h, TZS {total_amount:,.0f} paid via {payment_method})", request)
-
-    # Compute expiry time for notifications
-    expiry_dt = session.sign_in_time + timedelta(hours=float(calculated_paid_hours))
-    expiry_str = expiry_dt.strftime('%d %b %Y, %H:%M')
-
-    # SMS + Email notification
-    try:
-        sms_msg = (f"MSICT OLMS: Session started — {calculated_paid_hours:.0f}h at TZS {hourly_rate:,.0f}/h. "
-                   f"Total paid: TZS {total_amount:,.0f} via {payment_method.upper()}. "
-                   f"Expires at: {expiry_str}. Session #{session.id}.")
-        notify_user(request.user, sms_msg, 'sms', message_type='guest_session_start')
-    except Exception:
-        pass
-    try:
-        email_subject = f"Guest Session Started — MSICT OLMS"
-        email_body = (
-            f"Dear {request.user.get_full_name()},\n\n"
-            f"Your guest session has started successfully.\n\n"
-            f"  Duration   : {calculated_paid_hours:.0f} hour(s)\n"
-            f"  Rate       : TZS {hourly_rate:,.0f}/hour\n"
-            f"  Total      : TZS {total_amount:,.0f}\n"
-            f"  Method     : {payment_method.upper()}\n"
-            f"  Expires at : {expiry_str}\n\n"
-            f"Session ID: {session.id}\n\n"
-            f"Thank you for using MSICT Library."
-        )
-        notify_user(request.user, email_body, 'email', subject=email_subject)
-    except Exception:
-        pass
-
-    try:
-        from circulation.receipt_utils import email_guest_receipt
-        email_guest_receipt(session, is_renewal=False)
-    except Exception:
-        pass
-
-    messages.success(request, f'Payment successful! Session started for {calculated_paid_hours:.0f} hour(s). TZS {total_amount:,.0f} paid via {payment_method.upper()}.')
-    return redirect('guest_dashboard')
-
-
-@login_required
-@require_POST
-def end_guest_session_view(request):
-    if request.user.role != 'guest' and not request.user.is_guest:
-        messages.error(request, 'Only guest accounts can end guest sessions.')
-        return redirect('dashboard')
-
-    session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).order_by('-sign_in_time').first()
-    if not session:
-        messages.info(request, 'No active guest session found.')
-        return redirect('guest_dashboard')
-
-    now = timezone.now()
-    duration_hours = max(0.01, (now - session.sign_in_time).total_seconds() / 3600)
-
-    auto_expired = request.POST.get('auto_expire') == '1'
-    session.sign_out_time = now
-    session.duration_hours = round(duration_hours, 2)
-    # amount_paid already set at payment time — no refund on early sign-out
-    session.status = 'expired' if auto_expired else 'ended'
-    session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-
-    request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(session.paid_hours))
-    request.user.save(update_fields=['total_guest_hours'])
-
-    # Revenue already recorded at payment time — no new RevenueTransaction here
-
-    log_audit(request.user, f"Guest session {'auto-expired' if auto_expired else 'ended'} ({session.duration_hours}h, TZS {session.amount_paid:,.0f} already paid)", request)
-
-    # SMS + Email notification
-    event_label = 'expired' if auto_expired else 'ended'
-    try:
-        sms_msg = (f"MSICT OLMS: Session {event_label}. Duration: {session.duration_hours}h. "
-                   f"Amount paid: TZS {session.amount_paid:,.0f}. No refund for unused time. Session #{session.id}.")
-        notify_user(request.user, sms_msg, 'sms', message_type='guest_session_end')
-    except Exception:
-        pass
-    try:
-        email_body = (
-            f"Dear {request.user.get_full_name()},\n\n"
-            f"Your guest session has {event_label}.\n\n"
-            f"  Duration    : {session.duration_hours} hour(s)\n"
-            f"  Amount paid : TZS {session.amount_paid:,.0f}\n"
-            f"  Session #   : {session.id}\n\n"
-            f"Note: Payment is non-refundable. Unused time is not carried over.\n"
-            f"You can start a new session anytime if daily limit allows."
-        )
-        notify_user(request.user, email_body, 'email', subject=f'MSICT OLMS — Guest Session {event_label.title()}', message_type='guest_session_end')
-    except Exception:
-        pass
-
-    if auto_expired:
-        messages.warning(request, f'Your session has expired. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}. Please start a new session to continue.')
-        return redirect('guest_start_session')
-    else:
-        messages.success(request, f'Session ended. Duration: {session.duration_hours} hour(s). Amount paid: TZS {session.amount_paid:,.0f}. No refund for unused time.')
-    return redirect('guest_dashboard')
-
-
-@login_required
-@require_POST
-def guest_session_delete_view(request, session_id):
-    """Guest deletes a non-active session from their history."""
-    session = get_object_or_404(GuestSession, pk=session_id, user=request.user)
-    if session.status in ('active', 'renewed'):
-        messages.error(request, 'Cannot delete an active session. End it first.')
-        return redirect('guest_dashboard')
-    session.delete()
-    log_audit(request.user, f"Deleted guest session #{session_id}", request)
-    messages.success(request, 'Session record deleted.')
-    return redirect('guest_dashboard')
-
-
-def _guest_hours_used_today(user):
-    """Calculate total paid hours for sessions started today by this user."""
-    today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    sessions_today = GuestSession.objects.filter(
-        user=user,
-        sign_in_time__gte=today_start,
-    ).exclude(status__in=['active', 'renewed'])  # active/renewed session handled separately
-    used = Decimal('0')
-    for s in sessions_today:
-        used += s.paid_hours
-    # Add active session's paid_hours if exists
-    active = GuestSession.objects.filter(user=user, status__in=['active', 'renewed']).first()
-    if active:
-        used += active.paid_hours
-    return used
-
-
-@login_required
-@require_POST
-def guest_session_renew_view(request):
-    """Show renewal payment form — user adds hours to active session.
-    Max 12h per day total (including current session + past sessions today).
-    """
-    if request.user.role != 'guest' and not request.user.is_guest:
-        messages.error(request, 'Only guest accounts can renew sessions.')
-        return redirect('dashboard')
-
-    active_session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
-    if not active_session:
-        messages.error(request, 'No active session to renew. Start a new session first.')
-        return redirect('guest_dashboard')
-
-    try:
-        renew_hours = float(request.POST.get('renew_hours', '1') or '1')
-    except ValueError:
-        renew_hours = 1.0
-
-    renew_hours = max(1.0, renew_hours)
-
-    max_daily = float(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
-    hours_used_today = float(_guest_hours_used_today(request.user))
-    available_today = max_daily - hours_used_today
-
-    if available_today <= 0:
-        messages.error(request, f'You have reached the daily limit of {max_daily:.0f}h. Try again tomorrow.')
-        return redirect('guest_dashboard')
-
-    renew_hours = min(renew_hours, available_today)
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    total_amount = renew_hours * hourly_rate
-
-    # Remaining time in current session
-    now = timezone.now()
-    expiry = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
-    remaining_seconds = max(0, (expiry - now).total_seconds())
-    remaining_hours = remaining_seconds / 3600
-
-    return render(request, 'accounts/guest_renew_payment.html', {
-        'active_session': active_session,
-        'renew_hours': renew_hours,
-        'hourly_rate': hourly_rate,
-        'total_amount': total_amount,
-        'remaining_hours': round(remaining_hours, 2),
-        'available_today': available_today,
-        'max_daily': max_daily,
-    })
-
-
-@login_required
-@require_POST
-def guest_session_renew_pay_view(request):
-    """Process renewal payment and extend active session hours."""
-    if request.user.role != 'guest' and not request.user.is_guest:
-        messages.error(request, 'Only guest accounts can renew sessions.')
-        return redirect('dashboard')
-
-    active_session = GuestSession.objects.filter(user=request.user, status__in=['active', 'renewed']).first()
-    if not active_session:
-        messages.error(request, 'No active session to renew.')
-        return redirect('guest_dashboard')
-
-    try:
-        renew_hours = float(request.POST.get('renew_hours', '1') or '1')
-    except ValueError:
-        renew_hours = 1.0
-
-    renew_hours = max(1.0, renew_hours)
-
-    max_daily = float(SystemPreference.get('GUEST_MAX_HOURS', 12) or 12)
-    hours_used_today = float(_guest_hours_used_today(request.user))
-    available_today = max_daily - hours_used_today
-
-    if available_today <= 0:
-        messages.error(request, f'Daily limit of {max_daily:.0f}h reached. Try again tomorrow.')
-        return redirect('guest_dashboard')
-
-    renew_hours = min(renew_hours, available_today)
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    total_amount = renew_hours * hourly_rate
-
-    payment_method = request.POST.get('payment_method', '').strip()
-    if not payment_method:
-        messages.error(request, 'Please select a payment method.')
-        return render(request, 'accounts/guest_renew_payment.html', {
-            'active_session': active_session,
-            'renew_hours': renew_hours,
-            'hourly_rate': hourly_rate,
-            'total_amount': total_amount,
-            'remaining_hours': 0,
-            'available_today': available_today,
-            'max_daily': max_daily,
-        })
-
-    # Validate payment fields (same logic as guest_payment_view)
-    phone_number = request.POST.get('phone_number', '').strip()
-    bank_name = request.POST.get('bank_name', '').strip()
-    bank_account_no = request.POST.get('bank_account_no', '').strip()
-    card_holder = request.POST.get('card_holder', '').strip()
-    card_last4 = request.POST.get('card_last4', '').strip()
-
-    is_mobile = payment_method in ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']
-    is_bank = payment_method == 'bank_transfer'
-    is_card = payment_method in ['visa', 'mastercard']
-
-    if is_mobile and not phone_number:
-        messages.error(request, 'Phone number is required for mobile money payment.')
-        return redirect('guest_dashboard')
-    if is_mobile and phone_number and not re.match(r'^0\d{9}$', phone_number):
-        messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
-        return redirect('guest_dashboard')
-    if is_bank and (not bank_name or not bank_account_no):
-        messages.error(request, 'Bank name and account number are required.')
-        return redirect('guest_dashboard')
-    if is_card and (not card_holder or not card_last4):
-        messages.error(request, 'Cardholder name and last 4 digits are required.')
-        return redirect('guest_dashboard')
-
-    # Calculate actual paid hours based on payment amount, not user input
-    calculated_renew_hours = round(total_amount / hourly_rate, 2)
-    
-    # Extend the session: add calculated_renew_hours to paid_hours (same row, no new session)
-    old_paid = float(active_session.paid_hours)
-    old_duration = float(active_session.duration_hours)
-    active_session.paid_hours = Decimal(str(old_paid + calculated_renew_hours))
-    active_session.duration_hours = Decimal(str(old_duration + calculated_renew_hours))
-    active_session.amount_paid = Decimal(str(float(active_session.amount_paid) + total_amount))
-    active_session.payment_method = payment_method
-    active_session.status = 'renewed'
-    active_session.renewed = True
-    active_session.expiry_notification_sent = False
-    active_session.save(update_fields=['paid_hours', 'duration_hours', 'amount_paid', 'payment_method', 'status', 'renewed', 'expiry_notification_sent'])
-
-    # Update user total_guest_hours with the renewal hours
-    request.user.total_guest_hours = (request.user.total_guest_hours or Decimal('0')) + Decimal(str(calculated_renew_hours))
-    request.user.total_guest_paid = (request.user.total_guest_paid or Decimal('0')) + Decimal(str(total_amount))
-    request.user.save(update_fields=['total_guest_hours', 'total_guest_paid'])
-
-    # Record revenue for renewal
-    try:
-        from circulation.models import RevenueTransaction
-        RevenueTransaction.objects.create(
-            user=request.user,
-            account_type='guest_fee',
-            amount=total_amount,
-            description=f'Guest session renewal (+{calculated_renew_hours:.0f}h) — {payment_method.upper()} — Session #{active_session.id}',
-            reference_id=active_session.id,
-            reference_table='accounts_guestsession',
-            recorded_by=request.user,
-        )
-    except Exception:
-        pass
-
-    log_audit(request.user, f"Guest session renewed (+{calculated_renew_hours}h, TZS {total_amount:,.0f} via {payment_method}) — Session #{active_session.id}", request)
-
-    # Compute new expiry time for notifications
-    renew_expiry_dt = active_session.sign_in_time + timedelta(hours=float(active_session.paid_hours))
-    renew_expiry_str = renew_expiry_dt.strftime('%d %b %Y, %H:%M')
-
-    # SMS + Email notification
-    try:
-        sms_msg = (f"MSICT OLMS: Session renewed — +{calculated_renew_hours:.0f}h added. "
-                   f"Total paid: TZS {total_amount:,.0f} via {payment_method.upper()}. "
-                   f"New total: {float(active_session.paid_hours):.0f}h. "
-                   f"Expires at: {renew_expiry_str}. Session #{active_session.id}.")
-        notify_user(request.user, sms_msg, 'sms', message_type='guest_session_renew')
-    except Exception:
-        pass
-    try:
-        email_body = (
-            f"Dear {request.user.get_full_name()},\n\n"
-            f"Your guest session has been renewed successfully.\n\n"
-            f"  Added Hours : {calculated_renew_hours:.0f}\n"
-            f"  Amount Paid : TZS {total_amount:,.0f}\n"
-            f"  Method      : {payment_method.upper()}\n"
-            f"  Total Hours : {float(active_session.paid_hours):.0f}\n"
-            f"  Session #   : {active_session.id}\n"
-            f"  Expires at  : {renew_expiry_str}\n\n"
-            f"Enjoy your extended library access!"
-        )
-        notify_user(request.user, email_body, 'email', subject='MSICT OLMS — Session Renewed', message_type='guest_session_renew')
-    except Exception:
-        pass
-
-    try:
-        from circulation.receipt_utils import email_guest_receipt
-        email_guest_receipt(active_session, is_renewal=True)
-    except Exception:
-        pass
-
-    messages.success(request, f'Session renewed! +{calculated_renew_hours:.0f}h added. TZS {total_amount:,.0f} paid via {payment_method.upper()}. Total: {float(active_session.paid_hours):.0f}h.')
-    return redirect('guest_dashboard')
-
-
-@login_required
-def guest_session_receipt_pdf_view(request, session_id):
-    """Generate a PDF receipt for a guest session payment (start or renewal)."""
-    from circulation.receipt_utils import generate_receipt_pdf
-
-    if getattr(request.user, 'role', '') in ('admin', 'librarian') or request.user.is_superuser or request.user.is_staff:
-        session = get_object_or_404(GuestSession, pk=session_id)
-    else:
-        session = get_object_or_404(GuestSession, pk=session_id, user=request.user)
-
-    if session.payment_status != 'paid':
-        messages.error(request, 'No payment record found for this session.')
-        return redirect('guest_dashboard')
-
-    receipt_id = f"RCPT-GUEST-{session.pk}-{session.sign_in_time.strftime('%Y%m%d%H%M')}"
-    expiry_dt = session.sign_in_time + timedelta(hours=float(session.paid_hours))
-    is_renewed = session.renewed
-
-    title = 'Guest Session Receipt' + (' (Renewed)' if is_renewed else '')
-    items = [
-        ('Session #', f'#{session.pk}'),
-        ('Signed In', session.sign_in_time.strftime('%d %b %Y, %H:%M')),
-        ('Total Hours', f'{float(session.paid_hours):.0f}h'),
-        ('Expires At', expiry_dt.strftime('%d %b %Y, %H:%M')),
-    ]
-
-    qr_data = (
-        f"MSICT-OLMS|GUEST-RECEIPT|{receipt_id}|{session.user.username}|"
-        f"TZS {session.amount_paid:,.0f}|Session #{session.pk}"
+    # --- Category breakdown (top 6) ---
+    top_categories = (
+        Category.objects
+        .annotate(book_count=Count('books'))
+        .filter(book_count__gt=0)
+        .order_by('-book_count')[:6]
     )
 
-    return generate_receipt_pdf(
-        receipt_id=receipt_id,
-        title=title,
-        user=session.user,
-        items=items,
-        qr_data=qr_data,
-        payment_method=session.payment_method,
-        amount_label='Total Paid',
-        amount_value=f"TZS {float(session.amount_paid):,.0f}",
-        filename=f'guest_receipt_{session.pk}',
-        extra_notes=[
-            'Payment is non-refundable. Unused time is not carried over.',
-            f'Session status: {session.get_status_display()}',
-        ],
-        download=request.GET.get('download') == '1',
-    )
+    context = {
+        'cur': 'guest_dashboard',
+        'most_borrowed': most_borrowed,
+        'total_books': total_books,
+        'total_hardcopy': total_hardcopy,
+        'total_softcopy': total_softcopy,
+        'total_categories': total_categories,
+        'top_categories': top_categories,
+    }
+    return render(request, 'accounts/guest_dashboard.html', context)
 
 
 @login_required
@@ -1652,157 +1099,6 @@ def librarian_required(func):
         return func(request, *args, **kwargs)
     return wrapper
 
-
-# ----------------------------------------------------------------------
-# Librarian Guest Management — active sessions, history, mark-paid, suspend
-# ----------------------------------------------------------------------
-@login_required
-@librarian_required
-def guest_manage_view(request):
-    """Librarian view: see all active guest sessions and recent history."""
-    active_sessions = GuestSession.objects.filter(
-        status__in=['active', 'renewed', 'expired']
-    ).select_related('user').order_by('-sign_in_time')
-
-    # Auto-expire any sessions past their paid hours
-    now = timezone.now()
-    hourly_rate = float(SystemPreference.get('GUEST_HOURLY_RATE', 500) or 500)
-    for s in active_sessions:
-        if s.status in ['active', 'renewed']:
-            expiry = s.sign_in_time + timedelta(hours=float(s.paid_hours))
-            if now >= expiry:
-                duration_hours = max(0.01, (now - s.sign_in_time).total_seconds() / 3600)
-                s.sign_out_time = now
-                s.duration_hours = round(duration_hours, 2)
-                s.status = 'expired'
-                # amount_paid already set at payment time — no refund
-                s.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-                
-                # Accrue total guest hours on the user
-                s.user.total_guest_hours = (s.user.total_guest_hours or Decimal('0')) + Decimal(str(s.paid_hours))
-                s.user.save(update_fields=['total_guest_hours'])
-            # Revenue already recorded at payment time
-            log_audit(request.user, f"Auto-expired guest session #{s.id} for {s.user.username}", request)
-
-    # Re-query after auto-expiry
-    active_sessions = GuestSession.objects.filter(
-        status__in=['active', 'renewed']
-    ).select_related('user').order_by('-sign_in_time')
-
-    history = GuestSession.objects.exclude(
-        status__in=['active', 'renewed']
-    ).select_related('user').order_by('-sign_in_time')[:50]
-
-    # Guest users - calculate total paid hours manually to avoid Oracle NCLOB aggregation issue
-    # Use values_list to avoid loading NCLOB fields that cause Oracle errors
-    guest_users = OLMSUser.objects.filter(is_guest=True).values_list('id', 'username', 'first_name', 'surname', 'phone', 'is_active', 'total_guest_paid')
-    
-    # Calculate total hours for each user and create a list of dicts
-    guest_users_data = []
-    for user_id, username, first_name, surname, phone, is_active, total_guest_paid in guest_users:
-        total_hours = Decimal('0')
-        for s in GuestSession.objects.filter(user_id=user_id):
-            total_hours += s.paid_hours
-        
-        guest_users_data.append({
-            'id': user_id,
-            'username': username,
-            'first_name': first_name,
-            'surname': surname,
-            'phone': phone,
-            'is_active': is_active,
-            'total_guest_paid': total_guest_paid,
-            'calculated_hours': total_hours,
-        })
-
-    mark_badge_viewed(request.user, 'active_guest_sessions')
-    return render(request, 'accounts/guest_manage.html', {
-        'active_sessions': active_sessions,
-        'history': history,
-        'guest_users': guest_users_data,
-        'hourly_rate': hourly_rate,
-    })
-
-
-@login_required
-@librarian_required
-@require_POST
-def guest_mark_paid_view(request, session_id):
-    """Librarian marks a guest session as paid."""
-    session = get_object_or_404(GuestSession, pk=session_id)
-    session.payment_status = 'paid'
-    session.save(update_fields=['payment_status'])
-    log_audit(request.user, f"Marked guest session #{session.id} as paid (TZS {session.amount_paid:,.0f})", request)
-    messages.success(request, f'Session #{session.id} marked as paid.')
-    return redirect('guest_manage')
-
-
-@login_required
-@librarian_required
-@require_POST
-def guest_session_end_view(request, session_id):
-    """Librarian force-ends an active guest session."""
-    session = get_object_or_404(GuestSession, pk=session_id, status__in=['active', 'renewed'])
-    now = timezone.now()
-    duration_hours = max(0.01, (now - session.sign_in_time).total_seconds() / 3600)
-    session.sign_out_time = now
-    session.duration_hours = round(duration_hours, 2)
-    session.status = 'ended'
-    # amount_paid already set at payment time — no refund
-    session.save(update_fields=['sign_out_time', 'duration_hours', 'status'])
-    session.user.total_guest_hours = (session.user.total_guest_hours or Decimal('0')) + Decimal(str(session.paid_hours))
-    session.user.save(update_fields=['total_guest_hours'])
-    # Revenue already recorded at payment time
-    log_audit(request.user, f"Force-ended guest session #{session.id} for {session.user.username}", request)
-    messages.success(request, f'Session #{session.id} ended. Amount paid: TZS {session.amount_paid:,.0f}.')
-    return redirect('guest_manage')
-
-
-@login_required
-@librarian_required
-@require_POST
-def librarian_guest_session_delete_view(request, session_id):
-    """Librarian deletes a guest session."""
-    session = get_object_or_404(GuestSession, pk=session_id)
-    session.delete()
-    log_audit(request.user, f"Librarian deleted guest session #{session_id}", request)
-    messages.success(request, f'Guest session #{session_id} deleted successfully.')
-    # Redirect back to the dashboard if it was called from there, else manage page
-    next_url = request.POST.get('next', 'guest_manage')
-    if next_url == 'librarian_dashboard':
-        return redirect('librarian_dashboard')
-    return redirect('guest_manage')
-
-
-@login_required
-@librarian_required
-@require_POST
-def guest_suspend_view(request, user_id):
-    """Librarian suspends a guest account."""
-    user = get_object_or_404(OLMSUser, pk=user_id, is_guest=True)
-    user.is_active = False
-    user.save(update_fields=['is_active'])
-    # End any active sessions
-    GuestSession.objects.filter(user=user, status__in=['active', 'renewed']).update(
-        sign_out_time=timezone.now(),
-        status='ended'
-    )
-    log_audit(request.user, f"Suspended guest account {user.username}", request)
-    messages.success(request, f'Guest {user.username} has been suspended.')
-    return redirect('guest_manage')
-
-
-@login_required
-@librarian_required
-@require_POST
-def guest_reactivate_view(request, user_id):
-    """Librarian reactivates a suspended guest account."""
-    user = get_object_or_404(OLMSUser, pk=user_id, is_guest=True)
-    user.is_active = True
-    user.save(update_fields=['is_active'])
-    log_audit(request.user, f"Reactivated guest account {user.username}", request)
-    messages.success(request, f'Guest {user.username} has been reactivated.')
-    return redirect('guest_manage')
 
 
 @login_required
@@ -2246,7 +1542,7 @@ def delete_user_view(request, user_id):
     # returning the book, the physical book is effectively gone from the library.
     active_borrows = BorrowingTransaction.objects.filter(
         user=user, status__in=['borrowed', 'overdue']
-    )
+    ).exclude(copy__copy_type='softcopy')
     for tx in active_borrows:
         tx.copy.status = 'lost'
         tx.copy.save(update_fields=['status'])
@@ -2268,7 +1564,7 @@ def delete_user_view(request, user_id):
 
     # Redirect based on original status / role
     if target_is_guest:
-        return redirect('guest_manage')
+        return redirect('user_list')
     if reg_status in ('pending', 'rejected'):
         return redirect('public_registrations')
     return redirect('user_list')
@@ -2302,7 +1598,7 @@ def delete_my_account_view(request):
     # Mark active physical borrowed books as 'lost'
     active_borrows = BorrowingTransaction.objects.filter(
         user=user, status__in=['borrowed', 'overdue']
-    )
+    ).exclude(copy__copy_type='softcopy')
     for tx in active_borrows:
         tx.copy.status = 'lost'
         tx.copy.save(update_fields=['status'])
@@ -2430,10 +1726,10 @@ def user_action_view(request, user_id, action):
 def user_detail_view(request, user_id):
     from circulation.models import BorrowingTransaction, Fine
     user_obj = get_object_or_404(OLMSUser, pk=user_id)
-    active_borrows = BorrowingTransaction.objects.filter(user=user_obj, status='borrowed').select_related('copy__book').order_by('-borrow_date')
-    overdue = BorrowingTransaction.objects.filter(user=user_obj, status='overdue').select_related('copy__book').order_by('-due_date')
+    active_borrows = BorrowingTransaction.objects.filter(user=user_obj, status='borrowed').exclude(copy__copy_type='softcopy').select_related('copy__book').order_by('-borrow_date')
+    overdue = BorrowingTransaction.objects.filter(user=user_obj, status='overdue').exclude(copy__copy_type='softcopy').select_related('copy__book').order_by('-due_date')
     unpaid_fines = Fine.objects.filter(transaction__user=user_obj, paid=False).select_related('transaction__copy__book')
-    borrow_history = BorrowingTransaction.objects.filter(user=user_obj).select_related('copy__book').order_by('-borrow_date')[:20]
+    borrow_history = BorrowingTransaction.objects.filter(user=user_obj).exclude(copy__copy_type='softcopy').select_related('copy__book').order_by('-borrow_date')[:20]
     audit_logs = AuditLog.objects.filter(user=user_obj).order_by('-timestamp')[:20]
     try:
         virtual_card = user_obj.virtual_card
@@ -2691,7 +1987,7 @@ def admin_dashboard_view(request):
         status='overdue',
         fines__paid=False
     ).exclude(
-        copy__copy_type='softcopy', copy__access_type='borrow'
+        copy__copy_type='softcopy'
     ).distinct().count()
     currently_borrowed = BorrowingTransaction.objects.filter(status='borrowed').count()
     # Total active loans = borrowed + overdue (denominator for overdue rate)
@@ -2852,21 +2148,12 @@ def admin_dashboard_view(request):
     paid_fines_amount = sum(fine.amount_paid for fine in Fine.objects.all())
 
     # Guest analytics
-    guest_sessions_qs = GuestSession.objects.all()
-    guest_total_visits = guest_sessions_qs.count()
-    guest_total_revenue = guest_sessions_qs.aggregate(
-        total=Sum('amount_paid')
-    )['total'] or 0
-    guest_avg_duration = guest_sessions_qs.aggregate(
-        avg=Sum('duration_hours')
-    )['avg'] or 0
-    if guest_total_visits > 0:
-        guest_avg_duration = round(float(guest_avg_duration) / guest_total_visits, 2)
-    else:
-        guest_avg_duration = 0
-    guest_active_sessions = guest_sessions_qs.filter(status__in=['active', 'renewed']).count()
+    guest_total_visits = 0
+    guest_total_revenue = 0
+    guest_avg_duration = 0
+    guest_active_sessions = 0
     guest_total_users = OLMSUser.objects.filter(is_guest=True).count()
-    guest_recent_sessions = guest_sessions_qs.select_related('user').order_by('-sign_in_time')[:10]
+    guest_recent_sessions = []
 
     # Revenue / Financial summary
     from reports.views import _revenue_summary
@@ -2905,13 +2192,11 @@ def admin_dashboard_view(request):
 
     # Revenue breakdown doughnut
     revenue_chart_data = _json.dumps({
-        'labels': ['Overdue', 'Link Fee', 'Guest Fee', 'Damage', 'Loss'],
+        'labels': ['Overdue', 'Damage', 'Loss'],
         'values': [
-            float(revenue['overdue']),
-            float(revenue['link_fee']),
-            float(revenue['guest_fee']),
+            float(revenue.get('overdue', 0)),
             float(revenue.get('damage', 0)),
-            float(revenue['loss']),
+            float(revenue.get('loss', 0)),
         ],
     })
 
@@ -2965,8 +2250,7 @@ def admin_dashboard_view(request):
         'guest_total_users': guest_total_users,
         'guest_recent_sessions': guest_recent_sessions,
         'revenue_overdue': revenue['overdue'],
-        'revenue_link_fee': revenue['link_fee'],
-        'revenue_guest_fee': revenue['guest_fee'],
+
         'revenue_damage': revenue.get('damage', 0),
         'revenue_loss': revenue['loss'],
         'revenue_unpaid': revenue['unpaid'],

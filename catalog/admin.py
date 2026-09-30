@@ -22,7 +22,7 @@ class CourseAdmin(admin.ModelAdmin):
 class BookCopyInline(admin.TabularInline):
     model = BookCopy
     extra = 1
-    fields = ('copy_type', 'access_type', 'accession_no', 'status', 'shelf_location', 'barcode', 'prepaid_fee', 'file_path')
+    fields = ('copy_type', 'accession_no', 'status', 'shelf_location', 'barcode', 'file_path')
     show_change_link = True
 
 
@@ -56,8 +56,8 @@ class BookAdmin(admin.ModelAdmin):
 
 @admin.register(BookCopy)
 class BookCopyAdmin(admin.ModelAdmin):
-    list_display = ('book', 'copy_type', 'access_type', 'accession_no', 'status', 'shelf_location')
-    list_filter = ('copy_type', 'access_type', 'status')
+    list_display = ('book', 'copy_type', 'accession_no', 'status', 'shelf_location')
+    list_filter = ('copy_type', 'status')
     search_fields = ('accession_no', 'barcode', 'book__title', 'book__author')
     list_per_page = 30
     actions = ['mark_available', 'mark_withdrawn']

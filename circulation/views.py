@@ -97,9 +97,7 @@ def member_dashboard_view(request):
     active_transactions = BorrowingTransaction.objects.filter(
         user=user, status__in=['borrowed', 'overdue']
     ).exclude(
-        copy__copy_type='softcopy',
-        copy__access_type='borrow',
-        due_date__lt=timezone.now(),
+        copy__copy_type='softcopy'
     ).select_related('copy__book').order_by('-borrow_date')
 
     overdue_transactions = active_transactions.filter(status='overdue').exclude(copy__copy_type='softcopy')
@@ -132,7 +130,7 @@ def member_dashboard_view(request):
     notifications = Notification.objects.filter(user=user).order_by('-created_at')[:10]
     borrow_history = BorrowingTransaction.objects.filter(
         user=user, status__in=['returned', 'lost']
-    ).select_related('copy__book').order_by('-return_date')[:5]
+    ).exclude(copy__copy_type='softcopy').select_related('copy__book').order_by('-return_date')[:5]
 
     # Get fines for overdue transactions (excluding loss report transactions)
     # If a book is reported lost, we only count overdue fine if it was already overdue before loss report
@@ -369,15 +367,15 @@ def request_borrow_book_view(request, book_id):
 # View ya Omba Kukopa Softcopy — Mwanachama anaomba kukopa softcopy
 # ----------------------------------------------------------------------
 def request_borrow_softcopy_view(request, book_id):
-    """Auto-selects the first available borrowable softcopy and submits a request."""
+    """Auto-selects the first available softcopy and grants access."""
     guard = _ensure_member_borrower(request)
     if guard:
         return guard
 
     book = get_object_or_404(Book, pk=book_id)
-    copy = book.copies.filter(copy_type='softcopy', access_type='borrow', status='available').exclude(transactions__status__in=['borrowed', 'overdue']).first()
+    copy = book.copies.filter(copy_type='softcopy').first()
     if not copy:
-        messages.error(request, f'No special soft copy is available for "{book.title}" right now.')
+        messages.error(request, f'No digital copy is available for "{book.title}" right now.')
         return redirect('borrow_catalog')
     return redirect('submit_borrow_request', copy.pk)
 
@@ -389,9 +387,9 @@ def request_borrow_softcopy_view(request, book_id):
 def download_free_book_view(request, book_id):
     """Redirects to the free softcopy download for the given book."""
     book = get_object_or_404(Book, pk=book_id)
-    copy = book.copies.filter(copy_type='softcopy', access_type='free').first()
+    copy = book.copies.filter(copy_type='softcopy').first()
     if not copy:
-        messages.error(request, f'No free softcopy available for "{book.title}".')
+        messages.error(request, f'No softcopy available for "{book.title}".')
         return redirect('borrow_catalog')
     return redirect('free_softcopy_download', copy.pk)
 
@@ -400,9 +398,9 @@ def download_free_book_view(request, book_id):
 def read_free_book_view(request, book_id):
     """Redirects to the free softcopy inline reader for the given book."""
     book = get_object_or_404(Book, pk=book_id)
-    copy = book.copies.filter(copy_type='softcopy', access_type='free').first()
+    copy = book.copies.filter(copy_type='softcopy').first()
     if not copy:
-        messages.error(request, f'No free softcopy available for "{book.title}".')
+        messages.error(request, f'No softcopy available for "{book.title}".')
         return redirect('borrow_catalog')
     return redirect('serve_softcopy', copy.pk)
 
@@ -430,8 +428,7 @@ def borrow_catalog_view(request):
 
     _any_hard     = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy')
     _hard_avail   = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='hardcopy', status='available').exclude(transactions__status__in=['borrowed', 'overdue'])
-    _soft_borrow  = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='borrow', status='available').exclude(transactions__status__in=['borrowed', 'overdue'])
-    _soft_free    = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy', access_type='free')
+    _soft_free    = BookCopy.objects.filter(book=OuterRef('pk'), copy_type='softcopy')
 
     _avail_hard_count_sq = (
         BookCopy.objects
@@ -448,7 +445,7 @@ def borrow_catalog_view(request):
         .prefetch_related('courses')
         .filter(
             # Show: available hardcopy OR all-borrowed hardcopy (reservable) OR softcopy
-            Exists(_any_hard) | Exists(_soft_borrow) | Exists(_soft_free)
+            Exists(_any_hard) | Exists(_soft_free)
         )
         .annotate(
             avail_hard=Coalesce(
@@ -456,7 +453,6 @@ def borrow_catalog_view(request):
                 Value(0),
             ),
             has_hard=Exists(_any_hard),          # book has at least one hardcopy (available or not)
-            soft_borrow_avail=Exists(_soft_borrow),
             soft_free=Exists(_soft_free),
         )
     )
@@ -510,18 +506,57 @@ def submit_borrow_request_view(request, copy_id):
         messages.error(request, f'This copy is marked as {copy.status} and cannot be borrowed.')
         return redirect('book_detail_public', book_id=copy.book_id)
 
-    if copy.access_type == 'free':
-        messages.info(request, 'Free soft copies do not need borrowing. Download directly.')
-        return redirect('book_detail_public', book_id=copy.book_id)
+    # Softcopy: always free, create access log and notify user
+    if copy.copy_type == 'softcopy':
+        if not copy.file_path:
+            messages.error(request, 'No digital file is available for this copy.')
+            return redirect('book_detail_public', book_id=copy.book_id)
 
-    if copy.copy_type == 'hardcopy':
-        if request.user.has_overdue():
-            messages.error(request, 'You have overdue items. Return them before borrowing new ones.')
-            return redirect('member_dashboard')
-    
-        if request.user.has_unpaid_fines():
-            messages.error(request, 'You have unpaid fines. Pay at the circulation desk before borrowing.')
-            return redirect('member_dashboard')
+        # Check if already has an access log for this copy
+        from .models import SoftcopyAccessLog
+        existing_log = SoftcopyAccessLog.objects.filter(
+            user=request.user,
+            copy=copy,
+            is_active=True,
+        ).first()
+        if existing_log:
+            messages.info(request, f'You already have access to "{copy.book.title}". Find it in the softcopy library.')
+            return redirect('softcopy_library')
+
+        import uuid as uuid_lib
+        access_token = str(uuid_lib.uuid4())
+        softcopy_url = request.build_absolute_uri(reverse('softcopy_access', args=[access_token]))
+        SoftcopyAccessLog.objects.create(
+            user=request.user,
+            copy=copy,
+            access_token=access_token,
+            access_url=softcopy_url,
+        )
+        msg_sms = (
+            f"MSICT OLMS: Digital copy \"{copy.book.title}\" is ready for you. "
+            f"Access it anytime from your Softcopy Library. No expiry — access is permanent."
+        )
+        msg_email = (
+            f"Dear {request.user.get_full_name() or request.user.username},<br><br>"
+            f"You now have free access to digital copy <b>\"{copy.book.title}\"</b>.<br>"
+            f"<b>Access:</b> Permanent (no expiry)<br>"
+            f"<b>Cost:</b> FREE<br><br>"
+            f"<i>Visit your Softcopy Library to read or download at any time.</i>"
+        )
+        notify_user(request.user, msg_sms, 'sms', message_type='softcopy_link')
+        notify_user(request.user, msg_email, 'email', subject=f'Digital Copy Ready — {copy.book.title}', message_type='softcopy_link')
+        log_audit(request.user, f"Softcopy access granted '{copy.book.title}' [{copy.accession_no}]", request)
+        messages.success(request, f'Access to "{copy.book.title}" granted! Find it in your Softcopy Library.')
+        return redirect('softcopy_library')
+
+    # ── Hardcopy: validate overdue/fines and create BorrowRequest ──
+    if request.user.has_overdue():
+        messages.error(request, 'You have overdue items. Return them before borrowing new ones.')
+        return redirect('member_dashboard')
+
+    if request.user.has_unpaid_fines():
+        messages.error(request, 'You have unpaid fines. Pay at the circulation desk before borrowing.')
+        return redirect('member_dashboard')
 
     active_borrows = request.user.active_borrows_count()
     pending_requests = BorrowRequest.objects.filter(user=request.user, status='pending').count()
@@ -538,60 +573,6 @@ def submit_borrow_request_view(request, copy_id):
     if BorrowRequest.objects.filter(user=request.user, copy=copy, status='pending').exists():
         messages.warning(request, 'You already have a pending request for this copy.')
         return redirect('book_detail_public', book_id=copy.book_id)
-
-    if copy.copy_type == 'softcopy':
-        active_tx_exists = BorrowingTransaction.objects.filter(
-            user=request.user,
-            copy=copy,
-            status__in=['borrowed', 'overdue'],
-            due_date__gte=timezone.now(),
-        ).exists()
-        if active_tx_exists:
-            messages.warning(request, 'You are already borrowing this soft copy. Check your borrowings to read it.')
-            return redirect('member_dashboard')
-
-        # ── Softcopy: redirect to payment page first ──
-        if copy.prepaid_fee > 0:
-            return redirect('softcopy_payment', copy_id=copy.pk)
-        else:
-            # Free softcopy: create transaction instantly
-            tx = BorrowingTransaction.objects.create(
-                user=request.user,
-                copy=copy,
-                borrow_type='softcopy',
-            )
-            fine_per_day = float(_pref('FINE_PER_DAY', 1000))
-            _loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-            softcopy_url = request.build_absolute_uri(reverse('softcopy_access', args=[tx.access_token]))
-            # Store access log
-            from .models import SoftcopyAccessLog
-            SoftcopyAccessLog.objects.create(
-                user=request.user,
-                copy=copy,
-                transaction=tx,
-                access_token=str(tx.access_token),
-                access_url=softcopy_url,
-                expires_at=tx.due_date,
-            )
-            msg_sms = (
-                f"MSICT OLMS: You have been issued digital copy \"{copy.book.title}\" "
-                f"from {tx.borrow_date.strftime('%d %b %Y')} to {tx.due_date.strftime('%d %b %Y')}. "
-                f"Your ebook link: {softcopy_url} "
-                f"Valid for {_loan_days} days. Sharing or misuse may lead to disciplinary action."
-            )
-            msg_email = (
-                f"Dear {request.user.get_full_name() or request.user.username},<br><br>"
-                f"You have been issued digital copy <b>\"{copy.book.title}\"</b>.<br>"
-                f"<b>Borrow Date:</b> {tx.borrow_date.strftime('%d %b %Y')}<br>"
-                f"<b>Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br>"
-                f"<b>Access Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-                f"<i>Note: Your access is valid for {_loan_days} days. Sharing or misuse of digital content may lead to disciplinary action.</i>"
-            )
-            notify_user(request.user, msg_sms, 'sms', message_type='softcopy_link')
-            notify_user(request.user, msg_email, 'email', subject=f'Digital Copy Issued — {copy.book.title}', message_type='softcopy_link')
-            log_audit(request.user, f"Softcopy auto-issued '{copy.book.title}' [{copy.accession_no}]", request)
-            messages.success(request, f'"{copy.book.title}" is ready to read. Access it from My Borrowings.')
-            return redirect('member_msict_borrowings')
 
     # ── Hardcopy: create BorrowRequest for librarian approval ──────────────
     if copy.status != 'available':
@@ -690,104 +671,34 @@ def approve_borrow_request_view(request, request_id):
         messages.error(request, f'Rejected: {user.username} has reached the borrow limit.')
         return redirect('all_requests')
 
+    # ── Softcopies shouldn't reach here (handled instantly), but just in case ──
+    if req.copy and req.copy.copy_type == 'softcopy':
+        messages.error(request, 'Softcopies are accessed instantly and do not require librarian approval.')
+        req.delete()
+        return redirect('all_requests')
+
     # ── Hardcopy: approve-only; copy assigned at physical handover ──────────
-    if req.copy is None or req.copy.copy_type == 'hardcopy':
-        if req.copy and req.copy.status != 'available':
-            messages.error(request, 'Hardcopy is no longer available.')
-            return redirect('all_requests')
-            
-        req.status = 'approved'
-        req.approved_by = request.user
-        req.save()
-        book = req.book
-        msg_sms = (
-            f"MSICT OLMS: Your request for \"{book.title}\" has been approved. "
-            f"Please come to the library to collect your book. Bring your library card or Army No."
-        )
-        msg_email = (
-            f"Your hardcopy request for <b>\"{book.title}\"</b> has been approved.<br><br>"
-            f"Please visit the library circulation desk to collect the book.<br>"
-            f"Bring your <b>library card or Army No</b>."
-        )
-        notify_user(user, msg_sms, 'sms')
-        notify_user(user, msg_email, 'email', subject='Borrow Approved — MSICT OLMS')
-        log_audit(request.user, f"Approved hardcopy request for '{user.username}' – '{book.title}'", request)
-        messages.success(request, f'Request approved for {user.username}. Use "Issue Copy" when they arrive.')
+    if req.copy and req.copy.status != 'available':
+        messages.error(request, 'Hardcopy is no longer available.')
         return redirect('all_requests')
-
-    # ── Softcopy: redirect to payment if fee required, else create transaction ─────────────────────────────
-    copy = req.copy
-
-    # Softcopy payment check
-    if copy.copy_type == 'softcopy' and copy.prepaid_fee > 0:
-        # Mark request as approved but don't create transaction yet
-        # User must complete payment first
-        req.status = 'approved'
-        req.approved_by = request.user
-        req.save()
-        messages.info(request, f'Request approved for {user.username}. User must complete payment (TZS {copy.prepaid_fee:,.0f}) to access softcopy.')
-        # Notify user that request is approved and payment is required
-        msg_sms = (
-            f"MSICT OLMS: Your softcopy request for \"{copy.book.title}\" has been approved. "
-            f"Please pay TZS {copy.prepaid_fee:,.0f} to access the book. Visit the library to complete payment."
-        )
-        msg_email = (
-            f"Dear {user.get_full_name() or user.username},<br><br>"
-            f"Your softcopy request for <b>\"{copy.book.title}\"</b> has been approved.<br>"
-            f"<b>Payment Required:</b> TZS {copy.prepaid_fee:,.0f}<br>"
-            f"Please visit the library circulation desk to complete payment and receive your access link."
-        )
-        notify_user(user, msg_sms, 'sms', message_type='softcopy_link')
-        notify_user(user, msg_email, 'email', subject='Softcopy Request Approved — Payment Required', message_type='softcopy_link')
-        log_audit(request.user, f"Approved softcopy request for '{user.username}' – '{book.title}' (payment required)", request)
-        return redirect('all_requests')
-
-    tx = BorrowingTransaction.objects.create(
-        user=user,
-        copy=copy,
-        borrow_type=copy.copy_type,
-        approved_by=request.user,
-    )
+        
     req.status = 'approved'
     req.approved_by = request.user
     req.save()
-
-    librarian_name = request.user.get_full_name() or request.user.username
-    _loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-    softcopy_url = request.build_absolute_uri(reverse('softcopy_access', args=[tx.access_token]))
-
-    # Store access log for softcopy
-    if copy.copy_type == 'softcopy':
-        from .models import SoftcopyAccessLog
-        SoftcopyAccessLog.objects.create(
-            user=user,
-            copy=copy,
-            transaction=tx,
-            access_token=str(tx.access_token),
-            access_url=softcopy_url,
-            expires_at=tx.due_date,
-        )
-
+    book = req.book
     msg_sms = (
-        f"MSICT OLMS: You have borrowed digital copy \"{copy.book.title}\" "
-        f"from {tx.borrow_date.strftime('%d %b %Y')} to {tx.due_date.strftime('%d %b %Y')}. "
-        f"Your ebook link: {softcopy_url} "
-        f"Valid for {_loan_days} days. Sharing or misuse may lead to disciplinary action. "
-        f"Processed by {librarian_name}."
+        f"MSICT OLMS: Your request for \"{book.title}\" has been approved. "
+        f"Please come to the library to collect your book. Bring your library card or Army No."
     )
     msg_email = (
-        f"Dear {user.get_full_name() or user.username},<br><br>"
-        f"You have borrowed digital copy <b>\"{copy.book.title}\"</b>.<br>"
-        f"<b>Borrow Date:</b> {tx.borrow_date.strftime('%d %b %Y')}<br>"
-        f"<b>Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br>"
-        f"<b>Access Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-        f"<i>Note: Your access is valid for {_loan_days} days. Sharing or misuse of digital content may lead to disciplinary action.</i><br><br>"
-        f"Processed by Librarian: <b>{librarian_name}</b>"
+        f"Your hardcopy request for <b>\"{book.title}\"</b> has been approved.<br><br>"
+        f"Please visit the library circulation desk to collect the book.<br>"
+        f"Bring your <b>library card or Army No</b>."
     )
-    notify_user(user, msg_sms, 'sms', message_type='softcopy_link')
-    notify_user(user, msg_email, 'email', subject=f'Digital Copy Issued — {copy.book.title}', message_type='softcopy_link')
-    log_audit(request.user, f"Approved softcopy for '{user.username}' – '{copy.book.title}'", request)
-    messages.success(request, f'Softcopy issued to {user.username}.')
+    notify_user(user, msg_sms, 'sms')
+    notify_user(user, msg_email, 'email', subject='Borrow Approved — MSICT OLMS')
+    log_audit(request.user, f"Approved hardcopy request for '{user.username}' – '{book.title}'", request)
+    messages.success(request, f'Request approved for {user.username}. Use "Issue Copy" when they arrive.')
     return redirect('all_requests')
 
 
@@ -996,9 +907,10 @@ def return_early_view(request, transaction_id):
         messages.error(request, 'Only soft copies can be returned online. Bring hardcopies to the desk.')
         return redirect('member_dashboard')
     
-    # Special softcopy expiry logic: link expired — allow return (no fine for softcopy)
-    if tx.copy.access_type == 'borrow' and tx.is_link_expired:
-        pass  # Link expired, proceed with return — softcopy has no fine/overdue concept
+    # Softcopies cannot be returned online anymore because they are not borrowed
+    if tx.copy.copy_type == 'softcopy':
+        messages.error(request, 'Softcopies do not need to be returned.')
+        return redirect('member_dashboard')
     
     # Regular return process (non-expired or fine paid)
     tx.return_date = timezone.now()
@@ -2016,7 +1928,7 @@ def all_requests_view(request):
 @librarian_required
 def issued_records_view(request):
     from django.core.paginator import Paginator
-    txs = BorrowingTransaction.objects.select_related(
+    txs = BorrowingTransaction.objects.exclude(copy__copy_type='softcopy').select_related(
         'user', 'copy__book', 'approved_by'
     ).order_by('-borrow_date')
     status_filter = request.GET.get('status', '')
@@ -3511,9 +3423,7 @@ def member_msict_borrowings_view(request):
         status__in=['borrowed', 'overdue'],
         copy__book__isnull=False,
     ).exclude(
-        copy__copy_type='softcopy',
-        copy__access_type='borrow',
-        due_date__lt=timezone.now(),
+        copy__copy_type='softcopy'
     ).select_related('copy__book').order_by('-borrow_date')
 
     # Lost borrowings (books reported lost with active loss reports - pending or confirmed)
@@ -3525,19 +3435,12 @@ def member_msict_borrowings_view(request):
         loss_report__status__in=['pending', 'confirmed'],
     ).select_related('copy__book', 'loss_report', 'loss_report__loss_fine').order_by('-borrow_date')
 
-    expired_softcopies = BorrowingTransaction.objects.filter(
-        user=user,
-        copy__copy_type='softcopy',
-        copy__access_type='borrow',
-        status='borrowed',
-        due_date__lt=timezone.now(),
-        copy__book__isnull=False,
-    ).select_related('copy__book').order_by('-borrow_date')
+    expired_softcopies = BorrowingTransaction.objects.none()
 
-    # Borrow history (returned or lost) - filter out missing books
+    # Borrow history (returned or lost) - filter out missing books and softcopies
     borrow_history = BorrowingTransaction.objects.filter(
         user=user, status__in=['returned', 'lost'], copy__book__isnull=False
-    ).select_related('copy__book').order_by('-return_date')[:50]
+    ).exclude(copy__copy_type='softcopy').select_related('copy__book').order_by('-return_date')[:50]
 
     # Pending borrow requests - include both copy-based and temp_book-based
     pending_requests = BorrowRequest.objects.filter(
@@ -3667,20 +3570,15 @@ def softcopy_library_view(request):
     sc_type = request.GET.get('type', '')  # 'free' | 'borrow' | ''
 
     free_book_ids = BookCopy.objects.filter(
-        copy_type='softcopy', access_type='free'
-    ).values('book_id')
-    special_book_ids = BookCopy.objects.filter(
-        copy_type='softcopy', access_type='borrow'
+        copy_type='softcopy'
     ).values('book_id')
 
     books_qs = Book.objects.select_related('category').prefetch_related('copies')
     if sc_type == 'free':
         books_qs = books_qs.filter(pk__in=free_book_ids)
-    elif sc_type == 'borrow':
-        books_qs = books_qs.filter(pk__in=special_book_ids)
     else:
         books_qs = books_qs.filter(
-            Q(pk__in=free_book_ids) | Q(pk__in=special_book_ids)
+            Q(pk__in=free_book_ids)
         )
 
     if query:
@@ -3720,8 +3618,7 @@ def softcopy_library_view(request):
 
     from catalog.models import Category
     categories = Category.objects.all()
-    total_free = BookCopy.objects.filter(copy_type='softcopy', access_type='free').values('book_id').distinct().count()
-    total_special = BookCopy.objects.filter(copy_type='softcopy', access_type='borrow').values('book_id').distinct().count()
+    total_free = BookCopy.objects.filter(copy_type='softcopy').values('book_id').distinct().count()
 
     return render(request, 'circulation/softcopy_library.html', {
         'books': books_qs,
@@ -3735,7 +3632,6 @@ def softcopy_library_view(request):
         'active_borrow_tokens': active_borrow_tokens,
         'pending_copy_ids': pending_copy_ids,
         'total_free': total_free,
-        'total_special': total_special,
     })
 
 
@@ -3834,7 +3730,7 @@ def renew_reservation_view(request, reservation_id):
 def return_history_view(request):
     """All returned transactions (hard + soft) descending by return date, with filtering."""
     qs = (
-        BorrowingTransaction.objects.filter(status='returned')
+        BorrowingTransaction.objects.filter(status='returned').exclude(copy__copy_type='softcopy')
         .select_related('user', 'copy__book', 'approved_by')
         .order_by('-return_date')
     )
@@ -3854,9 +3750,9 @@ def return_history_view(request):
             Q(copy__accession_no__icontains=query)
         )
 
-    total_returned   = BorrowingTransaction.objects.filter(status='returned').count()
+    total_returned   = BorrowingTransaction.objects.filter(status='returned').exclude(copy__copy_type='softcopy').count()
     hard_returned    = BorrowingTransaction.objects.filter(status='returned', borrow_type='hardcopy').count()
-    soft_returned    = BorrowingTransaction.objects.filter(status='returned', borrow_type='softcopy').count()
+    soft_returned    = 0
 
     return render(request, 'circulation/return_history.html', {
         'transactions':      qs,
@@ -3880,7 +3776,7 @@ def all_borrowings_view(request):
     _auto_mark_overdue()  # Catch any borrowed+past-due not yet marked by cron
 
     qs = (
-        BorrowingTransaction.objects.all()
+        BorrowingTransaction.objects.exclude(copy__copy_type='softcopy')
         .select_related('user', 'copy__book', 'approved_by')
         .order_by('-borrow_date')
     )
@@ -3911,7 +3807,7 @@ def all_borrowings_view(request):
 
     # Calculate counts based on the filtered queryset (without status filter for accurate totals)
     # Exclude softcopies from overdue count since they never go overdue (matching _auto_mark_overdue logic)
-    base_qs = BorrowingTransaction.objects.all()
+    base_qs = BorrowingTransaction.objects.exclude(copy__copy_type='softcopy')
     if copy_type_filter:
         base_qs = base_qs.filter(copy__copy_type=copy_type_filter)
     if query:
@@ -4647,540 +4543,6 @@ def delete_loss_report_view(request, report_id):
 
 
 # ----------------------------------------------------------------------
-# Softcopy Payment View — Payment gateway integration for softcopy access
-# ----------------------------------------------------------------------
-@login_required
-def softcopy_payment_view(request, copy_id):
-    """Display payment options and process payment for softcopy access."""
-    copy = get_object_or_404(BookCopy, pk=copy_id, copy_type='softcopy')
-    
-    if copy.prepaid_fee <= 0:
-        messages.warning(request, 'This softcopy is free. No payment required.')
-        return redirect('submit_borrow_request', copy_id=copy.pk)
-    
-    if BorrowingTransaction.objects.filter(
-        user=request.user, copy=copy, status__in=['borrowed', 'overdue'], due_date__gte=timezone.now()
-    ).exists():
-        messages.warning(request, 'You already have access to this softcopy.')
-        return redirect('member_msict_borrowings')
-    
-    if request.method == 'POST':
-        payment_method = request.POST.get('payment_method')
-        # Always use the fixed prepaid_fee — user cannot modify the amount
-        amount = copy.prepaid_fee
-        
-        if not payment_method:
-            messages.error(request, 'Please select a payment method.')
-            return render(request, 'circulation/softcopy_payment.html', {
-                'copy': copy,
-                'amount': copy.prepaid_fee,
-            })
-        
-        # Validate payment details based on method
-        mobile_methods = ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']
-        card_methods = ['visa', 'mastercard']
-        phone_number = request.POST.get('phone_number', '').strip()
-        bank_name = request.POST.get('bank_name', '').strip()
-        bank_account_no = request.POST.get('bank_account_no', '').strip()
-        card_last4 = request.POST.get('card_last4', '').strip()
-        card_holder = request.POST.get('card_holder', '').strip()
-        receipt_no = request.POST.get('receipt_no', '').strip()
-        
-        if payment_method in mobile_methods:
-            if not phone_number:
-                messages.error(request, 'Please enter your mobile money phone number.')
-                return render(request, 'circulation/softcopy_payment.html', {
-                    'copy': copy, 'amount': copy.prepaid_fee,
-                })
-            if not re.match(r'^0\d{9}$', phone_number):
-                messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
-                return render(request, 'circulation/softcopy_payment.html', {
-                    'copy': copy, 'amount': copy.prepaid_fee,
-                })
-        elif payment_method == 'bank_transfer':
-            if not bank_name:
-                messages.error(request, 'Please select your bank.')
-                return render(request, 'circulation/softcopy_payment.html', {
-                    'copy': copy, 'amount': copy.prepaid_fee,
-                })
-            if not bank_account_no:
-                messages.error(request, 'Please enter your bank account number.')
-                return render(request, 'circulation/softcopy_payment.html', {
-                    'copy': copy, 'amount': copy.prepaid_fee,
-                })
-        elif payment_method in card_methods:
-            if not card_holder:
-                messages.error(request, 'Please enter the cardholder name.')
-                return render(request, 'circulation/softcopy_payment.html', {
-                    'copy': copy, 'amount': copy.prepaid_fee,
-                })
-            if not card_last4 or len(card_last4) != 4:
-                messages.error(request, 'Please enter the last 4 digits of your card.')
-                return render(request, 'circulation/softcopy_payment.html', {
-                    'copy': copy, 'amount': copy.prepaid_fee,
-                })
-        
-        # Create prepaid transaction record
-        from .models import PrepaidTransaction
-        tx = PrepaidTransaction.objects.create(
-            user=request.user,
-            copy=copy,
-            amount=amount,
-            payment_method=payment_method,
-            status='pending',
-            phone_number=phone_number,
-            bank_name=bank_name,
-            bank_account_no=bank_account_no,
-            card_last4=card_last4,
-            card_holder=card_holder,
-            receipt_no=receipt_no,
-        )
-        
-        # For now, simulate successful payment (integrate with actual payment gateway later)
-        # TODO: Integrate with M-Pesa, card payment, bank APIs
-        tx.status = 'completed'
-        tx.transaction_id = f"TXN-{timezone.now().strftime('%Y%m%d%H%M%S')}-{request.user.id}"
-        tx.save()
-        _record_revenue(
-            user=request.user,
-            account_type='link_fee',
-            amount=tx.amount,
-            description=f"Softcopy prepaid fee for '{copy.book.title}'",
-            reference_id=tx.pk,
-            reference_table='prepaid_transactions',
-        )
-        
-        # Create borrowing transaction after successful payment
-        borrowing_tx = BorrowingTransaction.objects.create(
-            user=request.user,
-            copy=copy,
-            borrow_type='softcopy',
-        )
-        
-        # Generate secure access URL and store in SoftcopyAccessLog
-        _loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-        softcopy_url = request.build_absolute_uri(reverse('softcopy_access', args=[borrowing_tx.access_token]))
-        from .models import SoftcopyAccessLog
-        SoftcopyAccessLog.objects.create(
-            user=request.user,
-            copy=copy,
-            transaction=borrowing_tx,
-            access_token=str(borrowing_tx.access_token),
-            access_url=softcopy_url,
-            expires_at=borrowing_tx.due_date,
-        )
-        
-        # Send softcopy link via SMS/email
-        msg_sms = (
-            f"MSICT OLMS: Payment received for \"{copy.book.title}\" (TZS {tx.amount:,.0f}). "
-            f"Your ebook link: {softcopy_url} "
-            f"Valid for {_loan_days} days. Sharing or misuse may lead to disciplinary action."
-        )
-        msg_email = (
-            f"Dear {request.user.get_full_name() or request.user.username},<br><br>"
-            f"Payment confirmed for digital copy <b>\"{copy.book.title}\"</b>.<br>"
-            f"<b>Amount Paid:</b> TZS {tx.amount:,.0f}<br>"
-            f"<b>Transaction ID:</b> {tx.transaction_id}<br>"
-            f"<b>Due Date:</b> {borrowing_tx.due_date.strftime('%d %b %Y')}<br>"
-            f"<b>Access Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-            f"<i>Note: Your access is valid for {_loan_days} days. Sharing or misuse of digital content may lead to disciplinary action.</i>"
-        )
-        notify_user(request.user, msg_sms, 'sms', message_type='softcopy_link')
-        notify_user(request.user, msg_email, 'email', subject=f'Payment Confirmed — {copy.book.title}', message_type='softcopy_link')
-        log_audit(request.user, f"Softcopy payment completed for '{copy.book.title}' [{copy.accession_no}] - TXN: {tx.transaction_id}", request)
-        try:
-            from .receipt_utils import email_softcopy_receipt
-            email_softcopy_receipt(tx)
-        except Exception:
-            pass
-        payment_method_labels = {
-            'mpesa': 'M-Pesa', 'tigopesa': 'Tigo Pesa', 'airtel_money': 'Airtel Money',
-            'halopesa': 'Halopesa', 'bank_transfer': 'Bank Transfer', 'visa': 'Visa Card',
-            'mastercard': 'Mastercard', 'cash': 'Cash',
-        }
-        return render(request, 'circulation/payment_success.html', {
-            'book_title': copy.book.title,
-            'amount': tx.amount,
-            'txn_id': tx.transaction_id,
-            'payment_method_label': payment_method_labels.get(payment_method, payment_method),
-            'due_date': borrowing_tx.due_date.strftime('%d %b %Y, %H:%M'),
-            'prepaid_tx_id': tx.pk,
-            'librarian_mode': False,
-        })
-    
-    return render(request, 'circulation/softcopy_payment.html', {
-        'copy': copy,
-        'amount': copy.prepaid_fee,
-    })
-
-
-# ----------------------------------------------------------------------
-# Cancel Softcopy Access — Member cancels their own softcopy access early
-# ----------------------------------------------------------------------
-@login_required
-@require_POST
-def cancel_softcopy_access_view(request, tx_id):
-    """Member cancels their own softcopy access early.
-    Marks the transaction as returned and frees up the borrow slot."""
-    tx = get_object_or_404(
-        BorrowingTransaction,
-        pk=tx_id,
-        user=request.user,
-        copy__copy_type='softcopy',
-        status__in=['borrowed', 'overdue'],
-    )
-    tx.return_date = timezone.now()
-    tx.status = 'returned'
-    tx.save(update_fields=['return_date', 'status'])
-    log_audit(request.user,
-              f"Cancelled softcopy access early: '{tx.copy.book.title}' [{tx.copy.accession_no}]",
-              request)
-    messages.success(request, f'Access to "{tx.copy.book.title}" has been cancelled.')
-    return redirect('member_msict_borrowings')
-
-
-# ----------------------------------------------------------------------
-# Softcopy Renewal Payment View — Member pays renewal fee for softcopy
-# ----------------------------------------------------------------------
-@login_required
-def softcopy_renewal_payment_view(request, transaction_id):
-    """Member pays the prepaid fee to renew a softcopy borrowing for another 7 days.
-    If fee == 0, shows a free renewal confirmation page instead."""
-    tx = get_object_or_404(
-        BorrowingTransaction, pk=transaction_id, user=request.user,
-        copy__copy_type='softcopy', borrow_type='softcopy',
-        status='borrowed',  # Softcopy never goes 'overdue' — link simply expires
-    )
-    copy = tx.copy
-
-    # Only check max renewals here — softcopy has no fine/overdue concept
-    max_renewals = int(_pref('MAX_RENEWALS', 2))
-    if tx.renewed_count >= max_renewals:
-        messages.error(request, f'Maximum renewals reached ({max_renewals} times).')
-        return redirect('member_msict_borrowings')
-
-    # ── Free softcopy (prepaid_fee == 0): show confirmation page, renew on POST ──
-    if copy.prepaid_fee <= 0:
-        if request.method == 'POST':
-            success, message = tx.renew()
-            if success:
-                softcopy_url = request.build_absolute_uri(
-                    reverse('softcopy_access', args=[tx.access_token])
-                )
-                _loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-                msg_sms = (
-                    f"MSICT OLMS: '{copy.book.title}' renewed. New due date: {tx.due_date.date()}. "
-                    f"Your ebook link: {softcopy_url} Valid for {_loan_days} days."
-                )
-                msg_email = (
-                    f"Dear {request.user.get_full_name() or request.user.username},<br><br>"
-                    f"Renewal confirmed for digital copy <b>\"{copy.book.title}\"</b>.<br>"
-                    f"<b>New Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br>"
-                    f"<b>Access Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-                    f"<i>Note: Your access is valid for {_loan_days} days.</i>"
-                )
-                notify_user(request.user, msg_sms, 'sms', message_type='softcopy_link')
-                notify_user(request.user, msg_email, 'email',
-                            subject=f'Renewal Confirmed — {copy.book.title}',
-                            message_type='softcopy_link')
-                log_audit(request.user,
-                          f"Softcopy renewed (free) '{copy.book.title}'. New due: {tx.due_date.date()}",
-                          request)
-                messages.success(request,
-                    f'Renewed successfully. New due date: {tx.due_date.date()}')
-            else:
-                messages.error(request, message)
-            return redirect('member_msict_borrowings')
-
-        return render(request, 'circulation/softcopy_renewal_payment.html', {
-            'tx': tx,
-            'copy': copy,
-            'amount': Decimal('0'),
-            'is_free': True,
-        })
-
-    # ── Paid softcopy (prepaid_fee > 0): show payment form, process payment then renew ──
-    if request.method == 'POST':
-        payment_method = request.POST.get('payment_method')
-        amount_str = request.POST.get('amount')
-        try:
-            amount = Decimal(amount_str)
-        except (InvalidOperation, TypeError):
-            messages.error(request, 'Invalid payment amount entered.')
-            return render(request, 'circulation/softcopy_renewal_payment.html', {
-                'tx': tx, 'copy': copy, 'amount': copy.prepaid_fee,
-            })
-        if amount < copy.prepaid_fee:
-            messages.error(request,
-                f'Entered amount is less than required fee TZS {copy.prepaid_fee:,.0f}.')
-            return render(request, 'circulation/softcopy_renewal_payment.html', {
-                'tx': tx, 'copy': copy, 'amount': copy.prepaid_fee,
-            })
-        if not payment_method:
-            messages.error(request, 'Please select a payment method.')
-            return render(request, 'circulation/softcopy_renewal_payment.html', {
-                'tx': tx, 'copy': copy, 'amount': copy.prepaid_fee,
-            })
-
-        # 1. Record payment FIRST
-        from .models import PrepaidTransaction
-        prepaid_tx = PrepaidTransaction.objects.create(
-            user=request.user,
-            copy=copy,
-            amount=amount,
-            payment_method=payment_method,
-            status='completed',
-            transaction_id=f"TXN-REN-{timezone.now().strftime('%Y%m%d%H%M%S')}-{request.user.id}",
-        )
-        _record_revenue(
-            user=request.user,
-            account_type='link_fee',
-            amount=prepaid_tx.amount,
-            description=f"Softcopy renewal fee for '{copy.book.title}'",
-            reference_id=prepaid_tx.pk,
-            reference_table='prepaid_transactions',
-        )
-
-        # 2. Renew the transaction (generates new token + extends expiry)
-        success, renew_msg = tx.renew()
-        if not success:
-            messages.error(request, f'Payment recorded but renewal failed: {renew_msg}')
-            return redirect('member_msict_borrowings')
-
-        # 3. Build new access URL and notify user
-        softcopy_url = request.build_absolute_uri(
-            reverse('softcopy_access', args=[tx.access_token])
-        )
-        _loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-        msg_sms = (
-            f"MSICT OLMS: Renewal payment received for \"{copy.book.title}\" "
-            f"(TZS {prepaid_tx.amount:,.0f}). "
-            f"Your new ebook link: {softcopy_url} "
-            f"Valid for {_loan_days} days. Sharing or misuse may lead to disciplinary action."
-        )
-        msg_email = (
-            f"Dear {request.user.get_full_name() or request.user.username},<br><br>"
-            f"Renewal confirmed for digital copy <b>\"{copy.book.title}\"</b>.<br>"
-            f"<b>Amount Paid:</b> TZS {prepaid_tx.amount:,.0f}<br>"
-            f"<b>Transaction ID:</b> {prepaid_tx.transaction_id}<br>"
-            f"<b>New Due Date:</b> {tx.due_date.strftime('%d %b %Y')}<br>"
-            f"<b>Access Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-            f"<i>Note: Your access is valid for {_loan_days} days. Sharing or misuse of digital "
-            f"content may lead to disciplinary action.</i>"
-        )
-        notify_user(request.user, msg_sms, 'sms', message_type='softcopy_link')
-        notify_user(request.user, msg_email, 'email',
-                    subject=f'Renewal Confirmed — {copy.book.title}',
-                    message_type='softcopy_link')
-        log_audit(request.user,
-                  f"Softcopy renewal paid for '{copy.book.title}' - TXN: {prepaid_tx.transaction_id}",
-                  request)
-        try:
-            from .receipt_utils import email_softcopy_receipt
-            email_softcopy_receipt(prepaid_tx)
-        except Exception:
-            pass
-        
-        payment_method_labels = {
-            'mpesa': 'M-Pesa', 'tigopesa': 'Tigo Pesa', 'airtel_money': 'Airtel Money',
-            'halopesa': 'Halopesa', 'bank_transfer': 'Bank Transfer', 'visa': 'Visa Card',
-            'mastercard': 'Mastercard', 'cash': 'Cash',
-        }
-        return render(request, 'circulation/payment_success.html', {
-            'book_title': copy.book.title,
-            'amount': prepaid_tx.amount,
-            'txn_id': prepaid_tx.transaction_id,
-            'payment_method_label': payment_method_labels.get(payment_method, payment_method),
-            'due_date': tx.due_date.strftime('%d %b %Y, %H:%M'),
-            'prepaid_tx_id': prepaid_tx.pk,
-            'librarian_mode': False,
-        })
-
-    return render(request, 'circulation/softcopy_renewal_payment.html', {
-        'tx': tx,
-        'copy': copy,
-        'amount': copy.prepaid_fee,
-    })
-
-
-# ----------------------------------------------------------------------
-# Process Softcopy Payment View — Librarian records payment for approved softcopy request
-# ----------------------------------------------------------------------
-@login_required
-@librarian_required
-def process_softcopy_payment_view(request, request_id):
-    """Process payment for an approved softcopy request and create borrowing transaction."""
-    req = get_object_or_404(BorrowRequest, pk=request_id, status='approved')
-    copy = req.copy
-    
-    if copy.copy_type != 'softcopy':
-        messages.error(request, 'This is not a softcopy request.')
-        return redirect('all_requests')
-    
-    if copy.prepaid_fee <= 0:
-        messages.warning(request, 'This softcopy is free. No payment required.')
-        return redirect('issue_copy', request_id=req.pk)
-    
-    if BorrowingTransaction.objects.filter(
-        user=req.user, copy=copy, status__in=['borrowed', 'overdue'], due_date__gte=timezone.now()
-    ).exists():
-        messages.warning(request, 'User already has access to this softcopy.')
-        return redirect('all_requests')
-    
-    if request.method == 'POST':
-        payment_method = request.POST.get('payment_method')
-        
-        if not payment_method:
-            messages.error(request, 'Please select a payment method.')
-            return render(request, 'circulation/process_softcopy_payment.html', {
-                'req': req,
-                'copy': copy,
-                'amount': copy.prepaid_fee,
-            })
-        
-        # Validate payment details based on method
-        mobile_methods = ['mpesa', 'tigopesa', 'airtel_money', 'halopesa']
-        card_methods = ['visa', 'mastercard']
-        phone_number = request.POST.get('phone_number', '').strip()
-        bank_name = request.POST.get('bank_name', '').strip()
-        bank_account_no = request.POST.get('bank_account_no', '').strip()
-        card_last4 = request.POST.get('card_last4', '').strip()
-        card_holder = request.POST.get('card_holder', '').strip()
-        receipt_no = request.POST.get('receipt_no', '').strip()
-        
-        if payment_method in mobile_methods:
-            if not phone_number:
-                messages.error(request, 'Please enter the member\'s mobile money phone number.')
-                return render(request, 'circulation/process_softcopy_payment.html', {
-                    'req': req, 'copy': copy, 'amount': copy.prepaid_fee,
-                })
-            if not re.match(r'^0\d{9}$', phone_number):
-                messages.error(request, 'Phone number must be exactly 10 digits starting with 0 (e.g. 0712345678).')
-                return render(request, 'circulation/process_softcopy_payment.html', {
-                    'req': req, 'copy': copy, 'amount': copy.prepaid_fee,
-                })
-        elif payment_method == 'bank_transfer':
-            if not bank_name:
-                messages.error(request, 'Please select the bank.')
-                return render(request, 'circulation/process_softcopy_payment.html', {
-                    'req': req, 'copy': copy, 'amount': copy.prepaid_fee,
-                })
-            if not bank_account_no:
-                messages.error(request, 'Please enter the bank account number.')
-                return render(request, 'circulation/process_softcopy_payment.html', {
-                    'req': req, 'copy': copy, 'amount': copy.prepaid_fee,
-                })
-        elif payment_method in card_methods:
-            if not card_holder:
-                messages.error(request, 'Please enter the cardholder name.')
-                return render(request, 'circulation/process_softcopy_payment.html', {
-                    'req': req, 'copy': copy, 'amount': copy.prepaid_fee,
-                })
-            if not card_last4 or len(card_last4) != 4:
-                messages.error(request, 'Please enter the last 4 digits of the card.')
-                return render(request, 'circulation/process_softcopy_payment.html', {
-                    'req': req, 'copy': copy, 'amount': copy.prepaid_fee,
-                })
-        
-        # Create prepaid transaction record
-        from .models import PrepaidTransaction
-        tx = PrepaidTransaction.objects.create(
-            user=req.user,
-            copy=copy,
-            amount=copy.prepaid_fee,
-            payment_method=payment_method,
-            status='completed',
-            transaction_id=f"TXN-{timezone.now().strftime('%Y%m%d%H%M%S')}-{req.user.id}",
-            phone_number=phone_number,
-            bank_name=bank_name,
-            bank_account_no=bank_account_no,
-            card_last4=card_last4,
-            card_holder=card_holder,
-            receipt_no=receipt_no,
-        )
-        _record_revenue(
-            user=req.user,
-            account_type='link_fee',
-            amount=tx.amount,
-            description=f"Softcopy prepaid fee recorded by librarian for '{copy.book.title}'",
-            reference_id=tx.pk,
-            reference_table='prepaid_transactions',
-            recorded_by=request.user,
-        )
-        
-        # Create borrowing transaction after successful payment
-        borrowing_tx = BorrowingTransaction.objects.create(
-            user=req.user,
-            copy=copy,
-            borrow_type='softcopy',
-            approved_by=request.user,
-        )
-        
-        # Generate secure access URL and store in SoftcopyAccessLog
-        softcopy_url = request.build_absolute_uri(reverse('softcopy_access', args=[borrowing_tx.access_token]))
-        from .models import SoftcopyAccessLog
-        SoftcopyAccessLog.objects.create(
-            user=req.user,
-            copy=copy,
-            transaction=borrowing_tx,
-            access_token=str(borrowing_tx.access_token),
-            access_url=softcopy_url,
-            expires_at=borrowing_tx.due_date,
-        )
-        
-        # Update request status
-        req.status = 'approved'
-        req.approved_by = request.user
-        req.save()
-        
-        # Send softcopy link via SMS/email
-        _loan_days = int(_pref('LOAN_PERIOD_DAYS', 7))
-        msg_sms = (
-            f"MSICT OLMS: Payment received for \"{copy.book.title}\" (TZS {copy.prepaid_fee:,.0f}). "
-            f"Your ebook link: {softcopy_url} "
-            f"Valid for {_loan_days} days. Sharing or misuse may lead to disciplinary action."
-        )
-        msg_email = (
-            f"Dear {req.user.get_full_name() or req.user.username},<br><br>"
-            f"Payment confirmed for digital copy <b>\"{copy.book.title}\"</b>.<br>"
-            f"<b>Amount Paid:</b> TZS {copy.prepaid_fee:,.0f}<br>"
-            f"<b>Transaction ID:</b> {tx.transaction_id}<br>"
-            f"<b>Due Date:</b> {borrowing_tx.due_date.strftime('%d %b %Y')}<br>"
-            f"<b>Access Link:</b> <a href='{softcopy_url}'>{softcopy_url}</a><br><br>"
-            f"<i>Note: Your access is valid for {_loan_days} days. Sharing or misuse of digital content may lead to disciplinary action.</i>"
-        )
-        notify_user(req.user, msg_sms, 'sms', message_type='softcopy_link')
-        notify_user(req.user, msg_email, 'email', subject=f'Payment Confirmed — {copy.book.title}', message_type='softcopy_link')
-        log_audit(request.user, f"Softcopy payment processed for '{req.user.username}' – '{copy.book.title}' - TXN: {tx.transaction_id}", request)
-        try:
-            from .receipt_utils import email_softcopy_receipt
-            email_softcopy_receipt(tx)
-        except Exception:
-            pass
-        
-        payment_method_labels = {
-            'mpesa': 'M-Pesa', 'tigopesa': 'Tigo Pesa', 'airtel_money': 'Airtel Money',
-            'halopesa': 'Halopesa', 'bank_transfer': 'Bank Transfer', 'visa': 'Visa Card',
-            'mastercard': 'Mastercard', 'cash': 'Cash',
-        }
-        return render(request, 'circulation/payment_success.html', {
-            'book_title': copy.book.title,
-            'amount': tx.amount,
-            'txn_id': tx.transaction_id,
-            'payment_method_label': payment_method_labels.get(payment_method, payment_method),
-            'due_date': borrowing_tx.due_date.strftime('%d %b %Y, %H:%M'),
-            'prepaid_tx_id': tx.pk,
-            'librarian_mode': True,
-        })
-    
-    return render(request, 'circulation/process_softcopy_payment.html', {
-        'req': req,
-        'copy': copy,
-        'amount': copy.prepaid_fee,
-    })
-
-
-# ----------------------------------------------------------------------
 # Fine Receipt PDF — Generate a printable receipt for a fine payment
 # ----------------------------------------------------------------------
 @login_required
@@ -5224,59 +4586,6 @@ def fine_receipt_pdf_view(request, fine_id):
         download=request.GET.get('download') == '1',
     )
 
-
-# ----------------------------------------------------------------------
-# Softcopy Link Fee Receipt PDF
-# ----------------------------------------------------------------------
-@login_required
-def softcopy_receipt_pdf_view(request, tx_id):
-    """Generate a PDF receipt for a softcopy link fee payment."""
-    from .receipt_utils import generate_receipt_pdf
-    from .models import PrepaidTransaction
-
-    tx = get_object_or_404(PrepaidTransaction, pk=tx_id)
-    # Allow the user who paid or any librarian/admin
-    if tx.user != request.user and request.user.role not in ('librarian', 'admin'):
-        messages.error(request, 'You are not authorised to view this receipt.')
-        return redirect('member_dashboard')
-
-    copy = tx.copy
-    book_title = copy.book.title if copy and copy.book else '—'
-    receipt_id = f"RCPT-LINK-{tx.pk}-{tx.created_at.strftime('%Y%m%d%H%M')}"
-
-    items = [
-        ('Transaction ID', tx.transaction_id or f'TXN-{tx.pk}'),
-        ('Book Title', book_title),
-        ('Accession No', copy.accession_no if copy else '—'),
-        ('Status', tx.get_status_display()),
-    ]
-
-    # Find borrowing transaction for due date
-    bt = BorrowingTransaction.objects.filter(user=tx.user, copy=copy).order_by('-id').first()
-    if bt:
-        items.append(('Due Date', bt.due_date.strftime('%d %b %Y, %H:%M')))
-
-    qr_data = (
-        f"MSICT-OLMS|LINK-RECEIPT|{receipt_id}|{tx.user.username}|"
-        f"TZS {tx.amount:,.0f}|{book_title}"
-    )
-
-    return generate_receipt_pdf(
-        receipt_id=receipt_id,
-        title='Softcopy Link Fee Receipt',
-        user=tx.user,
-        items=items,
-        qr_data=qr_data,
-        payment_method=tx.payment_method,
-        amount_label='Amount Paid',
-        amount_value=f"TZS {float(tx.amount):,.0f}",
-        filename=f'softcopy_receipt_{tx.pk}',
-        extra_notes=[
-            'Digital access is valid for 7 days from issue date.',
-            'Sharing or misuse of digital content may lead to disciplinary action.',
-        ],
-        download=request.GET.get('download') == '1',
-    )
 
 
 # ----------------------------------------------------------------------

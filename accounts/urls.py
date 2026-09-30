@@ -22,22 +22,8 @@ urlpatterns = [
 
     # ── Wasifu na Kadi ────────────────────────────────────
     path('dashboard/', views.dashboard_redirect, name='dashboard'),                          # Elekeza kwa dashboard sahihi
-    path('guest/dashboard/', views.guest_dashboard_view, name='guest_dashboard'),            # Dashboard ya guest
-    path('guest/session/start/', views.guest_start_session_page_view, name='guest_start_session'),  # GET: start session page
-    path('guest/session/begin/', views.start_guest_session_view, name='start_guest_session'),# POST: hours → payment form
-    path('guest/session/pay/', views.guest_payment_view, name='guest_payment'),            # Guest malipo ya session
-    path('guest/session/end/', views.end_guest_session_view, name='end_guest_session'),      # Maliza session ya guest
-    path('guest/session/<int:session_id>/delete/', views.guest_session_delete_view, name='guest_session_delete'),
-    path('guest/session/renew/', views.guest_session_renew_view, name='guest_session_renew'),          # Show renewal form
-    path('guest/session/renew/pay/', views.guest_session_renew_pay_view, name='guest_session_renew_pay'), # Process renewal payment
-    path('guest/session/<int:session_id>/receipt/', views.guest_session_receipt_pdf_view, name='guest_session_receipt'),
+    path('guest/dashboard/', views.guest_dashboard_view, name='guest_dashboard'),             # /guest/dashboard/ — Guest overview page
     path('guest/upgrade/', views.upgrade_to_member_view, name='upgrade_to_member'),          # Guest → Member upgrade
-    path('guest/manage/', views.guest_manage_view, name='guest_manage'),                     # Librarian guest management
-    path('guest/manage/<int:session_id>/mark-paid/', views.guest_mark_paid_view, name='guest_mark_paid'),
-    path('guest/manage/<int:session_id>/end/', views.guest_session_end_view, name='guest_session_end'),
-    path('guest/manage/<int:session_id>/delete/', views.librarian_guest_session_delete_view, name='librarian_guest_session_delete'),
-    path('guest/manage/<int:user_id>/suspend/', views.guest_suspend_view, name='guest_suspend'),
-    path('guest/manage/<int:user_id>/reactivate/', views.guest_reactivate_view, name='guest_reactivate'),
     path('profile/', views.profile_view, name='profile'),                                    # Wasifu wa mtumiaji
     path('profile/delete/', views.delete_my_account_view, name='delete_my_account'),         # Futa akaunti yako
     path('change-password/', views.change_password_view, name='change_password'),            # Badilisha nywila

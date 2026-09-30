@@ -1,279 +1,460 @@
 {% extends 'base.html' %}
 {% load humanize %}
-{% block title %}Guest Dashboard - MSICT OLMS{% endblock %}
+{% block title %}Guest Dashboard – MSICT Library{% endblock %}
+
 {% block content %}
-<div class="container py-4">
-  <!-- Welcome greeting with live clock -->
-  <div class="card border-0 shadow-sm mb-4">
-    <div class="card-body p-4">
-      <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
-        <div>
-          <h4 class="fw-bold mb-1"><i class="bi bi-person-badge me-2 text-info"></i>Welcome, {{ user.get_full_name }}</h4>
-          <p class="text-muted small mb-1">{{ user.email }}</p>
-          <div class="d-flex align-items-center gap-2 mb-2">
-            <i class="bi bi-clock text-muted" style="font-size:.8rem;"></i>
-            <span id="dashLiveClock" class="text-muted" style="font-size:.82rem;font-variant-numeric:tabular-nums;">Loading…</span>
+<style>
+.gd-hero {
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 60%, #0369a1 100%);
+  border-radius: 1.25rem;
+  color: #fff;
+  padding: 2.5rem 2rem;
+  position: relative;
+  overflow: hidden;
+}
+.gd-hero::before {
+  content: '';
+  position: absolute;
+  width: 320px; height: 320px;
+  background: rgba(255,255,255,.04);
+  border-radius: 50%;
+  top: -80px; right: -60px;
+  pointer-events: none;
+}
+.gd-hero::after {
+  content: '';
+  position: absolute;
+  width: 180px; height: 180px;
+  background: rgba(255,255,255,.05);
+  border-radius: 50%;
+  bottom: -50px; left: 30px;
+  pointer-events: none;
+}
+.gd-stat-card {
+  border: none;
+  border-radius: 1rem;
+  transition: transform .2s, box-shadow .2s;
+}
+.gd-stat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(0,0,0,.12); }
+.gd-stat-icon {
+  width: 52px; height: 52px;
+  border-radius: .75rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.4rem;
+}
+.step-card {
+  border: 2px solid transparent;
+  border-radius: 1rem;
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.step-card:hover { border-color: #0369a1; box-shadow: 0 8px 24px rgba(3,105,161,.12); transform: translateY(-3px); }
+.step-num {
+  width: 40px; height: 40px; min-width: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0369a1, #0ea5e9);
+  color: #fff; font-weight: 700; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 12px rgba(3,105,161,.3);
+}
+.book-card {
+  border: none; border-radius: .875rem;
+  transition: transform .2s, box-shadow .2s;
+}
+.book-card:hover { transform: translateY(-4px); box-shadow: 0 10px 24px rgba(0,0,0,.1); }
+.book-rank {
+  position: absolute; top: -.5rem; left: -.5rem;
+  width: 28px; height: 28px; border-radius: 50%;
+  font-size: .72rem; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.cat-pill {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .45rem 1rem; border-radius: 2rem;
+  background: #f1f5f9; border: 1px solid #e2e8f0;
+  font-size: .84rem; font-weight: 500;
+  transition: background .2s, color .2s, transform .15s;
+}
+.cat-pill:hover { background: #0369a1; color: #fff; border-color: #0369a1; transform: scale(1.04); }
+.rule-item {
+  display: flex; align-items: flex-start; gap: .75rem;
+  padding: .65rem 0; border-bottom: 1px solid #f1f5f9;
+}
+.rule-item:last-child { border-bottom: none; }
+.rule-icon {
+  width: 32px; height: 32px; min-width: 32px; border-radius: .5rem;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .9rem;
+}
+.gd-cta {
+  background: linear-gradient(135deg, #0369a1 0%, #7c3aed 100%);
+  border-radius: 1.25rem; color: #fff;
+}
+</style>
+
+<div class="container-fluid py-4 px-3 px-md-4">
+
+  {# ── HERO ─────────────────────────────────────────────── #}
+  <div class="gd-hero mb-4 shadow">
+    <div class="row align-items-center g-3">
+      <div class="col-md-8">
+        <div class="d-flex align-items-center gap-3 mb-3">
+          <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:1.7rem;">
+            <i class="bi bi-person-badge"></i>
           </div>
-          <div class="d-flex gap-2">
-            <span class="badge bg-info text-dark"><i class="bi bi-person-badge me-1"></i>Guest</span>
+          <div>
+            <h3 class="fw-bold mb-0" style="letter-spacing:-.02em;">Welcome, {{ user.get_full_name }}</h3>
+            <small class="opacity-75">{{ user.email }}</small>
           </div>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-          <a href="{% url 'chat_inbox' %}" class="btn btn-outline-primary btn-sm">
-            <i class="bi bi-chat-dots me-1"></i> Messages/Support
-          </a>
-          <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-outline-success">
-            <i class="bi bi-arrow-up-circle"></i> Become a Member
-          </a>
-          <a href="{% url 'logout' %}" class="btn btn-outline-secondary btn-sm">Logout</a>
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+          <span class="badge" style="background:rgba(255,255,255,.2);font-size:.8rem;padding:.35rem .75rem;">
+            <i class="bi bi-person-badge me-1"></i> Guest Account
+          </span>
+          <span class="badge" style="background:rgba(255,255,255,.15);font-size:.8rem;padding:.35rem .75rem;">
+            <i class="bi bi-clock me-1"></i><span id="gdLiveClock">--:--</span>
+          </span>
+        </div>
+        <p class="mb-0 opacity-75" style="max-width:480px;font-size:.92rem;">
+          Browse our library catalog, discover popular titles, and explore how to unlock full borrowing privileges as a member.
+        </p>
+      </div>
+      <div class="col-md-4 text-md-end d-flex flex-md-column align-items-md-end gap-2 flex-wrap">
+        <a href="{% url 'catalog_search' %}" class="btn btn-light fw-semibold" style="border-radius:.75rem;">
+          <i class="bi bi-search me-1"></i> Search Books
+        </a>
+        <a href="{% url 'upgrade_to_member' %}" class="btn fw-semibold"
+           style="background:linear-gradient(135deg,#34d399,#059669);color:#fff;border:none;border-radius:.75rem;">
+          <i class="bi bi-arrow-up-circle me-1"></i> Become a Member
+        </a>
+        <a href="{% url 'chat_inbox' %}" class="btn btn-outline-light btn-sm" style="border-radius:.65rem;">
+          <i class="bi bi-chat-dots me-1"></i> Support
+        </a>
+      </div>
+    </div>
+  </div>
+
+  {# ── CATALOG STATS ────────────────────────────────────── #}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="card gd-stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3 p-3">
+          <div class="gd-stat-icon" style="background:#eff6ff;">
+            <i class="bi bi-book-half" style="color:#2563eb;"></i>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ total_books|intcomma }}</div>
+            <div class="text-muted small">Total Books</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card gd-stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3 p-3">
+          <div class="gd-stat-icon" style="background:#fef9c3;">
+            <i class="bi bi-journal-bookmark-fill" style="color:#ca8a04;"></i>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ total_hardcopy|intcomma }}</div>
+            <div class="text-muted small">Hard Copies</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card gd-stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3 p-3">
+          <div class="gd-stat-icon" style="background:#f0fdf4;">
+            <i class="bi bi-file-earmark-pdf-fill" style="color:#16a34a;"></i>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ total_softcopy|intcomma }}</div>
+            <div class="text-muted small">Soft Copies</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="card gd-stat-card shadow-sm h-100">
+        <div class="card-body d-flex align-items-center gap-3 p-3">
+          <div class="gd-stat-icon" style="background:#fdf4ff;">
+            <i class="bi bi-tags-fill" style="color:#9333ea;"></i>
+          </div>
+          <div>
+            <div class="fs-3 fw-bold lh-1">{{ total_categories|intcomma }}</div>
+            <div class="text-muted small">Categories</div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 
-  <div class="row g-3 mb-4">
-    <div class="col-md-6">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body">
-          <h6 class="text-muted">Current Session</h6>
-          {% if active_session %}
-            <p class="mb-1"><strong>Status:</strong>
-              {% if active_session.status == 'renewed' %}<span class="badge bg-primary">Renewed</span>
-              {% else %}<span class="badge bg-success">Active</span>{% endif %}
-            </p>
-            <p class="mb-1"><strong>Session #:</strong> #{{ active_session.pk }}</p>
-            <p class="mb-1"><strong>Signed in:</strong> {{ active_session.sign_in_time|date:"d M Y H:i" }}</p>
-            <p class="mb-1"><strong>Total Hours:</strong> {{ active_session.paid_hours|floatformat:0|intcomma }}h</p>
-            <p class="mb-1"><strong>Expires at:</strong> <span id="expiry-time">—</span></p>
+  <div class="row g-4">
 
-            <!-- Countdown timer -->
-            <div id="countdown-box" class="my-3 p-3 rounded text-center" style="background:#f8fafc;">
-              <div class="text-muted small mb-1">Time Remaining</div>
-              <div id="countdown-display" class="fs-3 fw-bold text-primary">--:--:--</div>
-              <div id="countdown-warning" class="small mt-1" style="display:none;"></div>
+    {# ── LEFT COLUMN ───────────────────────────────────── #}
+    <div class="col-lg-8">
+
+      {# How to Become a Member #}
+      <div class="card border-0 shadow-sm mb-4" style="border-radius:1.25rem;">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center gap-2 mb-4">
+            <div style="width:38px;height:38px;border-radius:.65rem;background:#eff6ff;display:flex;align-items:center;justify-content:center;">
+              <i class="bi bi-person-plus-fill" style="color:#2563eb;font-size:1.1rem;"></i>
             </div>
-
-            <div class="d-flex gap-2 mb-2">
-              <form method="post" action="{% url 'end_guest_session' %}" class="flex-grow-1">
-                {% csrf_token %}
-                <button class="btn btn-danger w-100">Terminate Session</button>
-              </form>
-              {% if active_session.payment_status == 'paid' %}
-              <a href="{% url 'guest_session_receipt' active_session.pk %}" target="_blank" class="btn btn-outline-secondary" title="Print Receipt">
-                <i class="bi bi-receipt"></i> Receipt
-              </a>
-              <a href="{% url 'guest_session_receipt' active_session.pk %}?download=1" class="btn btn-outline-primary" title="Download Receipt">
-                <i class="bi bi-download"></i>
-              </a>
-              {% endif %}
+            <div>
+              <h5 class="fw-bold mb-0">How to Become a Member</h5>
+              <small class="text-muted">Unlock full borrowing access in 4 simple steps</small>
             </div>
-
-            <hr class="my-3">
-            <h6 class="text-muted mb-2"><i class="bi bi-clock-history"></i> Renew Session</h6>
-            <form method="post" action="{% url 'guest_session_renew' %}" class="row g-2 align-items-end">
-              {% csrf_token %}
-              <div class="col-7">
-                <label class="form-label small">Add Hours (max 12h/day total)</label>
-                <input type="number" name="renew_hours" min="1" max="12" step="1" value="1" class="form-control" required>
+          </div>
+          <div class="row g-3">
+            <div class="col-sm-6">
+              <div class="step-card card shadow-sm h-100 p-3">
+                <div class="d-flex gap-3 align-items-start">
+                  <div class="step-num">1</div>
+                  <div>
+                    <div class="fw-semibold mb-1">Submit Your Application</div>
+                    <div class="text-muted small">Click <strong>Become a Member</strong> and fill in your personal details including Army No. and member type.</div>
+                  </div>
+                </div>
               </div>
-              <div class="col-5">
-                <button class="btn btn-outline-primary w-100"><i class="bi bi-plus-circle me-1"></i>Renew</button>
-              </div>
-            </form>
-            <div class="mt-1">
-              <small class="text-muted"><i class="bi bi-info-circle"></i> Add more hours via payment. Max 12h per day.</small>
             </div>
+            <div class="col-sm-6">
+              <div class="step-card card shadow-sm h-100 p-3">
+                <div class="d-flex gap-3 align-items-start">
+                  <div class="step-num">2</div>
+                  <div>
+                    <div class="fw-semibold mb-1">Librarian Review</div>
+                    <div class="text-muted small">A librarian reviews your request. You will be notified once your application is approved or rejected.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <div class="step-card card shadow-sm h-100 p-3">
+                <div class="d-flex gap-3 align-items-start">
+                  <div class="step-num">3</div>
+                  <div>
+                    <div class="fw-semibold mb-1">Account Activation</div>
+                    <div class="text-muted small">Upon approval your account is upgraded to <strong>Member</strong> status with a unique library membership number.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-sm-6">
+              <div class="step-card card shadow-sm h-100 p-3">
+                <div class="d-flex gap-3 align-items-start">
+                  <div class="step-num">4</div>
+                  <div>
+                    <div class="fw-semibold mb-1">Enjoy Full Access</div>
+                    <div class="text-muted small">Borrow hardcopy books, download softcopies, make reservations, and use the AI Library Assistant.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 d-flex gap-2 flex-wrap">
+            <a href="{% url 'upgrade_to_member' %}" class="btn btn-primary fw-semibold" style="border-radius:.75rem;">
+              <i class="bi bi-arrow-up-circle me-1"></i> Apply for Membership Now
+            </a>
+            <a href="{% url 'chat_inbox' %}" class="btn btn-outline-secondary" style="border-radius:.75rem;">
+              <i class="bi bi-chat-dots me-1"></i> Ask a Librarian
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {# Most Borrowed Books #}
+      <div class="card border-0 shadow-sm mb-4" style="border-radius:1.25rem;">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center justify-content-between mb-4">
+            <div class="d-flex align-items-center gap-2">
+              <div style="width:38px;height:38px;border-radius:.65rem;background:#fef9c3;display:flex;align-items:center;justify-content:center;">
+                <i class="bi bi-fire" style="color:#d97706;font-size:1.1rem;"></i>
+              </div>
+              <div>
+                <h5 class="fw-bold mb-0">Most Borrowed Books</h5>
+                <small class="text-muted">Top titles by all-time borrow count</small>
+              </div>
+            </div>
+            <a href="{% url 'catalog_search' %}" class="btn btn-sm btn-outline-primary" style="border-radius:.65rem;">
+              <i class="bi bi-arrow-right me-1"></i> Browse All
+            </a>
+          </div>
+          {% if most_borrowed %}
+          <div class="row g-3">
+            {% for book in most_borrowed %}
+            <div class="col-sm-6">
+              <div class="book-card card shadow-sm p-3 h-100 position-relative">
+                <div class="book-rank
+                  {% if forloop.counter == 1 %}bg-warning text-dark
+                  {% elif forloop.counter == 2 %}bg-secondary text-white
+                  {% elif forloop.counter == 3 %}bg-danger text-white
+                  {% else %}bg-light text-muted{% endif %}">
+                  {{ forloop.counter }}
+                </div>
+                <div class="d-flex gap-3 align-items-start ps-1">
+                  <div style="width:42px;height:54px;min-width:42px;border-radius:.5rem;
+                              background:linear-gradient(135deg,#dbeafe,#bfdbfe);
+                              display:flex;align-items:center;justify-content:center;">
+                    <i class="bi bi-book-fill" style="color:#2563eb;font-size:1.15rem;"></i>
+                  </div>
+                  <div class="flex-grow-1 overflow-hidden">
+                    <div class="fw-semibold text-truncate" style="font-size:.88rem;" title="{{ book.copy__book__title }}">
+                      {{ book.copy__book__title }}
+                    </div>
+                    <div class="text-muted" style="font-size:.78rem;">{{ book.copy__book__author|default:"Unknown Author" }}</div>
+                    <div class="mt-1">
+                      <span class="badge rounded-pill" style="background:#eff6ff;color:#1d4ed8;font-size:.74rem;">
+                        <i class="bi bi-arrow-repeat me-1"></i>{{ book.borrow_count }} borrow{{ book.borrow_count|pluralize }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
           {% else %}
-            <p class="mb-0 text-muted">No active session. <a href="{% url 'guest_start_session' %}">Start a new session</a>.</p>
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-book" style="font-size:2.5rem;opacity:.3;"></i>
+            <p class="mt-2 mb-0 small">No borrowing data yet.</p>
+          </div>
           {% endif %}
         </div>
       </div>
-    </div>
 
-    <div class="col-md-6">
-      <div class="card border-0 shadow-sm h-100">
-        <div class="card-body">
-          <h6 class="text-muted">Access Rules</h6>
-          <ul class="mb-0 small">
-            <li>Read hardcopy inside library only.</li>
-            <li>Softcopy access is view-only for guest mode.</li>
-            <li>No borrowing or reservation in guest mode.</li>
-            <li>Start a new session whenever you return.</li>
-          </ul>
-          <hr>
-          <h6 class="text-muted mb-2">Upgrade to Member</h6>
-          <p class="small text-muted mb-2">Get borrowing rights and full access to all library resources.</p>
-          <a href="{% url 'upgrade_to_member' %}" class="btn btn-sm btn-primary w-100">
-            <i class="bi bi-arrow-up-circle me-1"></i> Become a Member
+    </div>{# /left column #}
+
+    {# ── RIGHT COLUMN ──────────────────────────────────── #}
+    <div class="col-lg-4">
+
+      {# CTA Card #}
+      <div class="gd-cta p-4 mb-4 shadow" style="border-radius:1.25rem;">
+        <i class="bi bi-stars" style="font-size:2rem;opacity:.7;"></i>
+        <h5 class="fw-bold mt-2 mb-1">Unlock Full Access</h5>
+        <p class="opacity-75 small mb-3">
+          Members can borrow books, download softcopies, reserve titles, and get AI-powered reading recommendations.
+        </p>
+        <a href="{% url 'upgrade_to_member' %}" class="btn btn-light fw-semibold w-100" style="border-radius:.75rem;color:#0369a1;">
+          <i class="bi bi-arrow-up-circle me-1"></i> Apply for Membership
+        </a>
+      </div>
+
+      {# Top Categories #}
+      {% if top_categories %}
+      <div class="card border-0 shadow-sm mb-4" style="border-radius:1.25rem;">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <div style="width:34px;height:34px;border-radius:.6rem;background:#fdf4ff;display:flex;align-items:center;justify-content:center;">
+              <i class="bi bi-grid-3x3-gap-fill" style="color:#9333ea;"></i>
+            </div>
+            <h6 class="fw-bold mb-0">Browse by Category</h6>
+          </div>
+          <div class="d-flex flex-wrap gap-2">
+            {% for cat in top_categories %}
+            <a href="{% url 'catalog_search' %}?category={{ cat.id }}" class="cat-pill text-decoration-none text-dark">
+              <i class="bi bi-tag-fill" style="color:#9333ea;font-size:.75rem;"></i>
+              {{ cat.name }}
+              <span class="badge rounded-pill" style="background:#e2e8f0;color:#475569;font-size:.68rem;padding:.15rem .4rem;">{{ cat.book_count }}</span>
+            </a>
+            {% endfor %}
+          </div>
+          <a href="{% url 'catalog_search' %}" class="btn btn-sm btn-outline-secondary w-100 mt-3" style="border-radius:.65rem;">
+            <i class="bi bi-search me-1"></i> Full Catalog Search
           </a>
         </div>
       </div>
-    </div>
-  </div>
+      {% endif %}
 
-  <div class="card border-0 shadow-sm">
-    <div class="card-body">
-      <h6 class="fw-semibold">Recent Sessions</h6>
-      <div class="table-responsive">
-        <table class="table table-sm align-middle">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Sign In</th>
-              <th>Sign Out</th>
-              <th>Duration (h)</th>
-              <th>Amount (TZS)</th>
-              <th>Status</th>
-              <th>Payment</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for s in recent_sessions %}
-            <tr>
-              <td><strong>#{{ s.pk }}</strong></td>
-              <td>{{ s.sign_in_time|date:"d M Y H:i" }}</td>
-              <td>{{ s.sign_out_time|date:"d M Y H:i"|default:'—' }}</td>
-              <td>{{ s.duration_hours }}</td>
-              <td>{{ s.amount_paid|floatformat:0|intcomma }}</td>
-              <td>
-                {% if s.status == 'active' %}<span class="badge bg-success">Active</span>
-                {% elif s.status == 'renewed' %}<span class="badge bg-primary">Renewed</span>
-                {% elif s.status == 'ended' %}<span class="badge bg-secondary">Ended</span>
-                {% elif s.status == 'expired' %}<span class="badge bg-warning text-dark">Expired</span>
-                {% else %}{{ s.status }}{% endif %}
-              </td>
-              <td>
-                {% if s.payment_status == 'paid' %}<span class="badge bg-success">Paid</span>
-                {% elif s.payment_status == 'waived' %}<span class="badge bg-info text-dark">Waived</span>
-                {% else %}<span class="badge bg-warning text-dark">Pending</span>{% endif %}
-              </td>
-              <td>
-                {% if s.payment_status == 'paid' %}
-                <a href="{% url 'guest_session_receipt' s.pk %}" target="_blank" class="btn btn-sm btn-outline-secondary" title="Print Receipt">
-                  <i class="bi bi-receipt"></i>
-                </a>
-                <a href="{% url 'guest_session_receipt' s.pk %}?download=1" class="btn btn-sm btn-outline-primary" title="Download Receipt">
-                  <i class="bi bi-download"></i>
-                </a>
-                {% endif %}
-                {% if s.status != 'active' and s.status != 'renewed' %}
-                <form method="post" action="{% url 'guest_session_delete' s.pk %}" class="d-inline" onsubmit="return confirm('Delete this session record? This cannot be undone.');">
-                  {% csrf_token %}
-                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete session">
-                    <i class="bi bi-trash"></i>
-                  </button>
-                </form>
-                {% elif s.status == 'active' or s.status == 'renewed' %}
-                <span class="text-muted small">—</span>
-                {% endif %}
-              </td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="8" class="text-muted">No session history yet.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
+      {# Guest Rules #}
+      <div class="card border-0 shadow-sm mb-4" style="border-radius:1.25rem;">
+        <div class="card-body p-4">
+          <div class="d-flex align-items-center gap-2 mb-3">
+            <div style="width:34px;height:34px;border-radius:.6rem;background:#fff7ed;display:flex;align-items:center;justify-content:center;">
+              <i class="bi bi-info-circle-fill" style="color:#ea580c;"></i>
+            </div>
+            <h6 class="fw-bold mb-0">Guest Access Rules</h6>
+          </div>
+          <div>
+            <div class="rule-item">
+              <div class="rule-icon" style="background:#f0fdf4;"><i class="bi bi-check-circle-fill" style="color:#16a34a;font-size:.9rem;"></i></div>
+              <div>
+                <div class="fw-semibold small">Browse Catalog</div>
+                <div class="text-muted" style="font-size:.78rem;">Search and view all book listings freely.</div>
+              </div>
+            </div>
+            <div class="rule-item">
+              <div class="rule-icon" style="background:#f0fdf4;"><i class="bi bi-check-circle-fill" style="color:#16a34a;font-size:.9rem;"></i></div>
+              <div>
+                <div class="fw-semibold small">Read &amp; Download Softcopies</div>
+                <div class="text-muted" style="font-size:.78rem;">All digital books are free for guests.</div>
+              </div>
+            </div>
+            <div class="rule-item">
+              <div class="rule-icon" style="background:#fff7ed;"><i class="bi bi-x-circle-fill" style="color:#ea580c;font-size:.9rem;"></i></div>
+              <div>
+                <div class="fw-semibold small">No Hardcopy Borrowing</div>
+                <div class="text-muted" style="font-size:.78rem;">Borrow physical books after upgrading.</div>
+              </div>
+            </div>
+            <div class="rule-item">
+              <div class="rule-icon" style="background:#fff7ed;"><i class="bi bi-x-circle-fill" style="color:#ea580c;font-size:.9rem;"></i></div>
+              <div>
+                <div class="fw-semibold small">No Reservations</div>
+                <div class="text-muted" style="font-size:.78rem;">Reserve titles by becoming a member.</div>
+              </div>
+            </div>
+            <div class="rule-item">
+              <div class="rule-icon" style="background:#eff6ff;"><i class="bi bi-chat-dots-fill" style="color:#2563eb;font-size:.9rem;"></i></div>
+              <div>
+                <div class="fw-semibold small">Librarian Support</div>
+                <div class="text-muted" style="font-size:.78rem;">Chat with a librarian anytime.</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
+
+      {# Quick Links #}
+      <div class="card border-0 shadow-sm" style="border-radius:1.25rem;">
+        <div class="card-body p-4">
+          <h6 class="fw-bold mb-3"><i class="bi bi-lightning-fill text-warning me-1"></i> Quick Links</h6>
+          <div class="d-grid gap-2">
+            <a href="{% url 'catalog_search' %}" class="btn btn-outline-primary btn-sm text-start" style="border-radius:.65rem;">
+              <i class="bi bi-search me-2"></i> Search Library Catalog
+            </a>
+            <a href="{% url 'profile' %}" class="btn btn-outline-secondary btn-sm text-start" style="border-radius:.65rem;">
+              <i class="bi bi-person me-2"></i> My Profile
+            </a>
+            <a href="{% url 'change_password' %}" class="btn btn-outline-secondary btn-sm text-start" style="border-radius:.65rem;">
+              <i class="bi bi-key me-2"></i> Change Password
+            </a>
+            <a href="{% url 'chat_inbox' %}" class="btn btn-outline-secondary btn-sm text-start" style="border-radius:.65rem;">
+              <i class="bi bi-chat-dots me-2"></i> Messages &amp; Support
+            </a>
+            <a href="{% url 'upgrade_to_member' %}" class="btn btn-success btn-sm text-start fw-semibold" style="border-radius:.65rem;">
+              <i class="bi bi-arrow-up-circle me-2"></i> Apply for Membership
+            </a>
+          </div>
+        </div>
+      </div>
+
+    </div>{# /right column #}
+  </div>{# /row #}
 </div>
 
-{% if active_session %}
 <script>
 (function() {
-  // Display expiry time and countdown on the dashboard.
-  // Global redirect + popup are handled by base.html.
-  var signInStr = "{{ active_session.sign_in_time|date:'c' }}";
-  var paidHours = parseFloat("{{ active_session.paid_hours }}") || 0;
-  var signInDate = new Date(signInStr);
-  var expiryDate = new Date(signInDate.getTime() + paidHours * 3600 * 1000);
-  var warned15 = false, warned5 = false;
-
-  var expiryEl = document.getElementById('expiry-time');
-  if (expiryEl) {
-    expiryEl.textContent = expiryDate.toLocaleString('en-GB', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-  }
-
-  function updateCountdown() {
-    var now = new Date();
-    var diff = expiryDate - now;
-
-    if (diff <= 0) {
-      var cdEl = document.getElementById('countdown-display');
-      if (cdEl) {
-        cdEl.textContent = '00:00:00';
-        cdEl.classList.remove('text-primary','text-warning','text-danger');
-        cdEl.classList.add('text-danger');
-      }
-      var warn = document.getElementById('countdown-warning');
-      if (warn) {
-        warn.style.display = 'block';
-        warn.className = 'small mt-1 text-danger fw-bold';
-        warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Session expired. Redirecting to payment…';
-      }
-      clearInterval(timerId);
-      return;
-    }
-
-    var totalSec = Math.floor(diff / 1000);
-    var h = Math.floor(totalSec / 3600);
-    var m = Math.floor((totalSec % 3600) / 60);
-    var s = totalSec % 60;
-    var display = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
-    var cdEl = document.getElementById('countdown-display');
-    if (cdEl) cdEl.textContent = display;
-
-    var warn = document.getElementById('countdown-warning');
-
-    if (diff < 5 * 60 * 1000) {
-      if (cdEl) cdEl.className = 'fs-3 fw-bold text-danger';
-      if (!warned5) {
-        warned5 = true;
-        if (warn) {
-          warn.style.display = 'block';
-          warn.className = 'small mt-1 text-danger fw-bold';
-          warn.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i> Your session will expire soon. Renew now!';
-        }
-      }
-    } else if (diff < 15 * 60 * 1000) {
-      if (cdEl) cdEl.className = 'fs-3 fw-bold text-warning';
-      if (!warned15) {
-        warned15 = true;
-        if (warn) {
-          warn.style.display = 'block';
-          warn.className = 'small mt-1 text-warning';
-          warn.innerHTML = '<i class="bi bi-clock-fill"></i> Your session ends in 15 minutes.';
-        }
-      }
-    }
-  }
-
-  var timerId = setInterval(updateCountdown, 1000);
-  updateCountdown();
-})();
-</script>
-{% endif %}
-<script>
-/* Live clock for dashboard greeting */
-(function() {
-  var el = document.getElementById('dashLiveClock');
+  var el = document.getElementById('gdLiveClock');
   if (!el) return;
-  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   function tick() {
-    var now = new Date();
-    var d = days[now.getDay()];
-    var date = String(now.getDate()).padStart(2,'0');
-    var mon = months[now.getMonth()];
-    var yr = now.getFullYear();
-    var h = String(now.getHours()).padStart(2,'0');
-    var m = String(now.getMinutes()).padStart(2,'0');
-    var s = String(now.getSeconds()).padStart(2,'0');
-    el.textContent = d + ', ' + date + ' ' + mon + ' ' + yr + '  •  ' + h + ':' + m + ':' + s;
+    var n = new Date();
+    el.textContent = days[n.getDay()] + ' ' + String(n.getDate()).padStart(2,'0') + ' ' + months[n.getMonth()]
+      + '  ' + String(n.getHours()).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
   }
-  tick();
-  setInterval(tick, 1000);
+  tick(); setInterval(tick, 60000);
 })();
 </script>
 {% endblock %}

@@ -24,15 +24,13 @@ urlpatterns = [
     path('borrow/request-softcopy/<int:book_id>/', views.request_borrow_softcopy_view, name='request_borrow_softcopy'), # Auto-pick borrowable softcopy
     path('borrow/download-free/<int:book_id>/', views.download_free_book_view, name='download_free_book'),          # Auto-pick free softcopy
     path('borrow/read-free/<int:book_id>/', views.read_free_book_view, name='read_free_book'),                      # Read free softcopy inline
-    path('softcopy/payment/<int:copy_id>/', views.softcopy_payment_view, name='softcopy_payment'),                 # Softcopy payment page
-    path('softcopy/renewal-payment/<int:transaction_id>/', views.softcopy_renewal_payment_view, name='softcopy_renewal_payment'),  # Softcopy renewal payment
+
     path('borrow/cancel/<int:request_id>/', views.cancel_borrow_request_view, name='cancel_borrow_request'), # Futa ombi
     path('borrow/approve/<int:request_id>/', views.approve_borrow_request_view, name='approve_borrow_request'),
     path('borrow/reject/<int:request_id>/', views.reject_borrow_request_view, name='reject_borrow_request'),
     path('borrow/delete/<int:request_id>/', views.delete_borrow_request_view, name='delete_borrow_request'),
     path('borrow/issue/<int:request_id>/', views.issue_copy_view, name='issue_copy'),
-    path('softcopy/process-payment/<int:request_id>/', views.process_softcopy_payment_view, name='process_softcopy_payment'),
-    path('softcopy/cancel-access/<int:tx_id>/', views.cancel_softcopy_access_view, name='cancel_softcopy_access'),  # Cancel softcopy access early
+
     path('borrow/copy-lookup/', views.copy_lookup_view, name='copy_lookup'),
     path('requests/', views.all_requests_view, name='all_requests'),
     path('issued-records/', views.issued_records_view, name='issued_records'),
@@ -62,7 +60,7 @@ urlpatterns = [
     path('fines/user/<int:user_id>/', views.user_fines_view, name='user_fines'),                 # Faini za mtumiaji mahususi
     path('fines/user/<int:user_id>/bulk-pay/', views.bulk_fine_payment_view, name='bulk_fine_payment'),  # Malipo ya pamoja
     path('fines/<int:fine_id>/receipt/', views.fine_receipt_pdf_view, name='fine_receipt_pdf'),  # Pakua risiti ya faini
-    path('softcopy/<int:tx_id>/receipt/', views.softcopy_receipt_pdf_view, name='softcopy_receipt_pdf'),  # Softcopy link fee receipt
+
     path('loss/<int:report_id>/receipt/', views.loss_fine_receipt_pdf_view, name='loss_fine_receipt_pdf'),  # Loss fine receipt
 
     # ── Historia ya Kurudisha na Mikopo Yote ───────────────

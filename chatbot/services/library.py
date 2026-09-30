@@ -46,7 +46,6 @@ def _book_to_dict(book, include_copies=False):
         data['copies'] = [{
             'accession_no':   c.accession_no,
             'copy_type':      c.copy_type,
-            'access_type':    c.access_type or '',
             'status':         c.status,
             'shelf_location': c.shelf_location or '',
         } for c in copies]
@@ -250,13 +249,9 @@ def get_library_info():
 
         # ── Softcopy / Digital Books ────────────────────────────────────────
         'softcopy': {
-            'prepaid_fee_tzs': soft_fee,
             'note': (
-                f"Softcopy (digital/ebook) books are accessed via a secure time-limited link. "
-                f"{'Free access — no fee required.' if soft_fee == 0 else f'Access fee: TZS {soft_fee:,.0f} per borrow period.'} "
-                f"The link is valid for {loan_days} day(s) (same as the loan period). "
-                f"After expiry, you can renew (pay again if fee > 0) up to {max_renewals} time(s). "
-                f"Softcopy books do not have overdue fines — link simply expires."
+                f"Softcopy (digital/ebook) books are entirely free to access. "
+                f"They do not expire, have no borrow limit, and do not incur fines."
             ),
         },
 

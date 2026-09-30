@@ -114,27 +114,7 @@
               Softcopy books are accessed via a <strong>time-limited secure link</strong> — only 1 copy per book is allowed.
               The access link expires automatically on the due date. Users must renew to restore access.
             </div>
-            <div class="row g-3">
-              <div class="col-md-4">
-                <label class="form-label fw-semibold">Softcopy Access Type <span class="text-danger">*</span></label>
-                <select name="access_type" id="accessTypeSelect" class="form-select">
-                  <option value="free" {% if book.softcopy.access_type == 'free' %}selected{% endif %}>🟢 Free Download (any logged-in user)</option>
-                  <option value="borrow" {% if book.softcopy.access_type == 'borrow' %}selected{% endif %}>🟡 Special – Borrow Only (librarian approves)</option>
-                </select>
-                <div class="form-text" id="accessTypeNote">Free = immediate download. Special = user requests, link expires on due date.</div>
-                <input type="hidden" id="accessTypeHidden" name="access_type_forced" value="">
-                <div id="accessTypeLockNote" class="alert alert-warning py-1 mt-1 mb-0 small" style="display:none">
-                  <i class="bi bi-lock-fill me-1"></i> Locked to <strong>Special – Borrow Only</strong> because this book also has a hardcopy (both must require borrowing).
-                </div>
-              </div>
-              <div class="col-md-4" id="prepaidFeeRow" style="display:none">
-                <label class="form-label fw-semibold">Link Access Fee (TZS) <span class="text-danger">*</span></label>
-                <div class="input-group">
-                  <span class="input-group-text">TZS</span>
-                  <input type="number" name="prepaid_fee" id="prepaidFeeInput" class="form-control" value="{{ book.softcopy.prepaid_fee|default:0 }}" min="0" step="0.01" placeholder="0.00">
-                </div>
-                <div class="form-text">Fee required for softcopy access. Set to 0 for free access.</div>
-              </div>
+
               <div class="col-md-4">
                 <label class="form-label fw-semibold">eBook File</label>
                 <input type="file" name="softcopy_file" id="softcopyFile" class="form-control" accept=".pdf,.epub,.doc,.docx,.txt,.rtf,.mobi,.azw,.azw3,.fb2">
@@ -164,12 +144,6 @@ const softcopySection  = document.getElementById('softcopySection');
 const numberCopies     = document.getElementById('numberCopies');
 const softcopyFile     = document.getElementById('softcopyFile');
 
-const accessTypeSelect   = document.getElementById('accessTypeSelect');
-const accessTypeLockNote = document.getElementById('accessTypeLockNote');
-const accessTypeNote     = document.getElementById('accessTypeNote');
-const accessTypeHidden   = document.getElementById('accessTypeHidden');
-const prepaidFeeRow      = document.getElementById('prepaidFeeRow');
-const prepaidFeeInput    = document.getElementById('prepaidFeeInput');
 
 /* ── Toggle sections based on book type radio ─── */
 const lostFineSection = document.getElementById('lostFineSection');
@@ -186,39 +160,6 @@ function applyBookType(val) {
   if (lostFineSection) lostFineSection.style.display = showHard ? '' : 'none';
   if (lostFineInput && !showHard) lostFineInput.value = '0';
 
-  /* When 'both': force softcopy to Special Borrow and lock */
-  if (val === 'both') {
-    accessTypeSelect.value    = 'borrow';
-    accessTypeSelect.disabled = true;
-    if (accessTypeHidden)   accessTypeHidden.value           = 'borrow';
-    if (accessTypeLockNote) accessTypeLockNote.style.display = 'block';
-    if (accessTypeNote)     accessTypeNote.style.display     = 'none';
-    if (prepaidFeeRow)    prepaidFeeRow.style.display        = '';
-    if (prepaidFeeInput)  prepaidFeeInput.setAttribute('required', 'required');
-  } else {
-    accessTypeSelect.disabled = false;
-    if (accessTypeHidden)   accessTypeHidden.value           = '';
-    if (accessTypeLockNote) accessTypeLockNote.style.display = 'none';
-    if (accessTypeNote)     accessTypeNote.style.display     = '';
-    updatePrepaidFeeVisibility();
-  }
-}
-
-/* ── Toggle prepaid fee field based on access type ─── */
-function updatePrepaidFeeVisibility() {
-  const accessType = accessTypeSelect.value;
-  if (accessType === 'borrow') {
-    prepaidFeeRow.style.display = '';
-    prepaidFeeInput.setAttribute('required', 'required');
-  } else {
-    prepaidFeeRow.style.display = 'none';
-    prepaidFeeInput.removeAttribute('required');
-    prepaidFeeInput.value = 0;
-  }
-}
-
-if (accessTypeSelect) {
-  accessTypeSelect.addEventListener('change', updatePrepaidFeeVisibility);
 }
 
 document.querySelectorAll('input[name="book_type"]').forEach(r => {
@@ -243,13 +184,7 @@ if (checkedType) applyBookType(checkedType.value);
     typeRadio.checked = true;
     applyBookType(bookType);
   }
-  
-  // Initialize access type and prepaid fee visibility
-  if (hasSoft && accessTypeSelect) {
-    const currentAccess = '{{ book.softcopy.access_type|default:"free" }}';
-    accessTypeSelect.value = currentAccess;
-    updatePrepaidFeeVisibility();
-  }
+
 {% endif %}
 
 /* ── Shelf capacity helpers ──────────────────── */

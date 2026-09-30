@@ -109,7 +109,7 @@ REPORT_TABLES = {
             'book_title': 'Book Title',
             'accession_no': 'Accession No',
             'copy_type': 'Copy Type',
-            'access_type': 'Access Type',
+
             'status': 'Status',
             'shelf_location': 'Shelf',
             'created_at': 'Created',

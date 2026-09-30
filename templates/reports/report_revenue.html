@@ -43,16 +43,7 @@
                      {% if not account_types or 'overdue' in account_types %}checked{% endif %}>
               <label class="form-check-label small" for="chk_overdue"><span class="badge bg-warning text-dark">Overdue</span></label>
             </div>
-            <div class="form-check form-check-inline mb-0">
-              <input class="form-check-input" type="checkbox" name="account_type" value="link_fee" id="chk_link"
-                     {% if not account_types or 'link_fee' in account_types %}checked{% endif %}>
-              <label class="form-check-label small" for="chk_link"><span class="badge bg-primary">Link Fee</span></label>
-            </div>
-            <div class="form-check form-check-inline mb-0">
-              <input class="form-check-input" type="checkbox" name="account_type" value="guest_fee" id="chk_guest"
-                     {% if not account_types or 'guest_fee' in account_types %}checked{% endif %}>
-              <label class="form-check-label small" for="chk_guest"><span class="badge bg-success">Guest Fee</span></label>
-            </div>
+
             <div class="form-check form-check-inline mb-0">
               <input class="form-check-input" type="checkbox" name="account_type" value="damage" id="chk_damage"
                      {% if not account_types or 'damage' in account_types %}checked{% endif %}>
@@ -149,8 +140,6 @@
         <table class="table table-sm align-middle mb-0">
           <tbody>
             <tr><td><i class="bi bi-clock-history text-warning"></i> Overdue Fees</td><td class="text-end fw-bold">TZS {{ overdue|floatformat:2|intcomma }}</td></tr>
-            <tr><td><i class="bi bi-link-45deg text-primary"></i> Softcopy Link Fees</td><td class="text-end fw-bold">TZS {{ link_fee|floatformat:2|intcomma }}</td></tr>
-            <tr><td><i class="bi bi-person-badge text-success"></i> Guest Session Fees</td><td class="text-end fw-bold">TZS {{ guest_fee|floatformat:2|intcomma }}</td></tr>
             <tr><td><i class="bi bi-exclamation-triangle" style="color: #ea580c;"></i> Damage Fines</td><td class="text-end fw-bold">TZS {{ damage|floatformat:2|intcomma }}</td></tr>
             <tr><td><i class="bi bi-journal-x" style="color: #8b5cf6;"></i> Loss Fines</td><td class="text-end fw-bold" style="color: #8b5cf6;">TZS {{ loss|floatformat:2|intcomma }}</td></tr>
             <tr class="table-light"><td class="fw-bold">Total Revenue</td><td class="text-end fw-bold text-success">TZS {{ total_revenue|floatformat:2|intcomma }}</td></tr>
@@ -189,9 +178,7 @@
             <td><small>{{ t.recorded_at|date:"d M Y H:i" }}</small></td>
             <td><small>{{ t.user.get_full_name|default:"System" }}</small></td>
             <td>
-              {% if t.account_type == 'guest_fee' %}<span class="badge bg-success">Guest Fee</span>
-              {% elif t.account_type == 'link_fee' %}<span class="badge bg-primary">Link Fee</span>
-              {% elif t.account_type == 'overdue' %}<span class="badge bg-warning text-dark">Overdue</span>
+              {% if t.account_type == 'overdue' %}<span class="badge bg-warning text-dark">Overdue</span>
               {% elif t.account_type == 'damage' %}<span class="badge" style="background-color: #ea580c;">Damage Fine</span>
               {% else %}<span class="badge" style="background-color: #8b5cf6;">Loss Fine</span>{% endif %}
             </td>

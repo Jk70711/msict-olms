@@ -68,8 +68,6 @@ class Command(BaseCommand):
             ('MAX_LOGIN_ATTEMPTS', '6', 'Max failed login attempts before account lockout'),
             ('SUSPEND_ATTEMPTS', '3', 'Failed login attempts before temporary suspension'),
             ('SUSPEND_DURATION_MINUTES', '10', 'Suspension duration in minutes'),
-            ('GUEST_HOURLY_RATE', '500', 'Default guest session hourly fee in TZS'),
-            ('GUEST_MAX_HOURS', '12', 'Maximum hours per guest session'),
             ('NEW_ARRIVAL_NOTIFY_ENABLED', '1', 'Enable new arrival alerts (1=yes,0=no)'),
             ('NEW_ARRIVAL_NOTIFY_CHANNEL', 'sms', 'Preferred new arrival alert channel (sms/email)'),
         ]

@@ -188,17 +188,8 @@
             <!-- Type badges -->
             <div class="mt-1 d-flex flex-wrap gap-1">
               {% for copy in book.copies.all %}
-                {% if copy.copy_type == 'softcopy' and copy.access_type == 'free' %}
+                {% if copy.copy_type == 'softcopy' %}
                   <span class="badge bg-success"><i class="bi bi-download"></i> Free PDF</span>
-                {% endif %}
-                {% if copy.copy_type == 'softcopy' and copy.access_type == 'borrow' %}
-                  {% if copy.pk in active_borrow_copy_ids %}
-                    <span class="badge bg-primary"><i class="bi bi-file-pdf"></i> Borrowed by you</span>
-                  {% elif copy.pk in pending_copy_ids %}
-                    <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> Request Pending</span>
-                  {% else %}
-                    <span class="badge bg-warning text-dark"><i class="bi bi-file-earmark-lock"></i> Special{% if copy.prepaid_fee > 0 %} · TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}{% else %} · Fee not set{% endif %}</span>
-                  {% endif %}
                 {% endif %}
               {% endfor %}
             </div>
@@ -208,7 +199,6 @@
           <div class="card-footer p-2 bg-transparent border-top-0 d-flex flex-column gap-1">
             {% for copy in book.copies.all %}
               {% if copy.copy_type == 'softcopy' %}
-                {% if copy.access_type == 'free' %}
                   <div class="btn-group btn-group-sm w-100">
                     <a href="{% url 'serve_softcopy' copy.pk %}" class="btn btn-success" target="_blank">
                       <i class="bi bi-book-fill"></i> Read Free
@@ -217,36 +207,6 @@
                       <i class="bi bi-download"></i> Download Free
                     </a>
                   </div>
-                {% elif copy.access_type == 'borrow' %}
-                  {% if copy.pk in active_borrow_copy_ids %}
-                    <a href="{% url 'softcopy_access' active_borrow_tokens|get_item:copy.pk %}" class="btn btn-sm btn-primary w-100" target="_blank">
-                      <i class="bi bi-file-pdf"></i> Read Now
-                    </a>
-                  {% elif not user_can_borrow %}
-                    {% if borrow_block_reason == 'overdue' %}
-                    <button class="btn btn-sm btn-outline-danger w-100" disabled title="Return overdue items first">
-                      <i class="bi bi-exclamation-triangle"></i> Clear Overdue First
-                    </button>
-                    {% elif borrow_block_reason == 'fines' %}
-                    <button class="btn btn-sm btn-outline-danger w-100" disabled title="Pay fines at desk">
-                      <i class="bi bi-cash-coin"></i> Pay Fines First
-                    </button>
-                    {% else %}
-                    <button class="btn btn-sm btn-outline-danger w-100" disabled title="Borrow limit reached (3)">
-                      <i class="bi bi-slash-circle"></i> Limit Reached
-                    </button>
-                    {% endif %}
-                  {% else %}
-                    <a href="{% url 'submit_borrow_request' copy.pk %}" class="btn btn-sm btn-warning w-100">
-                      <i class="bi bi-file-earmark-lock"></i> Borrow to Read
-                      {% if copy.prepaid_fee > 0 %}
-                        <span class="badge bg-light text-dark ms-1">TZS {{ copy.prepaid_fee|floatformat:0|intcomma }}</span>
-                      {% else %}
-                        <span class="badge bg-light text-dark ms-1">Fee not set</span>
-                      {% endif %}
-                    </a>
-                  {% endif %}
-                {% endif %}
               {% endif %}
             {% endfor %}
             <a href="{% url 'book_detail_public' book.pk %}" class="btn btn-sm btn-outline-secondary w-100">

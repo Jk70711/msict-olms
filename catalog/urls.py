@@ -29,8 +29,6 @@ urlpatterns = [
     path('copies/<int:copy_id>/delete/', views.copy_delete_view, name='copy_delete'),          # Futa nakala
     path('copies/<int:copy_id>/mark-lost/', views.copy_mark_lost_view, name='copy_mark_lost'), # Taji nakala kama imepotea
     path('copies/<int:copy_id>/read/', views.serve_softcopy_view, name='serve_softcopy'),                          # Soma PDF online
-    path('copies/access/<uuid:token>/', views.softcopy_access_link_view, name='softcopy_access'),                    # Tokenized access link
-    path('copies/<int:copy_id>/pdf-data/', views.special_pdf_data_view, name='special_pdf_data'),                 # Raw PDF bytes (viewer only)
     path('copies/<int:copy_id>/free-data/', views.free_softcopy_data_view, name='free_softcopy_data'),              # Raw bytes for free softcopy viewer
     path('copies/<int:copy_id>/download/', views.free_softcopy_download_view, name='free_softcopy_download'),     # Pakua PDF bure
 
